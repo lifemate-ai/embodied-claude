@@ -62,7 +62,7 @@
 ### 1. リポジトリのクローン
 
 ```bash
-git clone https://github.com/your-username/embodied-claude.git
+git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
@@ -117,7 +117,7 @@ uv sync
 
 ### 3. Claude Code 設定
 
-`~/.claude/settings.json` に MCP サーバーを登録：
+カレントディレクトリの `.mcp.json` に MCP サーバーを登録：
 
 ```json
 {
