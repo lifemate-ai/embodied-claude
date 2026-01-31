@@ -62,6 +62,18 @@ class MemoryMCPServer:
                                 "default": "daily",
                                 "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
                             },
+                            "auto_link": {
+                                "type": "boolean",
+                                "description": "Automatically link to similar existing memories",
+                                "default": True,
+                            },
+                            "link_threshold": {
+                                "type": "number",
+                                "description": "Similarity threshold for auto-linking (0-2, lower means more similar required)",
+                                "default": 0.8,
+                                "minimum": 0,
+                                "maximum": 2,
+                            },
                         },
                         "required": ["content"],
                     },
@@ -157,6 +169,55 @@ class MemoryMCPServer:
                         "required": [],
                     },
                 ),
+                Tool(
+                    name="recall_with_associations",
+                    description="Recall memories with their associated/linked memories. Returns the primary memories plus any memories linked to them.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "context": {
+                                "type": "string",
+                                "description": "Current context or topic",
+                            },
+                            "n_results": {
+                                "type": "integer",
+                                "description": "Number of primary memories to recall",
+                                "default": 3,
+                                "minimum": 1,
+                                "maximum": 10,
+                            },
+                            "chain_depth": {
+                                "type": "integer",
+                                "description": "How many levels of links to follow (1-3)",
+                                "default": 1,
+                                "minimum": 1,
+                                "maximum": 3,
+                            },
+                        },
+                        "required": ["context"],
+                    },
+                ),
+                Tool(
+                    name="get_memory_chain",
+                    description="Get a memory and all memories linked to it. Useful for exploring related memories.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {
+                                "type": "string",
+                                "description": "ID of the starting memory",
+                            },
+                            "depth": {
+                                "type": "integer",
+                                "description": "How deep to follow links",
+                                "default": 2,
+                                "minimum": 1,
+                                "maximum": 5,
+                            },
+                        },
+                        "required": ["memory_id"],
+                    },
+                ),
             ]
 
         @self._server.call_tool()
@@ -172,17 +233,30 @@ class MemoryMCPServer:
                         if not content:
                             return [TextContent(type="text", text="Error: content is required")]
 
-                        memory = await self._memory_store.save(
-                            content=content,
-                            emotion=arguments.get("emotion", "neutral"),
-                            importance=arguments.get("importance", 3),
-                            category=arguments.get("category", "daily"),
-                        )
+                        auto_link = arguments.get("auto_link", True)
+
+                        if auto_link:
+                            memory = await self._memory_store.save_with_auto_link(
+                                content=content,
+                                emotion=arguments.get("emotion", "neutral"),
+                                importance=arguments.get("importance", 3),
+                                category=arguments.get("category", "daily"),
+                                link_threshold=arguments.get("link_threshold", 0.8),
+                            )
+                            linked_info = f"\nLinked to: {len(memory.linked_ids)} memories"
+                        else:
+                            memory = await self._memory_store.save(
+                                content=content,
+                                emotion=arguments.get("emotion", "neutral"),
+                                importance=arguments.get("importance", 3),
+                                category=arguments.get("category", "daily"),
+                            )
+                            linked_info = ""
 
                         return [
                             TextContent(
                                 type="text",
-                                text=f"Memory saved!\nID: {memory.id}\nTimestamp: {memory.timestamp}\nEmotion: {memory.emotion}\nImportance: {memory.importance}\nCategory: {memory.category}",
+                                text=f"Memory saved!\nID: {memory.id}\nTimestamp: {memory.timestamp}\nEmotion: {memory.emotion}\nImportance: {memory.importance}\nCategory: {memory.category}{linked_info}",
                             )
                         ]
 
@@ -274,6 +348,84 @@ Date Range:
   Newest: {stats.newest_timestamp or 'N/A'}
 """
                         return [TextContent(type="text", text=output)]
+
+                    case "recall_with_associations":
+                        context = arguments.get("context", "")
+                        if not context:
+                            return [TextContent(type="text", text="Error: context is required")]
+
+                        results = await self._memory_store.recall_with_chain(
+                            context=context,
+                            n_results=arguments.get("n_results", 3),
+                            chain_depth=arguments.get("chain_depth", 1),
+                        )
+
+                        if not results:
+                            return [TextContent(type="text", text="No relevant memories found.")]
+
+                        # メイン結果と関連結果を分ける
+                        main_results = [r for r in results if r.distance < 900]
+                        linked_results = [r for r in results if r.distance >= 900]
+
+                        output_lines = [f"Recalled {len(main_results)} memories with {len(linked_results)} linked associations:\n"]
+
+                        output_lines.append("=== Primary Memories ===\n")
+                        for i, result in enumerate(main_results, 1):
+                            m = result.memory
+                            output_lines.append(
+                                f"--- Memory {i} (score: {result.distance:.4f}) ---\n"
+                                f"[{m.timestamp}] [{m.emotion}]\n"
+                                f"{m.content}\n"
+                            )
+
+                        if linked_results:
+                            output_lines.append("\n=== Linked Memories ===\n")
+                            for i, result in enumerate(linked_results, 1):
+                                m = result.memory
+                                output_lines.append(
+                                    f"--- Linked {i} ---\n"
+                                    f"[{m.timestamp}] [{m.emotion}]\n"
+                                    f"{m.content}\n"
+                                )
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
+                    case "get_memory_chain":
+                        memory_id = arguments.get("memory_id", "")
+                        if not memory_id:
+                            return [TextContent(type="text", text="Error: memory_id is required")]
+
+                        # 起点の記憶を取得
+                        start_memory = await self._memory_store.get_by_id(memory_id)
+                        if not start_memory:
+                            return [TextContent(type="text", text="Error: Memory not found")]
+
+                        linked_memories = await self._memory_store.get_linked_memories(
+                            memory_id=memory_id,
+                            depth=arguments.get("depth", 2),
+                        )
+
+                        output_lines = [f"Memory chain starting from {memory_id}:\n"]
+
+                        output_lines.append("=== Starting Memory ===\n")
+                        output_lines.append(
+                            f"[{start_memory.timestamp}] [{start_memory.emotion}] [{start_memory.category}]\n"
+                            f"{start_memory.content}\n"
+                            f"Linked to: {len(start_memory.linked_ids)} memories\n"
+                        )
+
+                        if linked_memories:
+                            output_lines.append(f"\n=== Linked Memories ({len(linked_memories)}) ===\n")
+                            for i, m in enumerate(linked_memories, 1):
+                                output_lines.append(
+                                    f"--- {i}. {m.id[:8]}... ---\n"
+                                    f"[{m.timestamp}] [{m.emotion}]\n"
+                                    f"{m.content}\n"
+                                )
+                        else:
+                            output_lines.append("\nNo linked memories found.\n")
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
 
                     case _:
                         return [TextContent(type="text", text=f"Unknown tool: {name}")]

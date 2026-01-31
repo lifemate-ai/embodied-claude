@@ -50,3 +50,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Autonomous action (contains credentials)
+autonomous-mcp.json

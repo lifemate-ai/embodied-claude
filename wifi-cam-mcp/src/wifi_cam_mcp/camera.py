@@ -115,6 +115,7 @@ class TapoCamera:
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
                 "-frames:v", "1",
+                "-vf", f"scale='min({self._config.max_width},iw)':'min({self._config.max_height},ih)':force_original_aspect_ratio=decrease",
                 "-f", "image2",
                 "-y",
                 tmp_path,

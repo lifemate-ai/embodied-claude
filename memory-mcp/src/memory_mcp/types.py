@@ -39,6 +39,11 @@ class Memory:
     emotion: str
     importance: int  # 1-5
     category: str
+    # Phase 2: アクセス追跡
+    access_count: int = 0  # 想起回数
+    last_accessed: str = ""  # 最終アクセス時刻（ISO 8601）
+    # Phase 3: 連想リンク
+    linked_ids: tuple[str, ...] = ()  # リンク先の記憶ID群
 
     def to_metadata(self) -> dict:
         """Convert to dictionary for ChromaDB metadata."""
@@ -47,6 +52,9 @@ class Memory:
             "emotion": self.emotion,
             "importance": self.importance,
             "category": self.category,
+            "access_count": self.access_count,
+            "last_accessed": self.last_accessed,
+            "linked_ids": ",".join(self.linked_ids),  # カンマ区切りで保存
         }
 
 
@@ -56,6 +64,18 @@ class MemorySearchResult:
 
     memory: Memory
     distance: float  # 類似度（小さいほど近い）
+
+
+@dataclass(frozen=True)
+class ScoredMemory:
+    """スコアリング済み検索結果."""
+
+    memory: Memory
+    semantic_distance: float  # ChromaDBからの生距離
+    time_decay_factor: float  # 時間減衰係数 (0.0-1.0)
+    emotion_boost: float  # 感情ブースト
+    importance_boost: float  # 重要度ブースト
+    final_score: float  # 最終スコア（低いほど良い）
 
 
 @dataclass(frozen=True)

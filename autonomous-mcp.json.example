@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "wifi-cam": {
+      "command": "uv",
+      "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/wifi-cam-mcp", "run", "wifi-cam-mcp"],
+      "env": {
+        "TAPO_CAMERA_HOST": "192.168.1.XXX",
+        "TAPO_USERNAME": "your-tapo-username",
+        "TAPO_PASSWORD": "your-tapo-password"
+      }
+    },
+    "memory": {
+      "command": "uv",
+      "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/memory-mcp", "run", "memory-mcp"]
+    },
+    "system-temperature": {
+      "command": "uv",
+      "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/system-temperature-mcp", "run", "system-temperature-mcp"]
+    }
+  }
+}

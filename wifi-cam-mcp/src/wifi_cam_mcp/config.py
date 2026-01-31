@@ -16,6 +16,8 @@ class CameraConfig:
     username: str
     password: str
     stream_url: str | None = None
+    max_width: int = 1920
+    max_height: int = 1080
 
     @classmethod
     def from_env(cls) -> "CameraConfig":
@@ -24,6 +26,8 @@ class CameraConfig:
         username = os.getenv("TAPO_USERNAME", "")
         password = os.getenv("TAPO_PASSWORD", "")
         stream_url = os.getenv("TAPO_STREAM_URL")
+        max_width = int(os.getenv("CAPTURE_MAX_WIDTH", "1920"))
+        max_height = int(os.getenv("CAPTURE_MAX_HEIGHT", "1080"))
 
         if not host:
             raise ValueError("TAPO_CAMERA_HOST environment variable is required")
@@ -37,6 +41,8 @@ class CameraConfig:
             username=username,
             password=password,
             stream_url=stream_url,
+            max_width=max_width,
+            max_height=max_height,
         )
 
 
