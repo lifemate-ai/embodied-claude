@@ -11,6 +11,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from .config import MemoryConfig, ServerConfig
+from .episode import EpisodeManager
 from .memory import MemoryStore
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +24,7 @@ class MemoryMCPServer:
     def __init__(self):
         self._server = Server("memory-mcp")
         self._memory_store: MemoryStore | None = None
+        self._episode_manager: EpisodeManager | None = None  # Phase 4
         self._server_config = ServerConfig.from_env()
         self._setup_handlers()
 
@@ -216,6 +218,72 @@ class MemoryMCPServer:
                             },
                         },
                         "required": ["memory_id"],
+                    },
+                ),
+                # Phase 4: Episode Memory Tools
+                Tool(
+                    name="create_episode",
+                    description="Create an episode from recent memories. Use this to group related experiences into a story (e.g., 'Morning sky search').",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Episode title (e.g., 'Morning sky search')",
+                            },
+                            "memory_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of memory IDs to include in the episode",
+                            },
+                            "participants": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "People involved in the episode (optional)",
+                                "default": [],
+                            },
+                            "auto_summarize": {
+                                "type": "boolean",
+                                "description": "Auto-generate summary from memories",
+                                "default": True,
+                            },
+                        },
+                        "required": ["title", "memory_ids"],
+                    },
+                ),
+                Tool(
+                    name="search_episodes",
+                    description="Search through past episodes. Find a sequence of experiences by topic.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query for episodes",
+                            },
+                            "n_results": {
+                                "type": "integer",
+                                "description": "Maximum number of results",
+                                "default": 5,
+                                "minimum": 1,
+                                "maximum": 20,
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                ),
+                Tool(
+                    name="get_episode_memories",
+                    description="Get all memories in a specific episode, in chronological order.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "episode_id": {
+                                "type": "string",
+                                "description": "Episode ID",
+                            },
+                        },
+                        "required": ["episode_id"],
                     },
                 ),
             ]
@@ -427,6 +495,92 @@ Date Range:
 
                         return [TextContent(type="text", text="\n".join(output_lines))]
 
+                    # Phase 4: Episode Tools
+                    case "create_episode":
+                        if self._episode_manager is None:
+                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+
+                        title = arguments.get("title", "")
+                        if not title:
+                            return [TextContent(type="text", text="Error: title is required")]
+
+                        memory_ids = arguments.get("memory_ids", [])
+                        if not memory_ids:
+                            return [TextContent(type="text", text="Error: memory_ids is required")]
+
+                        episode = await self._episode_manager.create_episode(
+                            title=title,
+                            memory_ids=memory_ids,
+                            participants=arguments.get("participants"),
+                            auto_summarize=arguments.get("auto_summarize", True),
+                        )
+
+                        return [
+                            TextContent(
+                                type="text",
+                                text=f"Episode created!\n"
+                                     f"ID: {episode.id}\n"
+                                     f"Title: {episode.title}\n"
+                                     f"Memories: {len(episode.memory_ids)}\n"
+                                     f"Time: {episode.start_time} - {episode.end_time}\n"
+                                     f"Emotion: {episode.emotion}\n"
+                                     f"Importance: {episode.importance}\n"
+                                     f"Summary: {episode.summary[:100]}...",
+                            )
+                        ]
+
+                    case "search_episodes":
+                        if self._episode_manager is None:
+                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+
+                        query = arguments.get("query", "")
+                        if not query:
+                            return [TextContent(type="text", text="Error: query is required")]
+
+                        episodes = await self._episode_manager.search_episodes(
+                            query=query,
+                            n_results=arguments.get("n_results", 5),
+                        )
+
+                        if not episodes:
+                            return [TextContent(type="text", text="No episodes found matching the query.")]
+
+                        output_lines = [f"Found {len(episodes)} episodes:\n"]
+                        for i, ep in enumerate(episodes, 1):
+                            output_lines.append(
+                                f"--- Episode {i} ---\n"
+                                f"ID: {ep.id}\n"
+                                f"Title: {ep.title}\n"
+                                f"Time: {ep.start_time} - {ep.end_time}\n"
+                                f"Memories: {len(ep.memory_ids)}\n"
+                                f"Emotion: {ep.emotion} | Importance: {ep.importance}\n"
+                                f"Summary: {ep.summary[:80]}...\n"
+                            )
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
+                    case "get_episode_memories":
+                        if self._episode_manager is None:
+                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+
+                        episode_id = arguments.get("episode_id", "")
+                        if not episode_id:
+                            return [TextContent(type="text", text="Error: episode_id is required")]
+
+                        memories = await self._episode_manager.get_episode_memories(episode_id)
+
+                        output_lines = [f"Episode memories ({len(memories)} total):\n"]
+                        for i, m in enumerate(memories, 1):
+                            output_lines.append(
+                                f"--- Memory {i} ---\n"
+                                f"ID: {m.id}\n"
+                                f"Time: {m.timestamp}\n"
+                                f"Content: {m.content}\n"
+                                f"Emotion: {m.emotion} | Importance: {m.importance}\n"
+                            )
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
                     case _:
                         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -435,11 +589,16 @@ Date Range:
                 return [TextContent(type="text", text=f"Error: {e!s}")]
 
     async def connect_memory(self) -> None:
-        """Connect to memory store."""
+        """Connect to memory store (Phase 4: with episode manager)."""
         config = MemoryConfig.from_env()
         self._memory_store = MemoryStore(config)
         await self._memory_store.connect()
         logger.info(f"Connected to memory store at {config.db_path}")
+
+        # Phase 4: Initialize episode manager
+        episodes_collection = self._memory_store.get_episodes_collection()
+        self._episode_manager = EpisodeManager(self._memory_store, episodes_collection)
+        logger.info("Episode manager initialized")
 
     async def disconnect_memory(self) -> None:
         """Disconnect from memory store."""

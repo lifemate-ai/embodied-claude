@@ -1,7 +1,9 @@
 """Type definitions for Memory MCP Server."""
 
+import json
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class Emotion(str, Enum):
@@ -29,10 +31,125 @@ class Category(str, Enum):
     CONVERSATION = "conversation"
 
 
+# Phase 4: エピソード記憶・感覚データ統合
+
+
+@dataclass(frozen=True)
+class CameraPosition:
+    """カメラの向き（パン・チルト角度）."""
+
+    pan_angle: int  # -90 to +90
+    tilt_angle: int  # -90 to +90
+    preset_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "pan_angle": self.pan_angle,
+            "tilt_angle": self.tilt_angle,
+            "preset_id": self.preset_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CameraPosition":
+        """Create from dictionary."""
+        return cls(
+            pan_angle=data["pan_angle"],
+            tilt_angle=data["tilt_angle"],
+            preset_id=data.get("preset_id"),
+        )
+
+
+@dataclass(frozen=True)
+class SensoryData:
+    """感覚データへの参照（画像パス、音声パスなど）."""
+
+    sensory_type: str  # "visual", "audio", "movement"
+    file_path: str | None
+    metadata: dict[str, Any]  # {width, height, camera_position, etc.}
+    description: str | None  # オプション: AI生成の説明文
+    timestamp: str  # ISO 8601
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "sensory_type": self.sensory_type,
+            "file_path": self.file_path,
+            "metadata": self.metadata,
+            "description": self.description,
+            "timestamp": self.timestamp,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SensoryData":
+        """Create from dictionary."""
+        return cls(
+            sensory_type=data["sensory_type"],
+            file_path=data.get("file_path"),
+            metadata=data.get("metadata", {}),
+            description=data.get("description"),
+            timestamp=data["timestamp"],
+        )
+
+
+@dataclass(frozen=True)
+class Episode:
+    """エピソード記憶（一連の体験）."""
+
+    id: str
+    title: str  # "朝の空を探した体験"
+    start_time: str  # ISO 8601
+    end_time: str | None
+    memory_ids: tuple[str, ...]  # このエピソードに含まれる記憶ID群
+    participants: tuple[str, ...]  # 関与した人物 ("幼馴染", etc.)
+    location_context: str | None  # カメラ位置の説明
+    summary: str  # エピソード全体のサマリー
+    emotion: str  # エピソード全体の感情
+    importance: int  # 1-5
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Convert to dictionary for ChromaDB metadata."""
+        return {
+            "title": self.title,
+            "start_time": self.start_time,
+            "end_time": self.end_time or "",
+            "memory_ids": ",".join(self.memory_ids),
+            "participants": ",".join(self.participants),
+            "location_context": self.location_context or "",
+            "emotion": self.emotion,
+            "importance": self.importance,
+        }
+
+    @classmethod
+    def from_metadata(
+        cls, id: str, summary: str, metadata: dict[str, Any]
+    ) -> "Episode":
+        """Create from ChromaDB metadata."""
+        return cls(
+            id=id,
+            title=metadata["title"],
+            start_time=metadata["start_time"],
+            end_time=metadata.get("end_time") or None,
+            memory_ids=tuple(
+                metadata["memory_ids"].split(",") if metadata.get("memory_ids") else []
+            ),
+            participants=tuple(
+                metadata["participants"].split(",")
+                if metadata.get("participants")
+                else []
+            ),
+            location_context=metadata.get("location_context") or None,
+            summary=summary,
+            emotion=metadata["emotion"],
+            importance=metadata["importance"],
+        )
+
+
 @dataclass(frozen=True)
 class Memory:
     """記憶データ構造."""
 
+    # Phase 1: 基本フィールド
     id: str
     content: str
     timestamp: str  # ISO 8601 format
@@ -44,18 +161,33 @@ class Memory:
     last_accessed: str = ""  # 最終アクセス時刻（ISO 8601）
     # Phase 3: 連想リンク
     linked_ids: tuple[str, ...] = ()  # リンク先の記憶ID群
+    # Phase 4: エピソード記憶・感覚データ統合
+    episode_id: str | None = None  # 所属エピソード
+    sensory_data: tuple[SensoryData, ...] = ()  # 感覚データ
+    camera_position: CameraPosition | None = None  # カメラ位置
+    tags: tuple[str, ...] = ()  # 自由形式タグ
 
-    def to_metadata(self) -> dict:
+    def to_metadata(self) -> dict[str, Any]:
         """Convert to dictionary for ChromaDB metadata."""
-        return {
+        metadata: dict[str, Any] = {
             "timestamp": self.timestamp,
             "emotion": self.emotion,
             "importance": self.importance,
             "category": self.category,
             "access_count": self.access_count,
             "last_accessed": self.last_accessed,
-            "linked_ids": ",".join(self.linked_ids),  # カンマ区切りで保存
+            "linked_ids": ",".join(self.linked_ids),
+            # Phase 4 フィールド
+            "episode_id": self.episode_id or "",
+            "sensory_data": json.dumps([s.to_dict() for s in self.sensory_data]),
+            "camera_position": (
+                json.dumps(self.camera_position.to_dict())
+                if self.camera_position
+                else ""
+            ),
+            "tags": ",".join(self.tags),
         }
+        return metadata
 
 
 @dataclass(frozen=True)
