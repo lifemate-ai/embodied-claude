@@ -31,6 +31,14 @@ class Category(str, Enum):
     CONVERSATION = "conversation"
 
 
+class MemoryType(str, Enum):
+    """記憶タイプ（ジョブ分離用）."""
+
+    GLOBAL = "global"  # 全体記憶（全ジョブで共有）
+    JOB = "job"  # ジョブ固有記憶
+    SHARED = "shared"  # ジョブ間共有記憶
+
+
 # Phase 5: 因果リンク
 
 
@@ -162,9 +170,7 @@ class Episode:
         }
 
     @classmethod
-    def from_metadata(
-        cls, id: str, summary: str, metadata: dict[str, Any]
-    ) -> "Episode":
+    def from_metadata(cls, id: str, summary: str, metadata: dict[str, Any]) -> "Episode":
         """Create from ChromaDB metadata."""
         return cls(
             id=id,
@@ -175,9 +181,7 @@ class Episode:
                 metadata["memory_ids"].split(",") if metadata.get("memory_ids") else []
             ),
             participants=tuple(
-                metadata["participants"].split(",")
-                if metadata.get("participants")
-                else []
+                metadata["participants"].split(",") if metadata.get("participants") else []
             ),
             location_context=metadata.get("location_context") or None,
             summary=summary,
@@ -215,6 +219,10 @@ class Memory:
     activation_count: int = 0
     last_activated: str = ""
     coactivation_weights: tuple[tuple[str, float], ...] = field(default_factory=tuple)
+    # Phase 7: ジョブ分離
+    memory_type: str = "global"  # "global" | "job" | "shared"
+    job_id: str | None = None  # ジョブ固有記憶の場合のジョブID
+    shared_group_ids: tuple[str, ...] = ()  # ジョブ間共有記憶のグループID群
 
     def to_metadata(self) -> dict[str, Any]:
         """Convert to dictionary for ChromaDB metadata."""
@@ -230,9 +238,7 @@ class Memory:
             "episode_id": self.episode_id or "",
             "sensory_data": json.dumps([s.to_dict() for s in self.sensory_data]),
             "camera_position": (
-                json.dumps(self.camera_position.to_dict())
-                if self.camera_position
-                else ""
+                json.dumps(self.camera_position.to_dict()) if self.camera_position else ""
             ),
             "tags": ",".join(self.tags),
             # Phase 5: 因果リンク
@@ -243,6 +249,10 @@ class Memory:
             "activation_count": self.activation_count,
             "last_activated": self.last_activated,
             "coactivation": json.dumps(dict(self.coactivation_weights)),
+            # Phase 7: ジョブ分離
+            "memory_type": self.memory_type,
+            "job_id": self.job_id or "",
+            "shared_group_ids": ",".join(self.shared_group_ids),
         }
         return metadata
 
@@ -276,3 +286,62 @@ class MemoryStats:
     by_emotion: dict[str, int]
     oldest_timestamp: str | None
     newest_timestamp: str | None
+
+
+
+@dataclass(frozen=True)
+class JobConfig:
+    """ジョブ設定（ジョブ分離用）."""
+
+    job_id: str  # ジョブの一意識別子
+    name: str  # ジョブの表示名
+    description: str = ""  # ジョブの説明
+    shared_group_ids: tuple[str, ...] = ()  # このジョブが参照する共有グループID群
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "job_id": self.job_id,
+            "name": self.name,
+            "description": self.description,
+            "shared_group_ids": list(self.shared_group_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "JobConfig":
+        """Create from dictionary."""
+        return cls(
+            job_id=data["job_id"],
+            name=data["name"],
+            description=data.get("description", ""),
+            shared_group_ids=tuple(data.get("shared_group_ids", [])),
+        )
+
+
+@dataclass(frozen=True)
+class SharedGroupConfig:
+    """ジョブ間共有グループ設定."""
+
+    group_id: str  # 共有グループの一意識別子
+    name: str  # グループの表示名
+    description: str = ""  # グループの説明
+    member_job_ids: tuple[str, ...] = ()  # このグループに所属するジョブID群
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "group_id": self.group_id,
+            "name": self.name,
+            "description": self.description,
+            "member_job_ids": list(self.member_job_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SharedGroupConfig":
+        """Create from dictionary."""
+        return cls(
+            group_id=data["group_id"],
+            name=data["name"],
+            description=data.get("description", ""),
+            member_job_ids=tuple(data.get("member_job_ids", [])),
+        )

@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+import logging
 import math
+import os
 import uuid
 from datetime import datetime
 from typing import Any
@@ -24,19 +26,23 @@ from .predictive import (
 )
 from .types import (
     CameraPosition,
+    JobConfig,
     Memory,
     MemoryLink,
     MemorySearchResult,
     MemoryStats,
     ScoredMemory,
     SensoryData,
+    SharedGroupConfig,
 )
+from .working_memory import WorkingMemoryBuffer
 from .workspace import (
     WorkspaceCandidate,
     diversity_score,
     select_workspace_candidates,
 )
-from .working_memory import WorkingMemoryBuffer
+
+logger = logging.getLogger(__name__)
 
 # 感情ブーストマップ: 強い感情は記憶に残りやすい
 EMOTION_BOOST_MAP: dict[str, float] = {
@@ -278,9 +284,13 @@ class MemoryStore:
         # Phase 6: 連想・統合エンジン
         self._association_engine = AssociationEngine()
         self._consolidation_engine = ConsolidationEngine()
+        # Phase 7: ジョブ分離 - ジョブ設定管理
+        self._job_configs: dict[str, JobConfig] = {}
+        self._shared_groups: dict[str, SharedGroupConfig] = {}
+        self._job_config_path = os.path.join(os.path.dirname(config.db_path), "job_configs.json")
 
     async def connect(self) -> None:
-        """Initialize ChromaDB connection (Phase 4: with episodes collection)."""
+        """Initialize ChromaDB connection (Phase 7: with job config loading)."""
         async with self._lock:
             if self._client is None:
                 self._client = await asyncio.to_thread(
@@ -299,10 +309,14 @@ class MemoryStore:
                     name="episodes",
                     metadata={"description": "Episodic memories"},
                 )
+                # Phase 7: ジョブ設定を読み込み
+                await self._load_job_configs()
 
     async def disconnect(self) -> None:
-        """Close ChromaDB connection."""
+        """Close ChromaDB connection (Phase 7: with job config saving)."""
         async with self._lock:
+            # Phase 7: ジョブ設定を保存
+            await self._save_job_configs()
             self._client = None
             self._collection = None
             self._episodes_collection = None
@@ -324,8 +338,12 @@ class MemoryStore:
         sensory_data: tuple[SensoryData, ...] = (),
         camera_position: CameraPosition | None = None,
         tags: tuple[str, ...] = (),
+        # Phase 7: ジョブ分離
+        memory_type: str = "global",
+        job_id: str | None = None,
+        shared_group_ids: tuple[str, ...] = (),
     ) -> Memory:
-        """Save a new memory (Phase 4: with sensory data & camera position)."""
+        """Save a new memory (Phase 7: with job isolation)."""
         collection = self._ensure_connected()
 
         memory_id = str(uuid.uuid4())
@@ -344,6 +362,10 @@ class MemoryStore:
             sensory_data=sensory_data,
             camera_position=camera_position,
             tags=tags,
+            # Phase 7: ジョブ分離
+            memory_type=memory_type,
+            job_id=job_id,
+            shared_group_ids=shared_group_ids,
         )
 
         await asyncio.to_thread(
@@ -366,8 +388,12 @@ class MemoryStore:
         category_filter: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        # Phase 7: ジョブ分離
+        job_id: str | None = None,
+        include_global: bool = True,
+        include_shared: bool = True,
     ) -> list[MemorySearchResult]:
-        """Search memories by semantic similarity."""
+        """Search memories by semantic similarity (Phase 7: with job isolation)."""
         collection = self._ensure_connected()
 
         # Build where filter
@@ -381,6 +407,43 @@ class MemoryStore:
             where_conditions.append({"timestamp": {"$gte": date_from}})
         if date_to:
             where_conditions.append({"timestamp": {"$lte": date_to}})
+
+        # Phase 7: ジョブ分離 - 検索対象の記憶タイプを制御
+        job_conditions: list[dict[str, Any]] = []
+
+        if include_global:
+            job_conditions.append({"memory_type": {"$eq": "global"}})
+
+        if job_id:
+            # ジョブ固有記憶
+            job_conditions.append(
+                {
+                    "$and": [
+                        {"memory_type": {"$eq": "job"}},
+                        {"job_id": {"$eq": job_id}},
+                    ]
+                }
+            )
+
+            if include_shared:
+                # このジョブが参照する共有グループの記憶
+                job_config = self._job_configs.get(job_id)
+                if job_config and job_config.shared_group_ids:
+                    for group_id in job_config.shared_group_ids:
+                        job_conditions.append(
+                            {
+                                "$and": [
+                                    {"memory_type": {"$eq": "shared"}},
+                                    {"shared_group_ids": {"$contains": group_id}},
+                                ]
+                            }
+                        )
+
+        if job_conditions:
+            if len(job_conditions) == 1:
+                where_conditions.append(job_conditions[0])
+            else:
+                where_conditions.append({"$or": job_conditions})
 
         where: dict[str, Any] | None = None
         if len(where_conditions) == 1:
@@ -430,8 +493,7 @@ class MemoryStore:
         )
         # ScoredMemory -> MemorySearchResult に変換
         return [
-            MemorySearchResult(memory=sr.memory, distance=sr.final_score)
-            for sr in scored_results
+            MemorySearchResult(memory=sr.memory, distance=sr.final_score) for sr in scored_results
         ]
 
     async def list_recent(
@@ -582,9 +644,7 @@ class MemoryStore:
                     else 1.0
                 )
                 emotion_boost = (
-                    calculate_emotion_boost(memory.emotion)
-                    if use_emotion_boost
-                    else 0.0
+                    calculate_emotion_boost(memory.emotion) if use_emotion_boost else 0.0
                 )
                 importance_boost = calculate_importance_boost(memory.importance)
 
@@ -772,9 +832,7 @@ class MemoryStore:
 
         # 閾値以下の記憶をフィルタ
         memories_to_link = [
-            result.memory
-            for result in similar_memories
-            if result.distance <= link_threshold
+            result.memory for result in similar_memories if result.distance <= link_threshold
         ]
 
         linked_ids = tuple(m.id for m in memories_to_link)
@@ -892,10 +950,7 @@ class MemoryStore:
                     linked_memories.append(mem)
 
         # リンク先をMemorySearchResultに変換（距離は仮の値）
-        linked_results = [
-            MemorySearchResult(memory=mem, distance=999.0)
-            for mem in linked_memories
-        ]
+        linked_results = [MemorySearchResult(memory=mem, distance=999.0) for mem in linked_memories]
 
         return main_results + linked_results
 
@@ -945,9 +1000,7 @@ class MemoryStore:
         if results and results.get("ids"):
             for i, memory_id in enumerate(results["ids"]):
                 content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                metadata = results["metadatas"][i] if results.get("metadatas") else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1027,9 +1080,7 @@ class MemoryStore:
         if results and results.get("ids"):
             for i, memory_id in enumerate(results["ids"]):
                 content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                metadata = results["metadatas"][i] if results.get("metadatas") else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1054,9 +1105,7 @@ class MemoryStore:
         if results and results.get("ids"):
             for i, memory_id in enumerate(results["ids"]):
                 content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                metadata = results["metadatas"][i] if results.get("metadatas") else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1441,3 +1490,193 @@ class MemoryStore:
             "avg_prediction_error": predictive.avg_prediction_error,
             "avg_novelty": predictive.avg_novelty,
         }
+
+    # Phase 7: ジョブ設定の永続化
+
+    async def _load_job_configs(self) -> None:
+        """Load job configurations from JSON file."""
+        if os.path.exists(self._job_config_path):
+            try:
+                with open(self._job_config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                # Load jobs
+                for job_data in data.get("jobs", []):
+                    job = JobConfig.from_dict(job_data)
+                    self._job_configs[job.job_id] = job
+
+                # Load shared groups
+                for group_data in data.get("shared_groups", []):
+                    group = SharedGroupConfig.from_dict(group_data)
+                    self._shared_groups[group.group_id] = group
+
+                logger.info(
+                    f"Loaded {len(self._job_configs)} jobs and "
+                    f"{len(self._shared_groups)} shared groups"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load job configs: {e}")
+                self._job_configs = {}
+                self._shared_groups = {}
+
+    async def _save_job_configs(self) -> None:
+        """Save job configurations to JSON file."""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self._job_config_path), exist_ok=True)
+
+            data = {
+                "jobs": [job.to_dict() for job in self._job_configs.values()],
+                "shared_groups": [group.to_dict() for group in self._shared_groups.values()],
+            }
+
+            with open(self._job_config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+            logger.info(
+                f"Saved {len(self._job_configs)} jobs and {len(self._shared_groups)} shared groups"
+            )
+        except Exception as e:
+            logger.error(f"Failed to save job configs: {e}")
+
+    # Phase 7: ジョブ分離 - ジョブ設定管理メソッド
+
+    async def create_job(
+        self,
+        job_id: str,
+        name: str,
+        description: str = "",
+        shared_group_ids: tuple[str, ...] = (),
+    ) -> JobConfig:
+        """Create a new job configuration."""
+        job_config = JobConfig(
+            job_id=job_id,
+            name=name,
+            description=description,
+            shared_group_ids=shared_group_ids,
+        )
+        self._job_configs[job_id] = job_config
+        return job_config
+
+    async def get_job(self, job_id: str) -> JobConfig | None:
+        """Get job configuration by ID."""
+        return self._job_configs.get(job_id)
+
+    async def list_jobs(self) -> list[JobConfig]:
+        """List all job configurations."""
+        return list(self._job_configs.values())
+
+    async def update_job(
+        self,
+        job_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        shared_group_ids: tuple[str, ...] | None = None,
+    ) -> JobConfig | None:
+        """Update job configuration."""
+        job = self._job_configs.get(job_id)
+        if job is None:
+            return None
+
+        updated = JobConfig(
+            job_id=job_id,
+            name=name if name is not None else job.name,
+            description=description if description is not None else job.description,
+            shared_group_ids=shared_group_ids
+            if shared_group_ids is not None
+            else job.shared_group_ids,
+        )
+        self._job_configs[job_id] = updated
+        return updated
+
+    async def delete_job(self, job_id: str) -> bool:
+        """Delete job configuration."""
+        if job_id in self._job_configs:
+            del self._job_configs[job_id]
+            return True
+        return False
+
+    async def create_shared_group(
+        self,
+        group_id: str,
+        name: str,
+        description: str = "",
+        member_job_ids: tuple[str, ...] = (),
+    ) -> SharedGroupConfig:
+        """Create a new shared group configuration."""
+        group_config = SharedGroupConfig(
+            group_id=group_id,
+            name=name,
+            description=description,
+            member_job_ids=member_job_ids,
+        )
+        self._shared_groups[group_id] = group_config
+        return group_config
+
+    async def get_shared_group(self, group_id: str) -> SharedGroupConfig | None:
+        """Get shared group configuration by ID."""
+        return self._shared_groups.get(group_id)
+
+    async def list_shared_groups(self) -> list[SharedGroupConfig]:
+        """List all shared group configurations."""
+        return list(self._shared_groups.values())
+
+    async def add_job_to_shared_group(self, job_id: str, group_id: str) -> bool:
+        """Add a job to a shared group."""
+        job = self._job_configs.get(job_id)
+        group = self._shared_groups.get(group_id)
+
+        if job is None or group is None:
+            return False
+
+        # Update job's shared_group_ids
+        if group_id not in job.shared_group_ids:
+            new_ids = tuple(list(job.shared_group_ids) + [group_id])
+            self._job_configs[job_id] = JobConfig(
+                job_id=job.job_id,
+                name=job.name,
+                description=job.description,
+                shared_group_ids=new_ids,
+            )
+
+        # Update group's member_job_ids
+        if job_id not in group.member_job_ids:
+            new_members = tuple(list(group.member_job_ids) + [job_id])
+            self._shared_groups[group_id] = SharedGroupConfig(
+                group_id=group.group_id,
+                name=group.name,
+                description=group.description,
+                member_job_ids=new_members,
+            )
+
+        return True
+
+    async def remove_job_from_shared_group(self, job_id: str, group_id: str) -> bool:
+        """Remove a job from a shared group."""
+        job = self._job_configs.get(job_id)
+        group = self._shared_groups.get(group_id)
+
+        if job is None or group is None:
+            return False
+
+        # Update job's shared_group_ids
+        if group_id in job.shared_group_ids:
+            new_ids = tuple([gid for gid in job.shared_group_ids if gid != group_id])
+            self._job_configs[job_id] = JobConfig(
+                job_id=job.job_id,
+                name=job.name,
+                description=job.description,
+                shared_group_ids=new_ids,
+            )
+
+        # Update group's member_job_ids
+        if job_id in group.member_job_ids:
+            new_members = tuple([jid for jid in group.member_job_ids if jid != job_id])
+            self._shared_groups[group_id] = SharedGroupConfig(
+                group_id=group.group_id,
+                name=group.name,
+                description=group.description,
+                member_job_ids=new_members,
+            )
+
+        return True

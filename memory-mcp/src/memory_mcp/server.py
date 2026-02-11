@@ -52,7 +52,16 @@ class MemoryMCPServer:
                                 "type": "string",
                                 "description": "Emotion associated with this memory",
                                 "default": "neutral",
-                                "enum": ["happy", "sad", "surprised", "moved", "excited", "nostalgic", "curious", "neutral"],
+                                "enum": [
+                                    "happy",
+                                    "sad",
+                                    "surprised",
+                                    "moved",
+                                    "excited",
+                                    "nostalgic",
+                                    "curious",
+                                    "neutral",
+                                ],
                             },
                             "importance": {
                                 "type": "integer",
@@ -65,7 +74,15 @@ class MemoryMCPServer:
                                 "type": "string",
                                 "description": "Category of memory",
                                 "default": "daily",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": [
+                                    "daily",
+                                    "philosophical",
+                                    "technical",
+                                    "memory",
+                                    "observation",
+                                    "feeling",
+                                    "conversation",
+                                ],
                             },
                             "auto_link": {
                                 "type": "boolean",
@@ -78,6 +95,21 @@ class MemoryMCPServer:
                                 "default": 0.8,
                                 "minimum": 0,
                                 "maximum": 2,
+                            },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Memory type for job isolation",
+                                "default": "global",
+                                "enum": ["global", "job", "shared"],
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID for job-specific memories (required when memory_type is 'job')",
+                            },
+                            "shared_group_ids": {
+                                "type": "array",
+                                "description": "Shared group IDs for shared memories (required when memory_type is 'shared')",
+                                "items": {"type": "string"},
                             },
                         },
                         "required": ["content"],
@@ -103,12 +135,29 @@ class MemoryMCPServer:
                             "emotion_filter": {
                                 "type": "string",
                                 "description": "Filter by emotion (optional)",
-                                "enum": ["happy", "sad", "surprised", "moved", "excited", "nostalgic", "curious", "neutral"],
+                                "enum": [
+                                    "happy",
+                                    "sad",
+                                    "surprised",
+                                    "moved",
+                                    "excited",
+                                    "nostalgic",
+                                    "curious",
+                                    "neutral",
+                                ],
                             },
                             "category_filter": {
                                 "type": "string",
                                 "description": "Filter by category (optional)",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": [
+                                    "daily",
+                                    "philosophical",
+                                    "technical",
+                                    "memory",
+                                    "observation",
+                                    "feeling",
+                                    "conversation",
+                                ],
                             },
                             "date_from": {
                                 "type": "string",
@@ -117,6 +166,20 @@ class MemoryMCPServer:
                             "date_to": {
                                 "type": "string",
                                 "description": "Filter memories until this date (ISO 8601 format, optional)",
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to search within specific job context (includes global and shared memories by default)",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in search",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
                             },
                         },
                         "required": ["query"],
@@ -159,7 +222,15 @@ class MemoryMCPServer:
                             "category_filter": {
                                 "type": "string",
                                 "description": "Filter by category (optional)",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": [
+                                    "daily",
+                                    "philosophical",
+                                    "technical",
+                                    "memory",
+                                    "observation",
+                                    "feeling",
+                                    "conversation",
+                                ],
                             },
                         },
                         "required": [],
@@ -426,7 +497,16 @@ class MemoryMCPServer:
                                 "type": "string",
                                 "description": "Emotion",
                                 "default": "neutral",
-                                "enum": ["happy", "sad", "surprised", "moved", "excited", "nostalgic", "curious", "neutral"],
+                                "enum": [
+                                    "happy",
+                                    "sad",
+                                    "surprised",
+                                    "moved",
+                                    "excited",
+                                    "nostalgic",
+                                    "curious",
+                                    "neutral",
+                                ],
                             },
                             "importance": {
                                 "type": "integer",
@@ -461,7 +541,16 @@ class MemoryMCPServer:
                                 "type": "string",
                                 "description": "Emotion",
                                 "default": "neutral",
-                                "enum": ["happy", "sad", "surprised", "moved", "excited", "nostalgic", "curious", "neutral"],
+                                "enum": [
+                                    "happy",
+                                    "sad",
+                                    "surprised",
+                                    "moved",
+                                    "excited",
+                                    "nostalgic",
+                                    "curious",
+                                    "neutral",
+                                ],
                             },
                             "importance": {
                                 "type": "integer",
@@ -582,6 +671,115 @@ class MemoryMCPServer:
                         "required": ["memory_id"],
                     },
                 ),
+                # Phase 7: ジョブ分離ツール
+                Tool(
+                    name="create_job",
+                    description="Create a new job for memory isolation. Jobs allow you to separate memories by project, novel, or any context.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "job_id": {
+                                "type": "string",
+                                "description": "Unique identifier for the job",
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Display name for the job",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Optional description of the job",
+                            },
+                            "shared_group_ids": {
+                                "type": "array",
+                                "description": "Shared group IDs this job should reference",
+                                "items": {"type": "string"},
+                            },
+                        },
+                        "required": ["job_id", "name"],
+                    },
+                ),
+                Tool(
+                    name="list_jobs",
+                    description="List all configured jobs.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="create_shared_group",
+                    description="Create a shared memory group for sharing memories between multiple jobs.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "Unique identifier for the shared group",
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Display name for the group",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Optional description of the group",
+                            },
+                            "member_job_ids": {
+                                "type": "array",
+                                "description": "Job IDs that are members of this group",
+                                "items": {"type": "string"},
+                            },
+                        },
+                        "required": ["group_id", "name"],
+                    },
+                ),
+                Tool(
+                    name="list_shared_groups",
+                    description="List all shared memory groups.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="add_job_to_shared_group",
+                    description="Add a job to a shared memory group.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "job_id": {
+                                "type": "string",
+                                "description": "ID of the job to add",
+                            },
+                            "group_id": {
+                                "type": "string",
+                                "description": "ID of the shared group",
+                            },
+                        },
+                        "required": ["job_id", "group_id"],
+                    },
+                ),
+                Tool(
+                    name="remove_job_from_shared_group",
+                    description="Remove a job from a shared memory group.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "job_id": {
+                                "type": "string",
+                                "description": "ID of the job to remove",
+                            },
+                            "group_id": {
+                                "type": "string",
+                                "description": "ID of the shared group",
+                            },
+                        },
+                        "required": ["job_id", "group_id"],
+                    },
+                ),
             ]
 
         @self._server.call_tool()
@@ -599,6 +797,11 @@ class MemoryMCPServer:
 
                         auto_link = arguments.get("auto_link", True)
 
+                        # Phase 7: ジョブ分離パラメータ
+                        memory_type = arguments.get("memory_type", "global")
+                        job_id = arguments.get("job_id")
+                        shared_group_ids = tuple(arguments.get("shared_group_ids", []))
+
                         if auto_link:
                             memory = await self._memory_store.save_with_auto_link(
                                 content=content,
@@ -606,6 +809,9 @@ class MemoryMCPServer:
                                 importance=arguments.get("importance", 3),
                                 category=arguments.get("category", "daily"),
                                 link_threshold=arguments.get("link_threshold", 0.8),
+                                memory_type=memory_type,
+                                job_id=job_id,
+                                shared_group_ids=shared_group_ids,
                             )
                             linked_info = f"\nLinked to: {len(memory.linked_ids)} memories"
                         else:
@@ -614,6 +820,9 @@ class MemoryMCPServer:
                                 emotion=arguments.get("emotion", "neutral"),
                                 importance=arguments.get("importance", 3),
                                 category=arguments.get("category", "daily"),
+                                memory_type=memory_type,
+                                job_id=job_id,
+                                shared_group_ids=shared_group_ids,
                             )
                             linked_info = ""
 
@@ -636,10 +845,17 @@ class MemoryMCPServer:
                             category_filter=arguments.get("category_filter"),
                             date_from=arguments.get("date_from"),
                             date_to=arguments.get("date_to"),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not results:
-                            return [TextContent(type="text", text="No memories found matching the query.")]
+                            return [
+                                TextContent(
+                                    type="text", text="No memories found matching the query."
+                                )
+                            ]
 
                         output_lines = [f"Found {len(results)} memories:\n"]
                         for i, result in enumerate(results, 1):
@@ -711,8 +927,8 @@ By Emotion:
 {json.dumps(stats.by_emotion, indent=2, ensure_ascii=False)}
 
 Date Range:
-  Oldest: {stats.oldest_timestamp or 'N/A'}
-  Newest: {stats.newest_timestamp or 'N/A'}
+  Oldest: {stats.oldest_timestamp or "N/A"}
+  Newest: {stats.newest_timestamp or "N/A"}
 """
                         return [TextContent(type="text", text=output)]
 
@@ -734,7 +950,9 @@ Date Range:
                         main_results = [r for r in results if r.distance < 900]
                         linked_results = [r for r in results if r.distance >= 900]
 
-                        output_lines = [f"Recalled {len(main_results)} memories with {len(linked_results)} linked associations:\n"]
+                        output_lines = [
+                            f"Recalled {len(main_results)} memories with {len(linked_results)} linked associations:\n"
+                        ]
 
                         output_lines.append("=== Primary Memories ===\n")
                         for i, result in enumerate(main_results, 1):
@@ -853,7 +1071,9 @@ Date Range:
                         )
 
                         if linked_memories:
-                            output_lines.append(f"\n=== Linked Memories ({len(linked_memories)}) ===\n")
+                            output_lines.append(
+                                f"\n=== Linked Memories ({len(linked_memories)}) ===\n"
+                            )
                             for i, m in enumerate(linked_memories, 1):
                                 output_lines.append(
                                     f"--- {i}. {m.id[:8]}... ---\n"
@@ -868,7 +1088,11 @@ Date Range:
                     # Phase 4: Episode Tools
                     case "create_episode":
                         if self._episode_manager is None:
-                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Episode manager not initialized"
+                                )
+                            ]
 
                         title = arguments.get("title", "")
                         if not title:
@@ -889,19 +1113,23 @@ Date Range:
                             TextContent(
                                 type="text",
                                 text=f"Episode created!\n"
-                                     f"ID: {episode.id}\n"
-                                     f"Title: {episode.title}\n"
-                                     f"Memories: {len(episode.memory_ids)}\n"
-                                     f"Time: {episode.start_time} - {episode.end_time}\n"
-                                     f"Emotion: {episode.emotion}\n"
-                                     f"Importance: {episode.importance}\n"
-                                     f"Summary: {episode.summary[:100]}...",
+                                f"ID: {episode.id}\n"
+                                f"Title: {episode.title}\n"
+                                f"Memories: {len(episode.memory_ids)}\n"
+                                f"Time: {episode.start_time} - {episode.end_time}\n"
+                                f"Emotion: {episode.emotion}\n"
+                                f"Importance: {episode.importance}\n"
+                                f"Summary: {episode.summary[:100]}...",
                             )
                         ]
 
                     case "search_episodes":
                         if self._episode_manager is None:
-                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Episode manager not initialized"
+                                )
+                            ]
 
                         query = arguments.get("query", "")
                         if not query:
@@ -913,7 +1141,11 @@ Date Range:
                         )
 
                         if not episodes:
-                            return [TextContent(type="text", text="No episodes found matching the query.")]
+                            return [
+                                TextContent(
+                                    type="text", text="No episodes found matching the query."
+                                )
+                            ]
 
                         output_lines = [f"Found {len(episodes)} episodes:\n"]
                         for i, ep in enumerate(episodes, 1):
@@ -931,7 +1163,11 @@ Date Range:
 
                     case "get_episode_memories":
                         if self._episode_manager is None:
-                            return [TextContent(type="text", text="Error: Episode manager not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Episode manager not initialized"
+                                )
+                            ]
 
                         episode_id = arguments.get("episode_id", "")
                         if not episode_id:
@@ -954,7 +1190,11 @@ Date Range:
                     # Phase 4.3: Sensory Integration Tools
                     case "save_visual_memory":
                         if self._sensory_integration is None:
-                            return [TextContent(type="text", text="Error: Sensory integration not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Sensory integration not initialized"
+                                )
+                            ]
 
                         content = arguments.get("content", "")
                         if not content:
@@ -966,7 +1206,9 @@ Date Range:
 
                         camera_pos_data = arguments.get("camera_position")
                         if not camera_pos_data:
-                            return [TextContent(type="text", text="Error: camera_position is required")]
+                            return [
+                                TextContent(type="text", text="Error: camera_position is required")
+                            ]
 
                         # Create CameraPosition from dict
                         camera_position = CameraPosition(
@@ -987,17 +1229,21 @@ Date Range:
                             TextContent(
                                 type="text",
                                 text=f"Visual memory saved!\n"
-                                     f"ID: {memory.id}\n"
-                                     f"Content: {memory.content}\n"
-                                     f"Image: {image_path}\n"
-                                     f"Camera: pan={camera_position.pan_angle}°, tilt={camera_position.tilt_angle}°\n"
-                                     f"Emotion: {memory.emotion} | Importance: {memory.importance}",
+                                f"ID: {memory.id}\n"
+                                f"Content: {memory.content}\n"
+                                f"Image: {image_path}\n"
+                                f"Camera: pan={camera_position.pan_angle}°, tilt={camera_position.tilt_angle}°\n"
+                                f"Emotion: {memory.emotion} | Importance: {memory.importance}",
                             )
                         ]
 
                     case "save_audio_memory":
                         if self._sensory_integration is None:
-                            return [TextContent(type="text", text="Error: Sensory integration not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Sensory integration not initialized"
+                                )
+                            ]
 
                         content = arguments.get("content", "")
                         if not content:
@@ -1023,23 +1269,31 @@ Date Range:
                             TextContent(
                                 type="text",
                                 text=f"Audio memory saved!\n"
-                                     f"ID: {memory.id}\n"
-                                     f"Content: {memory.content}\n"
-                                     f"Audio: {audio_path}\n"
-                                     f"Transcript: {transcript}\n"
-                                     f"Emotion: {memory.emotion} | Importance: {memory.importance}",
+                                f"ID: {memory.id}\n"
+                                f"Content: {memory.content}\n"
+                                f"Audio: {audio_path}\n"
+                                f"Transcript: {transcript}\n"
+                                f"Emotion: {memory.emotion} | Importance: {memory.importance}",
                             )
                         ]
 
                     case "recall_by_camera_position":
                         if self._sensory_integration is None:
-                            return [TextContent(type="text", text="Error: Sensory integration not initialized")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: Sensory integration not initialized"
+                                )
+                            ]
 
                         pan_angle = arguments.get("pan_angle")
                         tilt_angle = arguments.get("tilt_angle")
 
                         if pan_angle is None or tilt_angle is None:
-                            return [TextContent(type="text", text="Error: pan_angle and tilt_angle are required")]
+                            return [
+                                TextContent(
+                                    type="text", text="Error: pan_angle and tilt_angle are required"
+                                )
+                            ]
 
                         memories = await self._sensory_integration.recall_by_camera_position(
                             pan_angle=pan_angle,
@@ -1059,7 +1313,11 @@ Date Range:
                             f"Found {len(memories)} memories at camera position pan={pan_angle}°, tilt={tilt_angle}°:\n"
                         ]
                         for i, m in enumerate(memories, 1):
-                            cam_pos = f"pan={m.camera_position.pan_angle}°, tilt={m.camera_position.tilt_angle}°" if m.camera_position else "N/A"
+                            cam_pos = (
+                                f"pan={m.camera_position.pan_angle}°, tilt={m.camera_position.tilt_angle}°"
+                                if m.camera_position
+                                else "N/A"
+                            )
                             output_lines.append(
                                 f"--- Memory {i} ---\n"
                                 f"Time: {m.timestamp}\n"
@@ -1085,9 +1343,7 @@ Date Range:
                                 )
                             ]
 
-                        output_lines = [
-                            f"Working memory ({len(memories)} recent memories):\n"
-                        ]
+                        output_lines = [f"Working memory ({len(memories)} recent memories):\n"]
                         for i, m in enumerate(memories, 1):
                             output_lines.append(
                                 f"--- {i}. [{m.timestamp}] ---\n"
@@ -1134,10 +1390,10 @@ Date Range:
                             TextContent(
                                 type="text",
                                 text=f"Link created!\n"
-                                     f"Source: {source_id[:8]}...\n"
-                                     f"Target: {target_id[:8]}...\n"
-                                     f"Type: {link_type}\n"
-                                     f"Note: {note or '(none)'}",
+                                f"Source: {source_id[:8]}...\n"
+                                f"Target: {target_id[:8]}...\n"
+                                f"Type: {link_type}\n"
+                                f"Note: {note or '(none)'}",
                             )
                         ]
 
@@ -1163,13 +1419,15 @@ Date Range:
                         direction_label = "causes" if direction == "backward" else "effects"
                         output_lines = [
                             f"Causal chain ({direction_label}) starting from {memory_id[:8]}...:\n",
-                            f"=== Starting Memory ===\n",
+                            "=== Starting Memory ===\n",
                             f"[{start_memory.timestamp}] [{start_memory.emotion}]\n",
                             f"{start_memory.content}\n",
                         ]
 
                         if chain:
-                            output_lines.append(f"\n=== {direction_label.title()} ({len(chain)} memories) ===\n")
+                            output_lines.append(
+                                f"\n=== {direction_label.title()} ({len(chain)} memories) ===\n"
+                            )
                             for i, (mem, link_type) in enumerate(chain, 1):
                                 output_lines.append(
                                     f"--- {i}. [{link_type}] {mem.id[:8]}... ---\n"
@@ -1178,6 +1436,145 @@ Date Range:
                                 )
                         else:
                             output_lines.append(f"\nNo {direction_label} found.\n")
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
+                    # Phase 7: ジョブ分離ツール
+                    case "create_job":
+                        job_id = arguments.get("job_id", "")
+                        name = arguments.get("name", "")
+                        if not job_id or not name:
+                            return [
+                                TextContent(type="text", text="Error: job_id and name are required")
+                            ]
+
+                        job = await self._memory_store.create_job(
+                            job_id=job_id,
+                            name=name,
+                            description=arguments.get("description", ""),
+                            shared_group_ids=tuple(arguments.get("shared_group_ids", [])),
+                        )
+
+                        return [
+                            TextContent(
+                                type="text",
+                                text=f"Job created!\nID: {job.job_id}\nName: {job.name}\nDescription: {job.description}\nShared groups: {list(job.shared_group_ids)}",
+                            )
+                        ]
+
+                    case "list_jobs":
+                        jobs = await self._memory_store.list_jobs()
+
+                        if not jobs:
+                            return [TextContent(type="text", text="No jobs configured.")]
+
+                        output_lines = [f"Configured jobs ({len(jobs)}):\n"]
+                        for job in jobs:
+                            output_lines.append(
+                                f"--- {job.job_id} ---\n"
+                                f"Name: {job.name}\n"
+                                f"Description: {job.description}\n"
+                                f"Shared groups: {list(job.shared_group_ids)}\n"
+                            )
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
+                    case "create_shared_group":
+                        group_id = arguments.get("group_id", "")
+                        name = arguments.get("name", "")
+                        if not group_id or not name:
+                            return [
+                                TextContent(
+                                    type="text", text="Error: group_id and name are required"
+                                )
+                            ]
+
+                        group = await self._memory_store.create_shared_group(
+                            group_id=group_id,
+                            name=name,
+                            description=arguments.get("description", ""),
+                            member_job_ids=tuple(arguments.get("member_job_ids", [])),
+                        )
+
+                        return [
+                            TextContent(
+                                type="text",
+                                text=f"Shared group created!\nID: {group.group_id}\nName: {group.name}\nDescription: {group.description}\nMember jobs: {list(group.member_job_ids)}",
+                            )
+                        ]
+
+                    case "add_job_to_shared_group":
+                        job_id = arguments.get("job_id", "")
+                        group_id = arguments.get("group_id", "")
+                        if not job_id or not group_id:
+                            return [
+                                TextContent(
+                                    type="text", text="Error: job_id and group_id are required"
+                                )
+                            ]
+
+                        success = await self._memory_store.add_job_to_shared_group(
+                            job_id=job_id, group_id=group_id
+                        )
+
+                        if success:
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=f"Job '{job_id}' added to shared group '{group_id}'",
+                                )
+                            ]
+                        else:
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=f"Error: Job '{job_id}' or group '{group_id}' not found",
+                                )
+                            ]
+
+                    case "remove_job_from_shared_group":
+                        job_id = arguments.get("job_id", "")
+                        group_id = arguments.get("group_id", "")
+                        if not job_id or not group_id:
+                            return [
+                                TextContent(
+                                    type="text", text="Error: job_id and group_id are required"
+                                )
+                            ]
+
+                        success = await self._memory_store.remove_job_from_shared_group(
+                            job_id=job_id, group_id=group_id
+                        )
+
+                        if success:
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=f"Job '{job_id}' removed from shared group '{group_id}'",
+                                )
+                            ]
+                        else:
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=f"Error: Job '{job_id}' or group '{group_id}' not found",
+                                )
+                            ]
+
+                    case "list_shared_groups":
+                        groups = await self._memory_store.list_shared_groups()
+
+                        if not groups:
+                            return [TextContent(type="text", text="No shared groups configured.")]
+
+                        output_lines = [f"Shared groups ({len(groups)}):\n"]
+                        for group in groups:
+                            output_lines.append(
+                                f"--- {group.group_id} ---\n"
+                                f"Name: {group.name}\n"
+                                f"Description: {group.description}\n"
+                                f"Member jobs: {list(group.member_job_ids)}\n"
+                            )
 
                         return [TextContent(type="text", text="\n".join(output_lines))]
 
