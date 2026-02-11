@@ -31,8 +31,6 @@ ENV/
 *.swp
 *.swo
 
-# Serena
-.serena/
 
 # Environment variables (NEVER commit these!)
 .env
