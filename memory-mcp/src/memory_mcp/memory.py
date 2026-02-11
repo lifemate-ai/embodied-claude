@@ -239,10 +239,17 @@ def _memory_from_metadata(
     content: str,
     metadata: dict[str, Any],
 ) -> Memory:
-    """メタデータからMemoryオブジェクトを作成（Phase 4対応）。"""
+    """メタデータからMemoryオブジェクトを作成（Phase 7対応）。"""
     # episode_idの処理: 空文字列もNoneとして扱う
     episode_id_raw = metadata.get("episode_id", "")
     episode_id = episode_id_raw if episode_id_raw else None
+
+    # Phase 7: ジョブ分離フィールドのパース
+    memory_type = metadata.get("memory_type", "global")
+    job_id_raw = metadata.get("job_id", "")
+    job_id = job_id_raw if job_id_raw else None
+    shared_group_ids_str = metadata.get("shared_group_ids", "")
+    shared_group_ids = tuple(id.strip() for id in shared_group_ids_str.split(",") if id.strip())
 
     return Memory(
         id=memory_id,
@@ -267,6 +274,10 @@ def _memory_from_metadata(
         activation_count=_safe_int(metadata.get("activation_count", 0), 0),
         last_activated=metadata.get("last_activated", ""),
         coactivation_weights=_parse_coactivation_weights(metadata.get("coactivation", "")),
+        # Phase 7: ジョブ分離
+        memory_type=memory_type,
+        job_id=job_id,
+        shared_group_ids=shared_group_ids,
     )
 
 
