@@ -474,7 +474,8 @@ class MemoryStore:
                 distance = distances[i] if i < len(distances) else 0.0
 
                 # 共有メモリの場合、shared_group_idsの所有権を検証
-                if memory.memory_type == "shared" and job_id and include_shared:
+                # job_idがNoneの場合も含め、常に所有権検証を行う
+                if memory.memory_type == "shared" and include_shared:
                     memory_group_ids = set(memory.shared_group_ids)
                     if not memory_group_ids.intersection(allowed_shared_groups):
                         continue  # このジョブが参照していない共有グループの記憶はスキップ
@@ -605,7 +606,8 @@ class MemoryStore:
                 memory = _memory_from_metadata(memory_id, content, metadata)
 
                 # 共有メモリの場合、shared_group_idsの所有権を検証
-                if memory.memory_type == "shared" and job_id and include_shared:
+                # job_idがNoneの場合も含め、常に所有権検証を行う
+                if memory.memory_type == "shared" and include_shared:
                     memory_group_ids = set(memory.shared_group_ids)
                     if not memory_group_ids.intersection(allowed_shared_groups):
                         continue  # このジョブが参照していない共有グループの記憶はスキップ
@@ -681,8 +683,9 @@ class MemoryStore:
         metadatas = results.get("metadatas", [])
         for metadata in metadatas:
             # 共有メモリの場合、shared_group_idsの所有権を検証
+            # job_idがNoneの場合も含め、常に所有権検証を行う
             memory_type = metadata.get("memory_type", "global")
-            if memory_type == "shared" and job_id and include_shared:
+            if memory_type == "shared" and include_shared:
                 shared_group_ids_str = metadata.get("shared_group_ids", "")
                 memory_group_ids = set(
                     id.strip() for id in shared_group_ids_str.split(",") if id.strip()
@@ -827,7 +830,8 @@ class MemoryStore:
                 memory = _memory_from_metadata(memory_id, content, metadata)
 
                 # 共有メモリの場合、shared_group_idsの所有権を検証
-                if memory.memory_type == "shared" and job_id and include_shared:
+                # job_idがNoneの場合も含め、常に所有権検証を行う
+                if memory.memory_type == "shared" and include_shared:
                     memory_group_ids = set(memory.shared_group_ids)
                     if not memory_group_ids.intersection(allowed_shared_groups):
                         continue  # このジョブが参照していない共有グループの記憶はスキップ
@@ -1435,7 +1439,8 @@ class MemoryStore:
                 memory = _memory_from_metadata(memory_id, content, metadata)
 
                 # 共有メモリの場合、shared_group_idsの所有権を検証
-                if memory.memory_type == "shared" and job_id and include_shared:
+                # job_idがNoneの場合も含め、常に所有権検証を行う
+                if memory.memory_type == "shared" and include_shared:
                     memory_group_ids = set(memory.shared_group_ids)
                     if not memory_group_ids.intersection(allowed_shared_groups):
                         continue  # このジョブが参照していない共有グループの記憶はスキップ
@@ -1515,7 +1520,8 @@ class MemoryStore:
                 memory = _memory_from_metadata(memory_id, content, metadata)
 
                 # 共有メモリの場合、shared_group_idsの所有権を検証
-                if memory.memory_type == "shared" and job_id and include_shared:
+                # job_idがNoneの場合も含め、常に所有権検証を行う
+                if memory.memory_type == "shared" and include_shared:
                     memory_group_ids = set(memory.shared_group_ids)
                     if not memory_group_ids.intersection(allowed_shared_groups):
                         continue  # このジョブが参照していない共有グループの記憶はスキップ
@@ -2277,17 +2283,17 @@ class MemoryStore:
 
     async def delete_shared_group(self, group_id: str) -> bool:
         """Delete a shared group.
-        
+
         Args:
             group_id: ID of the shared group to delete
-            
+
         Returns:
             True if deleted successfully, False if group not found
         """
         group = self._shared_groups.get(group_id)
         if group is None:
             return False
-        
+
         # Remove this group from all member jobs' shared_group_ids
         for job_id in group.member_job_ids:
             job = self._job_configs.get(job_id)
@@ -2299,8 +2305,8 @@ class MemoryStore:
                     description=job.description,
                     shared_group_ids=new_ids,
                 )
-        
+
         # Delete the group
         del self._shared_groups[group_id]
-        
+
         return True
