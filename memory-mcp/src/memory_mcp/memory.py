@@ -878,9 +878,6 @@ class MemoryStore:
                     )
                 )
 
-                if len(scored_results) >= n_results:
-                    break
-
         # final_score昇順でソート
         scored_results.sort(key=lambda x: x.final_score)
         return scored_results[:n_results]
@@ -2052,8 +2049,8 @@ class MemoryStore:
         selected_memories = [cand.memory for cand, _ in selected_with_scores]
 
         if record_activation:
-            for memory in selected_memories:
-                await self.record_activation(memory.id)
+            for i, memory in enumerate(selected_memories):
+                await self.record_activation(memory.id, prediction_error=prediction_errors[i])
 
         results = [
             MemorySearchResult(memory=m, distance=distance_map.get(m.id, 0.5))
