@@ -41,3 +41,19 @@ class ServerConfig:
             name=os.getenv("MCP_SERVER_NAME", "memory-mcp"),
             version=os.getenv("MCP_SERVER_VERSION", "0.1.0"),
         )
+
+@dataclass(frozen=True)
+class JobIsolationConfig:
+    """Job isolation configuration for persistence."""
+
+    jobs_db_path: str
+
+    @classmethod
+    def from_memory_config(cls, memory_config: MemoryConfig) -> "JobIsolationConfig":
+        """Create job isolation config from memory config."""
+        # Store job configs in the same directory as ChromaDB but in a separate JSON file
+        jobs_db_path = os.path.join(
+            os.path.dirname(memory_config.db_path),
+            "job_configs.json"
+        )
+        return cls(jobs_db_path=jobs_db_path)

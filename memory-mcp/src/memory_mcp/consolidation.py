@@ -38,9 +38,28 @@ class ConsolidationEngine:
         window_hours: int = 24,
         max_replay_events: int = 200,
         link_update_strength: float = 0.2,
+        job_id: str | None = None,
+        include_global: bool = True,
+        include_shared: bool = True,
     ) -> ConsolidationStats:
+        """Run consolidation replay.
+
+        Args:
+            store: MemoryStore instance
+            window_hours: Lookback window in hours
+            max_replay_events: Maximum replay events
+            link_update_strength: Strength for coactivation updates
+            job_id: Job ID for job isolation
+            include_global: Include global memories
+            include_shared: Include shared memories
+        """
         cutoff = datetime.now() - timedelta(hours=max(1, window_hours))
-        recent = await store.list_recent(limit=max(max_replay_events * 2, 50))
+        recent = await store.list_recent(
+            limit=max(max_replay_events * 2, 50),
+            job_id=job_id,
+            include_global=include_global,
+            include_shared=include_shared,
+        )
         recent = [m for m in recent if self._is_after(m, cutoff)]
 
         if len(recent) < 2:
@@ -59,17 +78,43 @@ class ConsolidationEngine:
             right = recent[idx + 1]
 
             delta = max(0.05, min(1.0, link_update_strength))
-            await store.bump_coactivation(left.id, right.id, delta=delta)
+            await store.bump_coactivation(
+                left.id,
+                right.id,
+                delta=delta,
+                job_id=job_id,
+                include_global=include_global,
+                include_shared=include_shared,
+            )
             coactivation_updates += 2
 
             left_error = max(0.0, left.prediction_error * 0.9)
             right_error = max(0.0, right.prediction_error * 0.9)
-            await store.record_activation(left.id, prediction_error=left_error)
-            await store.record_activation(right.id, prediction_error=right_error)
+            await store.record_activation(
+                left.id,
+                prediction_error=left_error,
+                job_id=job_id,
+                include_global=include_global,
+                include_shared=include_shared,
+            )
+            await store.record_activation(
+                right.id,
+                prediction_error=right_error,
+                job_id=job_id,
+                include_global=include_global,
+                include_shared=include_shared,
+            )
             refreshed_ids.add(left.id)
             refreshed_ids.add(right.id)
 
-            if await store.maybe_add_related_link(left.id, right.id, threshold=0.6):
+            if await store.maybe_add_related_link(
+                left.id,
+                right.id,
+                threshold=0.6,
+                job_id=job_id,
+                include_global=include_global,
+                include_shared=include_shared,
+            ):
                 link_updates += 1
 
             replay_events += 1

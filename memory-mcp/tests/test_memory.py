@@ -93,6 +93,118 @@ class TestMemorySearch:
         assert isinstance(results, list)
 
 
+class TestSharedGroupJobIsolation:
+    """Tests for shared group and job isolation bug fix."""
+
+    @pytest.mark.asyncio
+    async def test_create_shared_group_updates_job_shared_group_ids(self, memory_store: MemoryStore):
+        """Test that creating a shared group with members updates each job's shared_group_ids."""
+        # Create jobs
+        job_a = await memory_store.create_job(job_id="Chat_A", name="Chat A")
+        job_b = await memory_store.create_job(job_id="Chat_B", name="Chat B")
+        
+        # Initially, jobs should have no shared groups
+        assert job_a.shared_group_ids == ()
+        assert job_b.shared_group_ids == ()
+        
+        # Create shared group with members
+        group = await memory_store.create_shared_group(
+            group_id="User_Chat",
+            name="User Chat",
+            member_job_ids=("Chat_A", "Chat_B"),
+        )
+        
+        # Verify group has members
+        assert group.member_job_ids == ("Chat_A", "Chat_B")
+        
+        # Verify jobs were updated to reference the group
+        updated_job_a = await memory_store.get_job("Chat_A")
+        updated_job_b = await memory_store.get_job("Chat_B")
+        
+        assert updated_job_a is not None
+        assert updated_job_b is not None
+        assert "User_Chat" in updated_job_a.shared_group_ids
+        assert "User_Chat" in updated_job_b.shared_group_ids
+
+    @pytest.mark.asyncio
+    async def test_search_includes_shared_memories_after_create_group(self, memory_store: MemoryStore):
+        """Test that search with job_id includes shared group memories after create_shared_group."""
+        # Create jobs
+        await memory_store.create_job(job_id="Chat_A", name="Chat A")
+        await memory_store.create_job(job_id="Chat_B", name="Chat B")
+        
+        # Create shared group with members
+        await memory_store.create_shared_group(
+            group_id="User_Chat",
+            name="User Chat",
+            member_job_ids=("Chat_A", "Chat_B"),
+        )
+        
+        # Save memories
+        await memory_store.save(
+            content="貴女の名前は二上ユウです",
+            memory_type="job",
+            job_id="Chat_A",
+        )
+        await memory_store.save(
+            content="チャット相手の名前は西日本太郎です",
+            memory_type="shared",
+            shared_group_ids=("User_Chat",),
+        )
+        
+        # Search with job_id Chat_A should find both memories
+        results = await memory_store.search(
+            query="*",
+            job_id="Chat_A",
+            include_global=True,
+            include_shared=True,
+        )
+        
+        contents = [r.memory.content for r in results]
+        assert "貴女の名前は二上ユウです" in contents
+        assert "チャット相手の名前は西日本太郎です" in contents
+
+    @pytest.mark.asyncio
+    async def test_delete_shared_group_removes_group_and_updates_jobs(self, memory_store: MemoryStore):
+        """Test that deleting a shared group removes it and updates member jobs."""
+        # Create jobs
+        await memory_store.create_job(job_id="Chat_A", name="Chat A")
+        await memory_store.create_job(job_id="Chat_B", name="Chat B")
+        
+        # Create shared group with members
+        await memory_store.create_shared_group(
+            group_id="User_Chat",
+            name="User Chat",
+            member_job_ids=("Chat_A", "Chat_B"),
+        )
+        
+        # Verify jobs have the group
+        job_a = await memory_store.get_job("Chat_A")
+        job_b = await memory_store.get_job("Chat_B")
+        assert "User_Chat" in job_a.shared_group_ids
+        assert "User_Chat" in job_b.shared_group_ids
+        
+        # Delete the group
+        success = await memory_store.delete_shared_group("User_Chat")
+        assert success is True
+        
+        # Verify group is deleted
+        group = await memory_store.get_shared_group("User_Chat")
+        assert group is None
+        
+        # Verify jobs no longer have the group
+        job_a = await memory_store.get_job("Chat_A")
+        job_b = await memory_store.get_job("Chat_B")
+        assert "User_Chat" not in job_a.shared_group_ids
+        assert "User_Chat" not in job_b.shared_group_ids
+
+    @pytest.mark.asyncio
+    async def test_delete_shared_group_not_found(self, memory_store: MemoryStore):
+        """Test that deleting a non-existent group returns False."""
+        success = await memory_store.delete_shared_group("NonExistentGroup")
+        assert success is False
+
+
 class TestMemoryRecall:
     """Tests for recall."""
 
