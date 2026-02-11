@@ -31,7 +31,6 @@ ENV/
 *.swp
 *.swo
 
-
 # Environment variables (NEVER commit these!)
 .env
 .env.local
