@@ -809,6 +809,10 @@ class MemoryStore:
         category: str = "daily",
         link_threshold: float = 0.8,
         max_links: int = 5,
+        # Phase 7: ジョブ分離
+        memory_type: str = "global",
+        job_id: str | None = None,
+        shared_group_ids: tuple[str, ...] = (),
     ) -> Memory:
         """
         記憶保存時に類似記憶を自動検索してリンク。
@@ -820,6 +824,9 @@ class MemoryStore:
             category: カテゴリ
             link_threshold: この距離以下の既存記憶にリンク
             max_links: 最大リンク数
+            memory_type: メモリタイプ ("global" | "job" | "shared")
+            job_id: ジョブ固有メモリの場合のジョブID
+            shared_group_ids: 共有メモリの場合の共有グループID
 
         Returns:
             保存された記憶
@@ -852,6 +859,10 @@ class MemoryStore:
             importance=importance,
             category=category,
             linked_ids=linked_ids,
+            # Phase 7: ジョブ分離
+            memory_type=memory_type,
+            job_id=job_id,
+            shared_group_ids=shared_group_ids,
         )
 
         await asyncio.to_thread(
