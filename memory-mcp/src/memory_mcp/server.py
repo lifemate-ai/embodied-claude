@@ -1058,9 +1058,9 @@ Date Range:
                         if not results:
                             return [TextContent(type="text", text="No relevant memories found.")]
 
-                        # メイン結果と関連結果を分ける
-                        main_results = [r for r in results if r.distance < 900]
-                        linked_results = [r for r in results if r.distance >= 900]
+                        # メイン結果と関連結果を分ける（is_linkedフラグを使用）
+                        main_results = [r for r in results if not r.is_linked]
+                        linked_results = [r for r in results if r.is_linked]
 
                         output_lines = [
                             f"Recalled {len(main_results)} memories with {len(linked_results)} linked associations:\n"
@@ -1516,6 +1516,7 @@ Date Range:
                             job_id=arguments.get("job_id"),
                             include_global=arguments.get("include_global", True),
                             include_shared=arguments.get("include_shared", True),
+                            bidirectional=arguments.get("bidirectional", False),
                         )
 
                         return [

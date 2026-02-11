@@ -1116,10 +1116,13 @@ class MemoryStore:
         Returns:
             保存された記憶
         """
-        # まず類似記憶を検索
+        # まず類似記憶を検索（ジョブ分離対応）
         similar_memories = await self.search(
             query=content,
             n_results=max_links,
+            job_id=job_id,
+            include_global=True,
+            include_shared=True,
         )
 
         # 閾値以下の記憶をフィルタ
@@ -1157,7 +1160,7 @@ class MemoryStore:
             metadatas=[memory.to_metadata()],
         )
 
-        # 双方向リンクを追加
+        # 双方向リンクを追加（重複を避けるため、linked_idsは既に設定済みなので相手側のみ更新）
         for target_id in linked_ids:
             await self._add_bidirectional_link(memory_id, target_id)
 
@@ -1208,14 +1211,21 @@ class MemoryStore:
                 if memory is None:
                     continue
 
-                # 起点以外は結果に追加
-                if mem_id != memory_id:
-                    result.append(memory)
+                # 起点は常に除外（循環リンクで戻ってきた場合も）
+                if mem_id == memory_id:
+                    continue
+                result.append(memory)
 
                 # 次の階層のIDを収集
+                # 1. linked_ids から（_add_bidirectional_link で作成されたリンク）
                 for linked_id in memory.linked_ids:
                     if linked_id not in visited:
                         next_ids.append(linked_id)
+
+                # 2. links から（add_causal_link で作成されたリンク）
+                for link in memory.links:
+                    if link.target_id not in visited:
+                        next_ids.append(link.target_id)
 
             current_ids = next_ids
             if not current_ids:
@@ -1272,8 +1282,11 @@ class MemoryStore:
                     seen_ids.add(mem.id)
                     linked_memories.append(mem)
 
-        # リンク先をMemorySearchResultに変換（距離は仮の値）
-        linked_results = [MemorySearchResult(memory=mem, distance=999.0) for mem in linked_memories]
+        # リンク先をMemorySearchResultに変換（距離は仮の値、is_linked=True）
+        linked_results = [
+            MemorySearchResult(memory=mem, distance=999.0, is_linked=True)
+            for mem in linked_memories
+        ]
 
         return main_results + linked_results
 
@@ -1585,8 +1598,9 @@ class MemoryStore:
         job_id: str | None = None,
         include_global: bool = True,
         include_shared: bool = True,
+        bidirectional: bool = False,
     ) -> None:
-        """因果リンクを追加（単方向）.
+        """因果リンクを追加（単方向、または双方向）.
 
         Args:
             source_id: リンク元の記憶ID
@@ -1596,6 +1610,7 @@ class MemoryStore:
             job_id: ジョブ固有メモリを検索する場合のジョブID（所有権検証用）
             include_global: グローバルメモリを含めるか
             include_shared: 共有メモリを含めるか
+            bidirectional: 双方向リンクを作成するか（デフォルトは単方向）
         """
         collection = self._ensure_connected()
 
@@ -1651,6 +1666,27 @@ class MemoryStore:
                 metadatas=[metadata],
             )
 
+        # 双方向リンクが要求された場合、逆方向のリンクも作成
+        if bidirectional:
+            # 逆方向のリンクタイプを決定
+            reverse_link_type = link_type
+            if link_type == "caused_by":
+                reverse_link_type = "leads_to"
+            elif link_type == "leads_to":
+                reverse_link_type = "caused_by"
+
+            # ターゲットからソースへのリンクを作成（無限再帰を防ぐためbidirectional=False）
+            await self.add_causal_link(
+                source_id=target_id,
+                target_id=source_id,
+                link_type=reverse_link_type,
+                note=note,
+                job_id=job_id,
+                include_global=include_global,
+                include_shared=include_shared,
+                bidirectional=False,
+            )
+
     async def get_causal_chain(
         self,
         memory_id: str,
@@ -1676,10 +1712,11 @@ class MemoryStore:
         max_depth = max(1, min(5, max_depth))
 
         # 方向によって辿るリンクタイプを決定
+        # すべてのリンクタイプを辿るように拡張
         if direction == "backward":
-            target_link_types = {"caused_by"}
+            target_link_types = {"caused_by", "related", "similar"}
         elif direction == "forward":
-            target_link_types = {"leads_to"}
+            target_link_types = {"leads_to", "related", "similar"}
         else:
             raise ValueError(f"Invalid direction: {direction}")
 

@@ -263,6 +263,7 @@ class MemorySearchResult:
 
     memory: Memory
     distance: float  # 類似度（小さいほど近い）
+    is_linked: bool = False  # リンク先からの結果かどうか
 
 
 @dataclass(frozen=True)
@@ -286,7 +287,6 @@ class MemoryStats:
     by_emotion: dict[str, int]
     oldest_timestamp: str | None
     newest_timestamp: str | None
-
 
 
 @dataclass(frozen=True)
