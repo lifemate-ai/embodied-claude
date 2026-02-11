@@ -202,6 +202,20 @@ class MemoryMCPServer:
                                 "minimum": 1,
                                 "maximum": 10,
                             },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to search within specific job context (includes global and shared memories by default)",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in recall",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
+                            },
                         },
                         "required": ["context"],
                     },
@@ -232,6 +246,20 @@ class MemoryMCPServer:
                                     "conversation",
                                 ],
                             },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to list memories within specific job context",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in list",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
+                            },
                         },
                         "required": [],
                     },
@@ -241,7 +269,22 @@ class MemoryMCPServer:
                     description="Get statistics about stored memories. Shows total count, breakdown by category and emotion.",
                     inputSchema={
                         "type": "object",
-                        "properties": {},
+                        "properties": {
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to get stats for specific job context",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in stats",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
+                            },
+                        },
                         "required": [],
                     },
                 ),
@@ -268,6 +311,20 @@ class MemoryMCPServer:
                                 "default": 1,
                                 "minimum": 1,
                                 "maximum": 3,
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to recall within specific job context",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in recall",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
                             },
                         },
                         "required": ["context"],
@@ -877,6 +934,9 @@ class MemoryMCPServer:
                         results = await self._memory_store.recall(
                             context=context,
                             n_results=arguments.get("n_results", 3),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not results:
@@ -898,6 +958,9 @@ class MemoryMCPServer:
                         memories = await self._memory_store.list_recent(
                             limit=arguments.get("limit", 10),
                             category_filter=arguments.get("category_filter"),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not memories:
@@ -915,7 +978,11 @@ class MemoryMCPServer:
                         return [TextContent(type="text", text="\n".join(output_lines))]
 
                     case "get_memory_stats":
-                        stats = await self._memory_store.get_stats()
+                        stats = await self._memory_store.get_stats(
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
+                        )
 
                         output = f"""Memory Statistics:
 Total Memories: {stats.total_count}
@@ -941,6 +1008,9 @@ Date Range:
                             context=context,
                             n_results=arguments.get("n_results", 3),
                             chain_depth=arguments.get("chain_depth", 1),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not results:
@@ -989,6 +1059,9 @@ Date Range:
                             max_depth=arguments.get("max_depth", 3),
                             temperature=arguments.get("temperature", 0.7),
                             include_diagnostics=arguments.get("include_diagnostics", False),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not results:
@@ -1020,6 +1093,9 @@ Date Range:
                         diagnostics = await self._memory_store.get_association_diagnostics(
                             context=context,
                             sample_size=arguments.get("sample_size", 20),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         return [
@@ -1035,6 +1111,9 @@ Date Range:
                             window_hours=arguments.get("window_hours", 24),
                             max_replay_events=arguments.get("max_replay_events", 200),
                             link_update_strength=arguments.get("link_update_strength", 0.2),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         return [
@@ -1051,13 +1130,21 @@ Date Range:
                             return [TextContent(type="text", text="Error: memory_id is required")]
 
                         # 起点の記憶を取得
-                        start_memory = await self._memory_store.get_by_id(memory_id)
+                        start_memory = await self._memory_store.get_by_id(
+                            memory_id,
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
+                        )
                         if not start_memory:
                             return [TextContent(type="text", text="Error: Memory not found")]
 
                         linked_memories = await self._memory_store.get_linked_memories(
                             memory_id=memory_id,
                             depth=arguments.get("depth", 2),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         output_lines = [f"Memory chain starting from {memory_id}:\n"]
@@ -1384,6 +1471,9 @@ Date Range:
                             target_id=target_id,
                             link_type=link_type,
                             note=note,
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         return [
@@ -1406,7 +1496,12 @@ Date Range:
                         max_depth = arguments.get("max_depth", 3)
 
                         # 起点の記憶を取得
-                        start_memory = await self._memory_store.get_by_id(memory_id)
+                        start_memory = await self._memory_store.get_by_id(
+                            memory_id,
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
+                        )
                         if not start_memory:
                             return [TextContent(type="text", text="Error: Memory not found")]
 
@@ -1414,6 +1509,9 @@ Date Range:
                             memory_id=memory_id,
                             direction=direction,
                             max_depth=max_depth,
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         direction_label = "causes" if direction == "backward" else "effects"
