@@ -37,6 +37,15 @@ class ElevenLabsConfig:
     playback: str
     pulse_sink: str | None
     pulse_server: str | None
+    go2rtc_url: str | None
+    go2rtc_stream: str
+    go2rtc_ffmpeg: str
+    go2rtc_bin: str | None
+    go2rtc_config: str | None
+    go2rtc_auto_start: bool
+    go2rtc_camera_host: str | None
+    go2rtc_camera_username: str | None
+    go2rtc_camera_password: str | None
 
     @classmethod
     def from_env(cls) -> "ElevenLabsConfig":
@@ -55,6 +64,27 @@ class ElevenLabsConfig:
             playback=os.getenv("ELEVENLABS_PLAYBACK", "auto"),
             pulse_sink=os.getenv("ELEVENLABS_PULSE_SINK") or None,
             pulse_server=_detect_pulse_server(),
+            go2rtc_url=os.getenv("GO2RTC_URL") or None,
+            go2rtc_stream=os.getenv("GO2RTC_STREAM", "tapo_cam"),
+            go2rtc_ffmpeg=os.getenv("GO2RTC_FFMPEG", "ffmpeg"),
+            go2rtc_bin=os.getenv("GO2RTC_BIN") or None,
+            go2rtc_config=os.getenv("GO2RTC_CONFIG") or None,
+            go2rtc_auto_start=_parse_bool(os.getenv("GO2RTC_AUTO_START"), True),
+            go2rtc_camera_host=(
+                os.getenv("GO2RTC_CAMERA_HOST")
+                or os.getenv("TAPO_CAMERA_HOST")
+                or None
+            ),
+            go2rtc_camera_username=(
+                os.getenv("GO2RTC_CAMERA_USERNAME")
+                or os.getenv("TAPO_USERNAME")
+                or None
+            ),
+            go2rtc_camera_password=(
+                os.getenv("GO2RTC_CAMERA_PASSWORD")
+                or os.getenv("TAPO_PASSWORD")
+                or None
+            ),
         )
 
 

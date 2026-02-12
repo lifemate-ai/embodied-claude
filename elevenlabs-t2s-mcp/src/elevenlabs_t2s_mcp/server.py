@@ -1,14 +1,20 @@
 """MCP Server for ElevenLabs text-to-speech."""
 
 import asyncio
+import logging
 import os
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
+
+if TYPE_CHECKING:
+    from .go2rtc import Go2RTCProcess
 
 from elevenlabs.client import ElevenLabs
 from mcp.server import Server
@@ -16,6 +22,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from .config import ElevenLabsConfig, ServerConfig
+
+logger = logging.getLogger(__name__)
 
 
 def _collect_audio_bytes(audio: Any) -> bytes:
@@ -178,6 +186,65 @@ def _play_with_paplay(
     return False, f"paplay failed: {error}"
 
 
+def _play_with_go2rtc(
+    file_path: str,
+    go2rtc_url: str,
+    go2rtc_stream: str,
+    go2rtc_ffmpeg: str,
+) -> tuple[bool, str]:
+    try:
+        import json
+        import urllib.request
+
+        abs_path = os.path.abspath(file_path)
+        src = f"ffmpeg:{abs_path}#audio=pcma#input=file"
+        url = f"{go2rtc_url}/api/streams?dst={quote(go2rtc_stream, safe='')}&src={quote(src, safe='')}"
+
+        req = urllib.request.Request(url, method="POST", data=b"")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read())
+
+        producers = body.get("producers", [])
+        has_sender = False
+        for consumer in body.get("consumers", []):
+            if consumer.get("senders"):
+                has_sender = True
+                break
+
+        if not has_sender:
+            return False, "go2rtc: no audio sender established (camera may not support backchannel)"
+
+        # Wait for ffmpeg producer to finish playing
+        ffmpeg_producer_id = None
+        for p in producers:
+            if p.get("format_name") == "wav" or "ffmpeg" in p.get("source", ""):
+                ffmpeg_producer_id = p.get("id")
+                break
+
+        if ffmpeg_producer_id:
+            # Poll stream status until ffmpeg producer disappears (audio finished)
+            for _ in range(60):  # max 30 seconds
+                time.sleep(0.5)
+                try:
+                    status_url = f"{go2rtc_url}/api/streams"
+                    with urllib.request.urlopen(status_url, timeout=5) as r:
+                        streams = json.loads(r.read())
+                    stream = streams.get(go2rtc_stream, {})
+                    still_playing = False
+                    for p in stream.get("producers", []):
+                        if p.get("id") == ffmpeg_producer_id:
+                            still_playing = True
+                            break
+                    if not still_playing:
+                        break
+                except Exception:
+                    break
+
+        return True, f"played via go2rtc → {go2rtc_stream}"
+    except Exception as exc:
+        return False, f"go2rtc failed: {exc}"
+
+
 def _play_audio(
     audio_bytes: bytes,
     file_path: str,
@@ -258,6 +325,7 @@ class ElevenLabsTTSMCP:
         self._config = ElevenLabsConfig.from_env()
         self._client = ElevenLabs(api_key=self._config.api_key)
         self._server = Server(self._server_config.name)
+        self._go2rtc: "Go2RTCProcess | None" = None
         self._setup_handlers()
 
     def _setup_handlers(self) -> None:
@@ -291,6 +359,11 @@ class ElevenLabsTTSMCP:
                                 "description": "Play audio on this machine (default: true)",
                                 "default": True,
                             },
+                            "speaker": {
+                                "type": "string",
+                                "description": "Where to play: 'camera' (camera speaker only), 'local' (PC only), 'both' (default if go2rtc configured)",
+                                "enum": ["camera", "local", "both"],
+                            },
                         },
                         "required": ["text"],
                     },
@@ -310,11 +383,15 @@ class ElevenLabsTTSMCP:
             model_id = arguments.get("model_id") or self._config.model_id
             output_format = arguments.get("output_format") or self._config.output_format
             play_audio = arguments.get("play_audio", self._config.play_audio)
+            speaker = arguments.get("speaker") or ("both" if self._config.go2rtc_url else "local")
+            use_local = speaker in {"local", "both"}
+            use_camera = speaker in {"camera", "both"} and self._config.go2rtc_url
 
             try:
                 playback_mode = (self._config.playback or "auto").strip().lower()
                 use_streaming = (
                     play_audio
+                    and use_local
                     and playback_mode in {"auto", "stream"}
                     and shutil.which("mpv") is not None
                 )
@@ -359,7 +436,7 @@ class ElevenLabsTTSMCP:
                     file_path = _save_audio(audio_bytes, output_format, self._config.save_dir)
 
                     playback = "skipped"
-                    if play_audio:
+                    if play_audio and use_local:
                         playback = _play_audio(
                             audio_bytes,
                             file_path,
@@ -368,25 +445,82 @@ class ElevenLabsTTSMCP:
                             self._config.pulse_server,
                         )
 
+                camera_playback = "not configured"
+                if use_camera:
+                    ok, cam_msg = await asyncio.to_thread(
+                        _play_with_go2rtc,
+                        file_path,
+                        self._config.go2rtc_url,
+                        self._config.go2rtc_stream,
+                        self._config.go2rtc_ffmpeg,
+                    )
+                    camera_playback = cam_msg
+
                 message = (
                     "Spoken via ElevenLabs\n"
                     f"Voice: {voice_id}\n"
                     f"Model: {model_id}\n"
                     f"Output: {output_format}\n"
                     f"File: {file_path}\n"
-                    f"Playback: {playback}"
+                    f"Speaker: {speaker}\n"
+                    f"Playback: {playback}\n"
+                    f"Camera: {camera_playback}"
                 )
                 return [TextContent(type="text", text=message)]
             except Exception as exc:  # noqa: BLE001 - surface error to caller
                 return [TextContent(type="text", text=f"Error: {exc}")]
 
-    async def run(self) -> None:
-        async with stdio_server() as (read_stream, write_stream):
-            await self._server.run(
-                read_stream,
-                write_stream,
-                self._server.create_initialization_options(),
+    async def _ensure_go2rtc(self) -> None:
+        """Auto-download and start go2rtc if configured."""
+        if not self._config.go2rtc_url or not self._config.go2rtc_auto_start:
+            return
+
+        from .go2rtc import Go2RTCProcess, default_config_path, ensure_binary, generate_config
+
+        # Step 1: Ensure binary
+        try:
+            bin_path = Path(self._config.go2rtc_bin) if self._config.go2rtc_bin else None
+            bin_path = ensure_binary(bin_path)
+        except Exception as exc:
+            logger.warning("go2rtc binary not available: %s", exc)
+            return
+
+        # Step 2: Ensure config
+        if self._config.go2rtc_config:
+            config_path = Path(self._config.go2rtc_config)
+        elif self._config.go2rtc_camera_host and self._config.go2rtc_camera_password:
+            config_path = generate_config(
+                config_path=default_config_path(),
+                stream_name=self._config.go2rtc_stream,
+                camera_host=self._config.go2rtc_camera_host,
+                username=self._config.go2rtc_camera_username or "",
+                password=self._config.go2rtc_camera_password,
+                ffmpeg_bin=self._config.go2rtc_ffmpeg,
             )
+        else:
+            logger.warning("go2rtc: no config and no camera credentials, skipping auto-start")
+            return
+
+        # Step 3: Start process
+        try:
+            self._go2rtc = Go2RTCProcess(bin_path, config_path, self._config.go2rtc_url)
+            await self._go2rtc.start()
+        except Exception as exc:
+            logger.warning("go2rtc failed to start: %s", exc)
+            self._go2rtc = None
+
+    async def run(self) -> None:
+        try:
+            await self._ensure_go2rtc()
+            async with stdio_server() as (read_stream, write_stream):
+                await self._server.run(
+                    read_stream,
+                    write_stream,
+                    self._server.create_initialization_options(),
+                )
+        finally:
+            if self._go2rtc:
+                self._go2rtc.stop()
 
 
 def main() -> None:

@@ -707,10 +707,15 @@ class CameraMCPServer:
         # Try to connect right camera if configured
         right_config = CameraConfig.right_camera_from_env()
         if right_config:
-            self._camera_right = TapoCamera(right_config, self._server_config.capture_dir)
-            await self._camera_right.connect()
-            self._has_stereo = True
-            logger.info(f"Connected to right camera at {right_config.host} (stereo vision enabled)")
+            try:
+                self._camera_right = TapoCamera(right_config, self._server_config.capture_dir)
+                await self._camera_right.connect()
+                self._has_stereo = True
+                logger.info(f"Connected to right camera at {right_config.host} (stereo vision enabled)")
+            except Exception as e:
+                logger.warning(f"Failed to connect right camera at {right_config.host}: {e}")
+                self._camera_right = None
+                self._has_stereo = False
 
     async def disconnect_camera(self) -> None:
         """Disconnect from the camera(s)."""
