@@ -2,10 +2,12 @@
 
 import asyncio
 import os
+import re
 import shutil
 import subprocess
-from pathlib import Path
+from collections.abc import Iterator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from elevenlabs.client import ElevenLabs
@@ -38,6 +40,95 @@ def _save_audio(audio_bytes: bytes, output_format: str, save_dir: str) -> str:
     with open(file_path, "wb") as f:
         f.write(audio_bytes)
     return file_path
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences for stable TTS generation."""
+    parts = re.split(r'(?<=[。！？!?.])\s*', text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _build_mpv_env(
+    pulse_sink: str | None, pulse_server: str | None,
+) -> dict[str, str] | None:
+    """Build environment dict with PulseAudio settings for mpv."""
+    if not pulse_sink and not pulse_server:
+        return None
+    env = os.environ.copy()
+    if pulse_sink:
+        env["PULSE_SINK"] = pulse_sink
+    if pulse_server:
+        env["PULSE_SERVER"] = pulse_server
+    return env
+
+
+def _start_mpv(
+    pulse_sink: str | None = None, pulse_server: str | None = None,
+) -> subprocess.Popen:
+    """Start an mpv process for streaming playback."""
+    mpv = shutil.which("mpv")
+    if not mpv:
+        raise FileNotFoundError("mpv not found")
+
+    env = _build_mpv_env(pulse_sink, pulse_server)
+    return subprocess.Popen(
+        [mpv, "--no-cache", "--no-terminal", "--", "fd://0"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+    )
+
+
+def _stream_sentences_with_mpv(
+    client: ElevenLabs,
+    sentences: list[str],
+    voice_id: str,
+    model_id: str,
+    output_format: str,
+    pulse_sink: str | None = None,
+    pulse_server: str | None = None,
+) -> tuple[bytes, str]:
+    """Stream sentences with separate mpv processes, waiting for each to finish."""
+    all_chunks: list[bytes] = []
+    for sentence in sentences:
+        audio_stream = client.text_to_speech.stream(
+            text=sentence,
+            voice_id=voice_id,
+            model_id=model_id,
+            output_format=output_format,
+        )
+        process = _start_mpv(pulse_sink, pulse_server)
+        try:
+            for chunk in audio_stream:
+                all_chunks.append(chunk)
+                process.stdin.write(chunk)
+                process.stdin.flush()
+        finally:
+            process.stdin.close()
+            process.wait()
+
+    return b"".join(all_chunks), f"streamed via mpv ({len(sentences)} sentences)"
+
+
+def _stream_with_mpv(
+    audio_stream: Iterator[bytes],
+    pulse_sink: str | None = None,
+    pulse_server: str | None = None,
+) -> tuple[bytes, str]:
+    """Stream audio chunks to mpv for real-time playback. Returns collected bytes and status."""
+    process = _start_mpv(pulse_sink, pulse_server)
+    chunks: list[bytes] = []
+    try:
+        for chunk in audio_stream:
+            chunks.append(chunk)
+            process.stdin.write(chunk)
+            process.stdin.flush()
+    finally:
+        process.stdin.close()
+        process.wait()
+
+    return b"".join(chunks), "streamed via mpv"
 
 
 def _play_with_paplay(
@@ -221,25 +312,61 @@ class ElevenLabsTTSMCP:
             play_audio = arguments.get("play_audio", self._config.play_audio)
 
             try:
-                audio = await asyncio.to_thread(
-                    self._client.text_to_speech.convert,
-                    text=text,
-                    voice_id=voice_id,
-                    model_id=model_id,
-                    output_format=output_format,
+                playback_mode = (self._config.playback or "auto").strip().lower()
+                use_streaming = (
+                    play_audio
+                    and playback_mode in {"auto", "stream"}
+                    and shutil.which("mpv") is not None
                 )
-                audio_bytes = _collect_audio_bytes(audio)
-                file_path = _save_audio(audio_bytes, output_format, self._config.save_dir)
 
-                playback = "skipped"
-                if play_audio:
-                    playback = _play_audio(
-                        audio_bytes,
-                        file_path,
-                        self._config.playback,
-                        self._config.pulse_sink,
-                        self._config.pulse_server,
+                if use_streaming:
+                    pulse_sink = self._config.pulse_sink
+                    pulse_server = self._config.pulse_server
+                    sentences = _split_sentences(text)
+                    if len(sentences) > 1:
+                        audio_bytes, playback = await asyncio.to_thread(
+                            _stream_sentences_with_mpv,
+                            self._client,
+                            sentences,
+                            voice_id,
+                            model_id,
+                            output_format,
+                            pulse_sink,
+                            pulse_server,
+                        )
+                    else:
+                        audio_stream = await asyncio.to_thread(
+                            self._client.text_to_speech.stream,
+                            text=text,
+                            voice_id=voice_id,
+                            model_id=model_id,
+                            output_format=output_format,
+                        )
+                        audio_bytes, playback = await asyncio.to_thread(
+                            _stream_with_mpv, audio_stream,
+                            pulse_sink, pulse_server,
+                        )
+                    file_path = _save_audio(audio_bytes, output_format, self._config.save_dir)
+                else:
+                    audio = await asyncio.to_thread(
+                        self._client.text_to_speech.convert,
+                        text=text,
+                        voice_id=voice_id,
+                        model_id=model_id,
+                        output_format=output_format,
                     )
+                    audio_bytes = _collect_audio_bytes(audio)
+                    file_path = _save_audio(audio_bytes, output_format, self._config.save_dir)
+
+                    playback = "skipped"
+                    if play_audio:
+                        playback = _play_audio(
+                            audio_bytes,
+                            file_path,
+                            self._config.playback,
+                            self._config.pulse_sink,
+                            self._config.pulse_server,
+                        )
 
                 message = (
                     "Spoken via ElevenLabs\n"

@@ -36,6 +36,9 @@ ENV/
 .env.local
 .env.*.local
 
+# MCP config (may contain API keys)
+.mcp.json
+
 # Captured images
 /captures/
 *.jpg
