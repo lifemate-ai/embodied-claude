@@ -477,6 +477,21 @@ class MemoryMCPServer:
                                 "description": "Auto-generate summary from memories",
                                 "default": True,
                             },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Memory type for job isolation",
+                                "default": "global",
+                                "enum": ["global", "job", "shared"],
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID for job-specific episodes (required when memory_type is 'job')",
+                            },
+                            "shared_group_ids": {
+                                "type": "array",
+                                "description": "Shared group IDs for shared episodes (required when memory_type is 'shared')",
+                                "items": {"type": "string"},
+                            },
                         },
                         "required": ["title", "memory_ids"],
                     },
@@ -498,6 +513,20 @@ class MemoryMCPServer:
                                 "minimum": 1,
                                 "maximum": 20,
                             },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to search within specific job context (includes global and shared episodes by default)",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global episodes in search",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared episodes that the job references",
+                                "default": True,
+                            },
                         },
                         "required": ["query"],
                     },
@@ -511,6 +540,20 @@ class MemoryMCPServer:
                             "episode_id": {
                                 "type": "string",
                                 "description": "Episode ID",
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to verify ownership (includes global and shared episodes by default)",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global episodes",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared episodes that the job references",
+                                "default": True,
                             },
                         },
                         "required": ["episode_id"],
@@ -572,6 +615,21 @@ class MemoryMCPServer:
                                 "minimum": 1,
                                 "maximum": 5,
                             },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Memory type for job isolation",
+                                "default": "global",
+                                "enum": ["global", "job", "shared"],
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID for job-specific memories (required when memory_type is 'job')",
+                            },
+                            "shared_group_ids": {
+                                "type": "array",
+                                "description": "Shared group IDs for shared memories (required when memory_type is 'shared')",
+                                "items": {"type": "string"},
+                            },
                         },
                         "required": ["content", "image_path", "camera_position"],
                     },
@@ -616,6 +674,21 @@ class MemoryMCPServer:
                                 "minimum": 1,
                                 "maximum": 5,
                             },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Memory type for job isolation",
+                                "default": "global",
+                                "enum": ["global", "job", "shared"],
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID for job-specific memories (required when memory_type is 'job')",
+                            },
+                            "shared_group_ids": {
+                                "type": "array",
+                                "description": "Shared group IDs for shared memories (required when memory_type is 'shared')",
+                                "items": {"type": "string"},
+                            },
                         },
                         "required": ["content", "audio_path", "transcript"],
                     },
@@ -640,6 +713,20 @@ class MemoryMCPServer:
                                 "default": 15,
                                 "minimum": 1,
                                 "maximum": 90,
+                            },
+                            "job_id": {
+                                "type": "string",
+                                "description": "Job ID to search within specific job context (includes global and shared memories by default)",
+                            },
+                            "include_global": {
+                                "type": "boolean",
+                                "description": "Include global memories in search",
+                                "default": True,
+                            },
+                            "include_shared": {
+                                "type": "boolean",
+                                "description": "Include shared memories that the job references",
+                                "default": True,
                             },
                         },
                         "required": ["pan_angle", "tilt_angle"],
@@ -1236,6 +1323,9 @@ Date Range:
                             memory_ids=memory_ids,
                             participants=arguments.get("participants"),
                             auto_summarize=arguments.get("auto_summarize", True),
+                            memory_type=arguments.get("memory_type", "global"),
+                            job_id=arguments.get("job_id"),
+                            shared_group_ids=tuple(arguments.get("shared_group_ids", [])),
                         )
 
                         return [
@@ -1267,6 +1357,9 @@ Date Range:
                         episodes = await self._episode_manager.search_episodes(
                             query=query,
                             n_results=arguments.get("n_results", 5),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not episodes:
@@ -1302,7 +1395,12 @@ Date Range:
                         if not episode_id:
                             return [TextContent(type="text", text="Error: episode_id is required")]
 
-                        memories = await self._episode_manager.get_episode_memories(episode_id)
+                        memories = await self._episode_manager.get_episode_memories(
+                            episode_id,
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
+                        )
 
                         output_lines = [f"Episode memories ({len(memories)} total):\n"]
                         for i, m in enumerate(memories, 1):
@@ -1352,6 +1450,9 @@ Date Range:
                             camera_position=camera_position,
                             emotion=arguments.get("emotion", "neutral"),
                             importance=arguments.get("importance", 3),
+                            memory_type=arguments.get("memory_type", "global"),
+                            job_id=arguments.get("job_id"),
+                            shared_group_ids=tuple(arguments.get("shared_group_ids", [])),
                         )
 
                         return [
@@ -1392,6 +1493,9 @@ Date Range:
                             transcript=transcript,
                             emotion=arguments.get("emotion", "neutral"),
                             importance=arguments.get("importance", 3),
+                            memory_type=arguments.get("memory_type", "global"),
+                            job_id=arguments.get("job_id"),
+                            shared_group_ids=tuple(arguments.get("shared_group_ids", [])),
                         )
 
                         return [
@@ -1428,6 +1532,9 @@ Date Range:
                             pan_angle=pan_angle,
                             tilt_angle=tilt_angle,
                             tolerance=arguments.get("tolerance", 15),
+                            job_id=arguments.get("job_id"),
+                            include_global=arguments.get("include_global", True),
+                            include_shared=arguments.get("include_shared", True),
                         )
 
                         if not memories:

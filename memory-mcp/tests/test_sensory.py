@@ -116,9 +116,7 @@ class TestCameraPositionRecall:
     """Test recalling memories by camera position."""
 
     @pytest.mark.asyncio
-    async def test_recall_by_camera_position_exact(
-        self, memory_store, sensory_integration
-    ):
+    async def test_recall_by_camera_position_exact(self, memory_store, sensory_integration):
         """Test recalling memory with exact camera position."""
         camera_pos = CameraPosition(pan_angle=60, tilt_angle=-30)
 
@@ -140,9 +138,7 @@ class TestCameraPositionRecall:
         assert results[0].content == "Morning sky at 60/-30"
 
     @pytest.mark.asyncio
-    async def test_recall_by_camera_position_within_tolerance(
-        self, sensory_integration
-    ):
+    async def test_recall_by_camera_position_within_tolerance(self, sensory_integration):
         """Test recalling memory within tolerance."""
         camera_pos = CameraPosition(pan_angle=50, tilt_angle=-25)
 
@@ -163,9 +159,7 @@ class TestCameraPositionRecall:
         assert results[0].content == "Test memory"
 
     @pytest.mark.asyncio
-    async def test_recall_by_camera_position_outside_tolerance(
-        self, sensory_integration
-    ):
+    async def test_recall_by_camera_position_outside_tolerance(self, sensory_integration):
         """Test no recall when position is outside tolerance."""
         camera_pos = CameraPosition(pan_angle=50, tilt_angle=-25)
 
@@ -185,9 +179,7 @@ class TestCameraPositionRecall:
         assert len(results) == 0
 
     @pytest.mark.asyncio
-    async def test_recall_by_camera_position_multiple_memories(
-        self, sensory_integration
-    ):
+    async def test_recall_by_camera_position_multiple_memories(self, sensory_integration):
         """Test recalling multiple memories at similar positions."""
         # Save 3 memories at similar positions
         for i in range(3):
@@ -274,9 +266,7 @@ class TestGetMemoriesWithSensoryData:
     """Test getting memories with sensory data."""
 
     @pytest.mark.asyncio
-    async def test_get_memories_with_visual_data(
-        self, memory_store, sensory_integration
-    ):
+    async def test_get_memories_with_visual_data(self, memory_store, sensory_integration):
         """Test getting memories with visual data."""
         # Save visual and audio memories
         await sensory_integration.save_visual_memory(
@@ -296,17 +286,13 @@ class TestGetMemoriesWithSensoryData:
         )
 
         # Get only visual memories
-        results = await sensory_integration.get_memories_with_sensory_data(
-            sensory_type="visual"
-        )
+        results = await sensory_integration.get_memories_with_sensory_data(sensory_type="visual")
 
         assert len(results) == 2
         assert all("Visual" in m.content for m in results)
 
     @pytest.mark.asyncio
-    async def test_get_memories_with_audio_data(
-        self, memory_store, sensory_integration
-    ):
+    async def test_get_memories_with_audio_data(self, memory_store, sensory_integration):
         """Test getting memories with audio data."""
         await sensory_integration.save_audio_memory(
             content="Audio 1",
@@ -320,17 +306,13 @@ class TestGetMemoriesWithSensoryData:
         )
 
         # Get only audio memories
-        results = await sensory_integration.get_memories_with_sensory_data(
-            sensory_type="audio"
-        )
+        results = await sensory_integration.get_memories_with_sensory_data(sensory_type="audio")
 
         assert len(results) == 1
         assert results[0].content == "Audio 1"
 
     @pytest.mark.asyncio
-    async def test_get_all_memories_with_sensory_data(
-        self, memory_store, sensory_integration
-    ):
+    async def test_get_all_memories_with_sensory_data(self, memory_store, sensory_integration):
         """Test getting all memories with sensory data."""
         # Save mixed memories
         await sensory_integration.save_visual_memory(
@@ -346,8 +328,119 @@ class TestGetMemoriesWithSensoryData:
         await memory_store.save(content="No sensory data", importance=3)
 
         # Get all with sensory data (no type filter)
-        results = await sensory_integration.get_memories_with_sensory_data(
-            sensory_type=None
-        )
+        results = await sensory_integration.get_memories_with_sensory_data(sensory_type=None)
 
         assert len(results) == 2  # Excludes the one without sensory data
+
+
+class TestSensoryJobIsolation:
+    """Test job isolation for sensory operations."""
+
+    @pytest.mark.asyncio
+    async def test_save_visual_memory_with_job_isolation(self, memory_store, sensory_integration):
+        """Test saving visual memory with job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+
+        camera_pos = CameraPosition(pan_angle=60, tilt_angle=-30)
+        memory = await sensory_integration.save_visual_memory(
+            content="Job A visual memory",
+            image_path="/tmp/job_a.jpg",
+            camera_position=camera_pos,
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        assert memory.memory_type == "job"
+        assert memory.job_id == "job_a"
+
+    @pytest.mark.asyncio
+    async def test_save_audio_memory_with_job_isolation(self, sensory_integration):
+        """Test saving audio memory with job isolation."""
+        memory = await sensory_integration.save_audio_memory(
+            content="Job A audio memory",
+            audio_path="/tmp/job_a.wav",
+            transcript="Test transcript",
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        assert memory.memory_type == "job"
+        assert memory.job_id == "job_a"
+
+    @pytest.mark.asyncio
+    async def test_recall_by_camera_position_with_job_isolation(
+        self, memory_store, sensory_integration
+    ):
+        """Test recall by camera position respects job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+
+        camera_pos = CameraPosition(pan_angle=60, tilt_angle=-30)
+
+        # Save visual memory for job_a
+        await sensory_integration.save_visual_memory(
+            content="Job A memory",
+            image_path="/tmp/job_a.jpg",
+            camera_position=camera_pos,
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        # Save visual memory for job_b
+        await sensory_integration.save_visual_memory(
+            content="Job B memory",
+            image_path="/tmp/job_b.jpg",
+            camera_position=camera_pos,
+            memory_type="job",
+            job_id="job_b",
+        )
+
+        # Recall for job_a should only return job_a's memory
+        results = await sensory_integration.recall_by_camera_position(
+            pan_angle=60,
+            tilt_angle=-30,
+            tolerance=5,
+            job_id="job_a",
+            include_global=False,
+            include_shared=False,
+        )
+
+        assert len(results) == 1
+        assert results[0].content == "Job A memory"
+
+    @pytest.mark.asyncio
+    async def test_recall_by_camera_position_with_shared_group(
+        self, memory_store, sensory_integration
+    ):
+        """Test recall by camera position with shared group."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+        await memory_store.create_shared_group(
+            group_id="shared_group",
+            name="Shared Group",
+            member_job_ids=("job_a", "job_b"),
+        )
+
+        camera_pos = CameraPosition(pan_angle=60, tilt_angle=-30)
+
+        # Save shared visual memory
+        await sensory_integration.save_visual_memory(
+            content="Shared memory",
+            image_path="/tmp/shared.jpg",
+            camera_position=camera_pos,
+            memory_type="shared",
+            shared_group_ids=("shared_group",),
+        )
+
+        # Recall for job_a should include shared memory
+        results = await sensory_integration.recall_by_camera_position(
+            pan_angle=60,
+            tilt_angle=-30,
+            tolerance=5,
+            job_id="job_a",
+            include_global=False,
+            include_shared=True,
+        )
+
+        assert len(results) == 1
+        assert results[0].content == "Shared memory"

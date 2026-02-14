@@ -33,6 +33,10 @@ class SensoryIntegration:
         importance: int = 3,
         category: str = "observation",
         auto_describe: bool = False,
+        # Phase 7: ジョブ分離
+        memory_type: str = "global",
+        job_id: str | None = None,
+        shared_group_ids: tuple[str, ...] = (),
     ) -> Memory:
         """視覚記憶を保存（画像パス + カメラ位置）.
 
@@ -44,6 +48,9 @@ class SensoryIntegration:
             importance: 重要度（1-5）
             category: カテゴリ
             auto_describe: 画像説明を自動生成（Phase 4.3では未実装）
+            memory_type: メモリタイプ ("global" | "job" | "shared")
+            job_id: ジョブ固有メモリの場合のジョブID
+            shared_group_ids: 共有メモリの場合の共有グループID
 
         Returns:
             保存された記憶
@@ -67,6 +74,10 @@ class SensoryIntegration:
             category=category,
             sensory_data=(sensory_data,),
             camera_position=camera_position,
+            # Phase 7: ジョブ分離
+            memory_type=memory_type,
+            job_id=job_id,
+            shared_group_ids=shared_group_ids,
         )
 
     async def save_audio_memory(
@@ -77,6 +88,10 @@ class SensoryIntegration:
         emotion: str = "neutral",
         importance: int = 3,
         category: str = "observation",
+        # Phase 7: ジョブ分離
+        memory_type: str = "global",
+        job_id: str | None = None,
+        shared_group_ids: tuple[str, ...] = (),
     ) -> Memory:
         """聴覚記憶を保存（音声パス + 文字起こし）.
 
@@ -87,6 +102,9 @@ class SensoryIntegration:
             emotion: 感情
             importance: 重要度（1-5）
             category: カテゴリ
+            memory_type: メモリタイプ ("global" | "job" | "shared")
+            job_id: ジョブ固有メモリの場合のジョブID
+            shared_group_ids: 共有メモリの場合の共有グループID
 
         Returns:
             保存された記憶
@@ -107,6 +125,10 @@ class SensoryIntegration:
             importance=importance,
             category=category,
             sensory_data=(sensory_data,),
+            # Phase 7: ジョブ分離
+            memory_type=memory_type,
+            job_id=job_id,
+            shared_group_ids=shared_group_ids,
         )
 
     async def recall_by_camera_position(
@@ -114,6 +136,10 @@ class SensoryIntegration:
         pan_angle: int,
         tilt_angle: int,
         tolerance: int = 15,
+        # Phase 7: ジョブ分離
+        job_id: str | None = None,
+        include_global: bool = True,
+        include_shared: bool = True,
     ) -> list[Memory]:
         """カメラ位置から記憶を想起.
 
@@ -123,12 +149,19 @@ class SensoryIntegration:
             pan_angle: パン角度（-90 to +90）
             tilt_angle: チルト角度（-90 to +90）
             tolerance: 角度の許容範囲（デフォルト±15度）
+            job_id: ジョブ固有メモリを検索する場合のジョブID
+            include_global: グローバルメモリを含めるか
+            include_shared: 共有メモリを含めるか
 
         Returns:
             条件を満たす記憶のリスト（新しい順）
         """
-        # 全記憶を取得
-        all_memories = await self._memory_store.get_all()
+        # 全記憶を取得（ジョブ分離適用）
+        all_memories = await self._memory_store.get_all(
+            job_id=job_id,
+            include_global=include_global,
+            include_shared=include_shared,
+        )
 
         # カメラ位置でフィルタ
         results = []

@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime, timezone
+from pathlib import Path
 
 from src.memory_mcp.config import MemoryConfig
 from src.memory_mcp.episode import EpisodeManager
@@ -10,10 +11,16 @@ from src.memory_mcp.types import Episode
 
 
 @pytest.fixture
-async def memory_store():
+def temp_db_path(tmp_path: Path) -> str:
+    """Create a temporary database path."""
+    return str(tmp_path / "test_chroma")
+
+
+@pytest.fixture
+async def memory_store(temp_db_path: str):
     """Create a MemoryStore instance for testing."""
     config = MemoryConfig(
-        db_path=":memory:",  # In-memory for testing
+        db_path=temp_db_path,
         collection_name="test_memories",
     )
     store = MemoryStore(config)
@@ -85,9 +92,7 @@ class TestEpisodeCreation:
         assert " → " in episode.summary
 
     @pytest.mark.asyncio
-    async def test_create_episode_no_auto_summarize(
-        self, memory_store, episode_manager
-    ):
+    async def test_create_episode_no_auto_summarize(self, memory_store, episode_manager):
         """Test creating episode without auto-summarize."""
         mem1 = await memory_store.save(content="Memory 1", importance=3)
 
@@ -100,9 +105,7 @@ class TestEpisodeCreation:
         assert episode.summary == ""
 
     @pytest.mark.asyncio
-    async def test_create_episode_updates_memory_episode_id(
-        self, memory_store, episode_manager
-    ):
+    async def test_create_episode_updates_memory_episode_id(self, memory_store, episode_manager):
         """Test that creating an episode updates memory episode_ids."""
         mem1 = await memory_store.save(content="Memory 1", importance=3)
         mem2 = await memory_store.save(content="Memory 2", importance=3)
@@ -275,9 +278,7 @@ class TestEpisodeDeletion:
         assert retrieved is None
 
     @pytest.mark.asyncio
-    async def test_delete_episode_clears_memory_episode_id(
-        self, memory_store, episode_manager
-    ):
+    async def test_delete_episode_clears_memory_episode_id(self, memory_store, episode_manager):
         """Test that deleting episode clears memory episode_ids."""
         mem = await memory_store.save(content="Test memory", importance=3)
 
@@ -296,3 +297,193 @@ class TestEpisodeDeletion:
         # Verify episode_id is cleared (None represents no episode)
         memories_after = await memory_store.get_by_ids([mem.id])
         assert memories_after[0].episode_id is None
+
+
+class TestEpisodeJobIsolation:
+    """Test job isolation for episode operations."""
+
+    @pytest.mark.asyncio
+    async def test_create_episode_with_job_isolation(self, memory_store, episode_manager):
+        """Test creating episode with job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+
+        mem = await memory_store.save(
+            content="Job A memory",
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        episode = await episode_manager.create_episode(
+            title="Job A Episode",
+            memory_ids=[mem.id],
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        assert episode.memory_type == "job"
+        assert episode.job_id == "job_a"
+
+    @pytest.mark.asyncio
+    async def test_create_episode_with_shared_group(self, memory_store, episode_manager):
+        """Test creating episode with shared group."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+        await memory_store.create_shared_group(
+            group_id="shared_group",
+            name="Shared Group",
+            member_job_ids=("job_a", "job_b"),
+        )
+
+        mem = await memory_store.save(
+            content="Shared memory",
+            memory_type="shared",
+            shared_group_ids=("shared_group",),
+        )
+
+        episode = await episode_manager.create_episode(
+            title="Shared Episode",
+            memory_ids=[mem.id],
+            memory_type="shared",
+            shared_group_ids=("shared_group",),
+        )
+
+        assert episode.memory_type == "shared"
+        assert "shared_group" in episode.shared_group_ids
+
+    @pytest.mark.asyncio
+    async def test_search_episodes_with_job_isolation(self, memory_store, episode_manager):
+        """Test search episodes respects job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+
+        mem_a = await memory_store.save(
+            content="Job A memory",
+            memory_type="job",
+            job_id="job_a",
+        )
+        mem_b = await memory_store.save(
+            content="Job B memory",
+            memory_type="job",
+            job_id="job_b",
+        )
+
+        await episode_manager.create_episode(
+            title="Job A Episode",
+            memory_ids=[mem_a.id],
+            memory_type="job",
+            job_id="job_a",
+        )
+        await episode_manager.create_episode(
+            title="Job B Episode",
+            memory_ids=[mem_b.id],
+            memory_type="job",
+            job_id="job_b",
+        )
+
+        # Search for job_a should only return job_a's episode
+        results = await episode_manager.search_episodes(
+            query="Episode",
+            n_results=10,
+            job_id="job_a",
+            include_global=False,
+            include_shared=False,
+        )
+
+        assert len(results) == 1
+        assert results[0].title == "Job A Episode"
+
+    @pytest.mark.asyncio
+    async def test_get_episode_by_id_with_job_isolation(self, memory_store, episode_manager):
+        """Test get episode by ID respects job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+
+        mem = await memory_store.save(
+            content="Job A memory",
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        episode = await episode_manager.create_episode(
+            title="Job A Episode",
+            memory_ids=[mem.id],
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        # job_a can access
+        retrieved_a = await episode_manager.get_episode_by_id(
+            episode.id,
+            job_id="job_a",
+        )
+        assert retrieved_a is not None
+
+        # job_b cannot access
+        retrieved_b = await episode_manager.get_episode_by_id(
+            episode.id,
+            job_id="job_b",
+        )
+        assert retrieved_b is None
+
+    @pytest.mark.asyncio
+    async def test_get_episode_memories_with_job_isolation(self, memory_store, episode_manager):
+        """Test get episode memories respects job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+
+        mem = await memory_store.save(
+            content="Job A memory",
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        episode = await episode_manager.create_episode(
+            title="Job A Episode",
+            memory_ids=[mem.id],
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        # job_b cannot get episode memories
+        with pytest.raises(ValueError, match="Episode not found"):
+            await episode_manager.get_episode_memories(
+                episode.id,
+                job_id="job_b",
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_episode_with_job_isolation(self, memory_store, episode_manager):
+        """Test delete episode respects job isolation."""
+        await memory_store.create_job(job_id="job_a", name="Job A")
+        await memory_store.create_job(job_id="job_b", name="Job B")
+
+        mem = await memory_store.save(
+            content="Job A memory",
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        episode = await episode_manager.create_episode(
+            title="Job A Episode",
+            memory_ids=[mem.id],
+            memory_type="job",
+            job_id="job_a",
+        )
+
+        # job_b cannot delete
+        result = await episode_manager.delete_episode(
+            episode.id,
+            job_id="job_b",
+        )
+        assert result is False
+
+        # Episode still exists
+        retrieved = await episode_manager.get_episode_by_id(episode.id)
+        assert retrieved is not None
+
+        # job_a can delete
+        result = await episode_manager.delete_episode(
+            episode.id,
+            job_id="job_a",
+        )
+        assert result is True

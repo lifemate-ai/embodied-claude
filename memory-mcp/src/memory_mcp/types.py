@@ -155,6 +155,10 @@ class Episode:
     summary: str  # エピソード全体のサマリー
     emotion: str  # エピソード全体の感情
     importance: int  # 1-5
+    # Phase 7: ジョブ分離
+    memory_type: str = "global"  # "global" | "job" | "shared"
+    job_id: str | None = None  # ジョブ固有エピソードの場合のジョブID
+    shared_group_ids: tuple[str, ...] = ()  # ジョブ間共有エピソードのグループID群
 
     def to_metadata(self) -> dict[str, Any]:
         """Convert to dictionary for ChromaDB metadata."""
@@ -167,11 +171,24 @@ class Episode:
             "location_context": self.location_context or "",
             "emotion": self.emotion,
             "importance": self.importance,
+            # Phase 7: ジョブ分離
+            "memory_type": self.memory_type,
+            "job_id": self.job_id or "",
+            "shared_group_ids": ",".join(self.shared_group_ids),
         }
 
     @classmethod
     def from_metadata(cls, id: str, summary: str, metadata: dict[str, Any]) -> "Episode":
         """Create from ChromaDB metadata."""
+        # Phase 7: ジョブ分離フィールドのパース
+        memory_type = metadata.get("memory_type", "global")
+        job_id_raw = metadata.get("job_id", "")
+        job_id = job_id_raw if job_id_raw else None
+        shared_group_ids_str = metadata.get("shared_group_ids", "")
+        shared_group_ids = tuple(
+            gid.strip() for gid in shared_group_ids_str.split(",") if gid.strip()
+        )
+
         return cls(
             id=id,
             title=metadata["title"],
@@ -187,6 +204,10 @@ class Episode:
             summary=summary,
             emotion=metadata["emotion"],
             importance=metadata["importance"],
+            # Phase 7: ジョブ分離
+            memory_type=memory_type,
+            job_id=job_id,
+            shared_group_ids=shared_group_ids,
         )
 
 
