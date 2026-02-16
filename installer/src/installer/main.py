@@ -1,44 +1,60 @@
-"""
-Embodied Claude Installer
-GUI installer for setting up Embodied Claude MCP servers
-"""
+"""Embodied Claude Installer GUI entrypoint."""
+
+from __future__ import annotations
+
 import sys
-from PyQt6.QtWidgets import QApplication, QWizard
-from PyQt6.QtCore import Qt
+from typing import TYPE_CHECKING
 
-from .pages.welcome import WelcomePage
-from .pages.dependencies import DependenciesPage
-from .pages.camera import CameraSelectionPage
-from .pages.api_key import ApiKeyPage
-from .pages.install import InstallationPage
-from .pages.complete import CompletePage
+if TYPE_CHECKING:
+    from PyQt6.QtWidgets import QWizard
 
 
-class EmbodiedClaudeInstaller(QWizard):
-    """Main installer wizard"""
+def _build_installer_wizard_class() -> type["QWizard"]:
+    """Build installer wizard class with lazy PyQt/page imports."""
+    from PyQt6.QtWidgets import QWizard
 
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Embodied Claude Installer")
-        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
-        self.setOption(QWizard.WizardOption.HaveHelpButton, False)
-        self.setMinimumSize(800, 600)
+    from .pages.api_key import ApiKeyPage
+    from .pages.camera import CameraSelectionPage
+    from .pages.complete import CompletePage
+    from .pages.dependencies import DependenciesPage
+    from .pages.install import InstallationPage
+    from .pages.welcome import WelcomePage
 
-        # Add pages
-        self.addPage(WelcomePage())
-        self.addPage(DependenciesPage())
-        self.addPage(CameraSelectionPage())
-        self.addPage(ApiKeyPage())
-        self.addPage(InstallationPage())
-        self.addPage(CompletePage())
+    class EmbodiedClaudeInstaller(QWizard):
+        """Main installer wizard."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.setWindowTitle("Embodied Claude Installer")
+            self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+            self.setOption(QWizard.WizardOption.HaveHelpButton, False)
+            self.setMinimumSize(800, 600)
+
+            self.addPage(WelcomePage())
+            self.addPage(DependenciesPage())
+            self.addPage(CameraSelectionPage())
+            self.addPage(ApiKeyPage())
+            self.addPage(InstallationPage())
+            self.addPage(CompletePage())
+
+    return EmbodiedClaudeInstaller
 
 
-def main():
-    """Entry point for the installer"""
+def main() -> None:
+    """Entry point for the installer."""
+    try:
+        from PyQt6.QtWidgets import QApplication
+    except ImportError as exc:
+        raise RuntimeError(
+            "PyQt6 runtime dependencies are missing. Install GUI dependencies "
+            "before launching installer."
+        ) from exc
+
+    installer_class = _build_installer_wizard_class()
     app = QApplication(sys.argv)
     app.setApplicationName("Embodied Claude Installer")
 
-    wizard = EmbodiedClaudeInstaller()
+    wizard = installer_class()
     wizard.show()
 
     sys.exit(app.exec())
