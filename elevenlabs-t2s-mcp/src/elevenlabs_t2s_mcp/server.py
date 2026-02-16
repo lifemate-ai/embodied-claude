@@ -519,6 +519,51 @@ class ElevenLabsTTSMCP:
 
             return audio_bytes, file_path, playback, fallback_voice_id, fallback_message
 
+    def _resolve_speaker(self, requested_speaker: Any) -> tuple[str, str | None]:
+        """Resolve speaker target with sane fallback behavior."""
+        has_go2rtc = bool(self._config.go2rtc_url)
+        if isinstance(requested_speaker, str) and requested_speaker.strip():
+            speaker = requested_speaker.strip().lower()
+        else:
+            speaker = self._config.default_speaker
+
+        if speaker not in {"camera", "local", "both"}:
+            fallback_speaker = "camera" if has_go2rtc else "local"
+            note = (
+                f"Unknown speaker '{speaker}'. "
+                f"Using '{fallback_speaker}' instead."
+            )
+            return fallback_speaker, note
+
+        if speaker in {"camera", "both"} and not has_go2rtc:
+            return (
+                "local",
+                "Camera speaker requested but go2rtc is not configured. Using local speaker.",
+            )
+
+        return speaker, None
+
+    def _resolve_output_format(
+        self,
+        requested_output_format: Any,
+        speaker: str,
+    ) -> tuple[str, str | None]:
+        if isinstance(requested_output_format, str) and requested_output_format.strip():
+            return requested_output_format.strip(), None
+
+        if speaker in {"camera", "both"}:
+            camera_format = self._config.camera_output_format.strip()
+            if camera_format:
+                note = None
+                if camera_format != self._config.output_format:
+                    note = (
+                        "Using camera-oriented output format "
+                        f"'{camera_format}' for lower latency."
+                    )
+                return camera_format, note
+
+        return self._config.output_format, None
+
     def _setup_handlers(self) -> None:
         @self._server.list_tools()
         async def list_tools() -> list[Tool]:
@@ -552,7 +597,7 @@ class ElevenLabsTTSMCP:
                             },
                             "speaker": {
                                 "type": "string",
-                                "description": "Where to play: 'camera' (camera speaker only), 'local' (PC only), 'both' (default if go2rtc configured)",
+                                "description": "Where to play: 'camera' (camera speaker only), 'local' (PC only), 'both' (both outputs)",
                                 "enum": ["camera", "local", "both"],
                             },
                         },
@@ -572,11 +617,14 @@ class ElevenLabsTTSMCP:
 
             voice_id = arguments.get("voice_id") or self._config.voice_id
             model_id = arguments.get("model_id") or self._config.model_id
-            output_format = arguments.get("output_format") or self._config.output_format
             play_audio = arguments.get("play_audio", self._config.play_audio)
-            speaker = arguments.get("speaker") or ("both" if self._config.go2rtc_url else "local")
+            speaker, speaker_note = self._resolve_speaker(arguments.get("speaker"))
+            output_format, output_note = self._resolve_output_format(
+                arguments.get("output_format"),
+                speaker,
+            )
             use_local = speaker in {"local", "both"}
-            use_camera = speaker in {"camera", "both"} and self._config.go2rtc_url
+            use_camera = speaker in {"camera", "both"} and bool(self._config.go2rtc_url)
 
             try:
                 audio_bytes, file_path, playback, resolved_voice_id, voice_note = (
@@ -611,8 +659,13 @@ class ElevenLabsTTSMCP:
                     f"Playback: {playback}\n"
                     f"Camera: {camera_playback}"
                 )
-                if voice_note:
-                    message = f"{voice_note}\n{message}"
+                notes = [
+                    note
+                    for note in (voice_note, speaker_note, output_note)
+                    if note
+                ]
+                if notes:
+                    message = "\n".join(notes) + f"\n{message}"
                 return [TextContent(type="text", text=message)]
             except Exception as exc:  # noqa: BLE001 - surface error to caller
                 return [TextContent(type="text", text=f"Error: {exc}")]

@@ -32,7 +32,9 @@ class ElevenLabsConfig:
     voice_id: str
     model_id: str
     output_format: str
+    camera_output_format: str
     play_audio: bool
+    default_speaker: str
     save_dir: str
     playback: str
     pulse_sink: str | None
@@ -53,18 +55,25 @@ class ElevenLabsConfig:
         api_key = os.getenv("ELEVENLABS_API_KEY", "")
         if not api_key:
             raise ValueError("ELEVENLABS_API_KEY environment variable is required")
+        go2rtc_url = os.getenv("GO2RTC_URL") or None
+        default_speaker = os.getenv(
+            "ELEVENLABS_DEFAULT_SPEAKER",
+            "camera" if go2rtc_url else "local",
+        )
 
         return cls(
             api_key=api_key,
             voice_id=os.getenv("ELEVENLABS_VOICE_ID", "").strip(),
             model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_v3"),
             output_format=os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"),
+            camera_output_format=os.getenv("ELEVENLABS_CAMERA_OUTPUT_FORMAT", "ulaw_8000"),
             play_audio=_parse_bool(os.getenv("ELEVENLABS_PLAY_AUDIO"), True),
+            default_speaker=default_speaker.strip().lower(),
             save_dir=os.getenv("ELEVENLABS_SAVE_DIR", "/tmp/elevenlabs-t2s"),
             playback=os.getenv("ELEVENLABS_PLAYBACK", "auto"),
             pulse_sink=os.getenv("ELEVENLABS_PULSE_SINK") or None,
             pulse_server=_detect_pulse_server(),
-            go2rtc_url=os.getenv("GO2RTC_URL") or None,
+            go2rtc_url=go2rtc_url,
             go2rtc_stream=os.getenv("GO2RTC_STREAM", "tapo_cam"),
             go2rtc_ffmpeg=os.getenv("GO2RTC_FFMPEG", "ffmpeg"),
             go2rtc_bin=os.getenv("GO2RTC_BIN") or None,

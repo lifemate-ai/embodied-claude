@@ -142,7 +142,7 @@ uv run pytest -v       # テストが通ること
 
 | ツール | パラメータ | 説明 |
 |--------|-----------|------|
-| `say` | text, voice_id?, model_id?, output_format?, play_audio? | ElevenLabsで音声合成して発話 |
+| `say` | text, voice_id?, model_id?, output_format?, play_audio?, speaker? | ElevenLabsで音声合成して発話（camera/local/both） |
 
 ### system-temperature-mcp（体温感覚）
 

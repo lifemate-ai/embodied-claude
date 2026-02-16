@@ -165,6 +165,9 @@ uv sync
 cp .env.example .env
 # .env に ELEVENLABS_API_KEY を設定
 # ELEVENLABS_VOICE_ID は未設定でもOK（利用可能な声へ自動フォールバック）
+# C200 から低遅延で喋らせる場合:
+# ELEVENLABS_DEFAULT_SPEAKER=camera
+# ELEVENLABS_CAMERA_OUTPUT_FORMAT=ulaw_8000
 # WSLで音が出ない場合:
 # ELEVENLABS_PLAYBACK=paplay
 # ELEVENLABS_PULSE_SINK=1

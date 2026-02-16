@@ -28,6 +28,8 @@ class TestElevenLabsConfigGo2rtc:
     @patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-key"}, clear=False)
     def test_go2rtc_defaults(self):
         config = ElevenLabsConfig.from_env()
+        assert config.camera_output_format == "ulaw_8000"
+        assert config.default_speaker == "local"
         assert config.go2rtc_bin is None
         assert config.go2rtc_config is None
         assert config.go2rtc_auto_start is True
@@ -42,6 +44,7 @@ class TestElevenLabsConfigGo2rtc:
             "GO2RTC_BIN": "/opt/go2rtc",
             "GO2RTC_CONFIG": "/etc/go2rtc.yaml",
             "GO2RTC_AUTO_START": "false",
+            "GO2RTC_URL": "http://localhost:1984",
             "GO2RTC_CAMERA_HOST": "10.0.0.1",
             "GO2RTC_CAMERA_USERNAME": "admin",
             "GO2RTC_CAMERA_PASSWORD": "pass123",
@@ -53,9 +56,25 @@ class TestElevenLabsConfigGo2rtc:
         assert config.go2rtc_bin == "/opt/go2rtc"
         assert config.go2rtc_config == "/etc/go2rtc.yaml"
         assert config.go2rtc_auto_start is False
+        assert config.default_speaker == "camera"
         assert config.go2rtc_camera_host == "10.0.0.1"
         assert config.go2rtc_camera_username == "admin"
         assert config.go2rtc_camera_password == "pass123"
+
+    @patch.dict(
+        os.environ,
+        {
+            "ELEVENLABS_API_KEY": "test-key",
+            "GO2RTC_URL": "http://localhost:1984",
+            "ELEVENLABS_DEFAULT_SPEAKER": "both",
+            "ELEVENLABS_CAMERA_OUTPUT_FORMAT": "pcm_16000",
+        },
+        clear=False,
+    )
+    def test_speaker_and_camera_format_override(self):
+        config = ElevenLabsConfig.from_env()
+        assert config.default_speaker == "both"
+        assert config.camera_output_format == "pcm_16000"
 
     @patch.dict(
         os.environ,

@@ -119,3 +119,50 @@ async def test_uses_available_voice_when_voice_id_not_configured(
     assert note is not None
     assert "No voice_id was configured." in note
 
+
+def test_resolve_speaker_prefers_camera_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GO2RTC_URL", "http://localhost:1984")
+    server = _create_server(
+        monkeypatch,
+        configured_voice_id="",
+        available_voices=[_DummyVoice("voice-default", "Default Voice")],
+    )
+
+    speaker, note = server._resolve_speaker(None)
+    assert speaker == "camera"
+    assert note is None
+
+
+def test_resolve_speaker_falls_back_to_local_without_go2rtc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GO2RTC_URL", raising=False)
+    server = _create_server(
+        monkeypatch,
+        configured_voice_id="",
+        available_voices=[_DummyVoice("voice-default", "Default Voice")],
+    )
+
+    speaker, note = server._resolve_speaker("camera")
+    assert speaker == "local"
+    assert note is not None
+    assert "go2rtc is not configured" in note
+
+
+def test_resolve_output_format_uses_camera_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")
+    monkeypatch.setenv("ELEVENLABS_CAMERA_OUTPUT_FORMAT", "ulaw_8000")
+    server = _create_server(
+        monkeypatch,
+        configured_voice_id="",
+        available_voices=[_DummyVoice("voice-default", "Default Voice")],
+    )
+
+    output_format, note = server._resolve_output_format(None, "camera")
+    assert output_format == "ulaw_8000"
+    assert note is not None
+    assert "lower latency" in note
