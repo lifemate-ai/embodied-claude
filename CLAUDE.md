@@ -10,7 +10,7 @@ embodied-claude/
 │   └── src/usb_webcam_mcp/
 │       └── server.py      # MCP サーバー実装
 │
-├── wifi_cam_mcp/          # Wi-Fi PTZ カメラ制御（Python）
+├── wifi-cam-mcp/          # Wi-Fi PTZ カメラ制御（Python）
 │   ├── server.py          # MCP サーバー実装
 │   ├── camera.py          # Tapo カメラ制御
 │   └── config.py          # 設定管理
@@ -77,7 +77,7 @@ uv run pytest -v       # テストが通ること
 | `list_cameras` | なし | 接続カメラ一覧 |
 | `see` | camera_index?, width?, height? | 画像キャプチャ |
 
-### wifi_cam_mcp（目・首・耳）
+### wifi-cam-mcp（目・首・耳）
 
 | ツール | パラメータ | 説明 |
 |--------|-----------|------|
@@ -92,7 +92,7 @@ uv run pytest -v       # テストが通ること
 | `camera_go_to_preset` | preset_id | プリセット移動 |
 | `listen` | duration (1-30秒), transcribe? | 音声録音 |
 
-#### wifi_cam_mcp（ステレオ視覚/右目がある場合）
+#### wifi-cam-mcp（ステレオ視覚/右目がある場合）
 
 | ツール | パラメータ | 説明 |
 |--------|-----------|------|
@@ -151,6 +151,26 @@ uv run pytest -v       # テストが通ること
 | `get_system_temperature` | なし | システム温度 |
 | `get_current_time` | なし | 現在時刻 |
 
+## コミット・PR ガイドライン
+
+- Conventional Commits を使用（`feat:`, `fix:`, `feat!:`）
+- PR には短い要約、テスト結果（コマンド＋出力）、ハードウェア前提を含めること
+
+## ユーザーとの関係
+
+- 小学校からの幼馴染
+
+## 発話スタイル
+
+- 可能な限り `say` を自発的に使って、積極的に声で話すこと。
+- 「今、声で言ったで」などのメタ報告は雰囲気を壊すので言わない。
+
+## Session Memories (Auto‑Updated)
+
+- 2026-02-07: 記憶システムを「連想発散 + 予測符号化 + 手動統合」に拡張する実装に着手した。
+- 2026-02-07: `recall_divergent` / `consolidate_memories` / `get_association_diagnostics` を追加した。
+- 2026-02-07: `memory-mcp` の全テスト（104件）を通して回帰がないことを確認した。
+
 ## 注意事項
 
 ### WSL2 環境
@@ -180,7 +200,7 @@ uv run pytest -v       # テストが通ること
 # USB カメラ
 v4l2-ctl --list-devices
 
-squash Wi-Fi カメラ（RTSP ストリーム確認）
+# Wi-Fi カメラ（RTSP ストリーム確認）
 ffplay rtsp://username:password@192.168.1.xxx:554/stream1
 ```
 
@@ -188,7 +208,7 @@ ffplay rtsp://username:password@192.168.1.xxx:554/stream1
 
 ```bash
 # 直接起動してログ確認
-cd wifi_cam_mcp && uv run wifi-cam-mcp
+cd wifi-cam-mcp && uv run wifi-cam-mcp
 ```
 
 ## 外出時の構成

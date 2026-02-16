@@ -20,6 +20,22 @@ from .config import CameraConfig, ServerConfig
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+LEGACY_TOOL_ALIASES: dict[str, str] = {
+    "camera_capture": "see",
+    "camera_pan_left": "look_left",
+    "camera_pan_right": "look_right",
+    "camera_tilt_up": "look_up",
+    "camera_tilt_down": "look_down",
+    "camera_look_around": "look_around",
+}
+
+
+def _legacy_tool_message(legacy_name: str, canonical_name: str) -> str:
+    return (
+        f"Deprecated tool alias '{legacy_name}' was used. "
+        f"Please migrate to '{canonical_name}'."
+    )
+
 
 class CameraMCPServer:
     """MCP Server that gives AI eyes to see the room."""
@@ -119,6 +135,92 @@ class CameraMCPServer:
                 Tool(
                     name="look_around",
                     description="Look around the room by turning your head to see multiple angles (center, left, right, up). Use this when you want to survey your surroundings or get a full view of the room. Returns multiple images from different angles.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_capture",
+                    description="(Deprecated alias) Use 'see' instead.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_pan_left",
+                    description="(Deprecated alias) Use 'look_left' instead.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "degrees": {
+                                "type": "integer",
+                                "description": "How far to turn left (1-90 degrees, default: 30)",
+                                "default": 30,
+                                "minimum": 1,
+                                "maximum": 90,
+                            }
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_pan_right",
+                    description="(Deprecated alias) Use 'look_right' instead.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "degrees": {
+                                "type": "integer",
+                                "description": "How far to turn right (1-90 degrees, default: 30)",
+                                "default": 30,
+                                "minimum": 1,
+                                "maximum": 90,
+                            }
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_tilt_up",
+                    description="(Deprecated alias) Use 'look_up' instead.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "degrees": {
+                                "type": "integer",
+                                "description": "How far to tilt up (1-90 degrees, default: 20)",
+                                "default": 20,
+                                "minimum": 1,
+                                "maximum": 90,
+                            }
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_tilt_down",
+                    description="(Deprecated alias) Use 'look_down' instead.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "degrees": {
+                                "type": "integer",
+                                "description": "How far to tilt down (1-90 degrees, default: 20)",
+                                "default": 20,
+                                "minimum": 1,
+                                "maximum": 90,
+                            }
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="camera_look_around",
+                    description="(Deprecated alias) Use 'look_around' instead.",
                     inputSchema={
                         "type": "object",
                         "properties": {},
@@ -380,10 +482,24 @@ class CameraMCPServer:
                 return [TextContent(type="text", text="Error: Camera not connected")]
 
             try:
+                legacy_alias = LEGACY_TOOL_ALIASES.get(name)
+                deprecation_message: str | None = None
+                if legacy_alias:
+                    deprecation_message = _legacy_tool_message(name, legacy_alias)
+                    name = legacy_alias
+
+                def _with_deprecation(
+                    contents: list[TextContent | ImageContent],
+                ) -> list[TextContent | ImageContent]:
+                    if not deprecation_message:
+                        return contents
+                    return [TextContent(type="text", text=deprecation_message), *contents]
+
                 match name:
                     case "see":
                         result = await self._camera.capture_image()
-                        return [
+                        return _with_deprecation(
+                            [
                             ImageContent(
                                 type="image",
                                 data=result.image_base64,
@@ -393,27 +509,28 @@ class CameraMCPServer:
                                 type="text",
                                 text=f"Captured image at {result.timestamp} ({result.width}x{result.height})",
                             ),
-                        ]
+                            ]
+                        )
 
                     case "look_left":
                         degrees = arguments.get("degrees", 30)
                         result = await self._camera.pan_left(degrees)
-                        return [TextContent(type="text", text=result.message)]
+                        return _with_deprecation([TextContent(type="text", text=result.message)])
 
                     case "look_right":
                         degrees = arguments.get("degrees", 30)
                         result = await self._camera.pan_right(degrees)
-                        return [TextContent(type="text", text=result.message)]
+                        return _with_deprecation([TextContent(type="text", text=result.message)])
 
                     case "look_up":
                         degrees = arguments.get("degrees", 20)
                         result = await self._camera.tilt_up(degrees)
-                        return [TextContent(type="text", text=result.message)]
+                        return _with_deprecation([TextContent(type="text", text=result.message)])
 
                     case "look_down":
                         degrees = arguments.get("degrees", 20)
                         result = await self._camera.tilt_down(degrees)
-                        return [TextContent(type="text", text=result.message)]
+                        return _with_deprecation([TextContent(type="text", text=result.message)])
 
                     case "look_around":
                         captures = await self._camera.look_around()
@@ -437,30 +554,34 @@ class CameraMCPServer:
                                 text=f"Captured {len(captures)} angles. Camera returned to center position.",
                             )
                         )
-                        return contents
+                        return _with_deprecation(contents)
 
                     case "camera_info":
                         info = await self._camera.get_device_info()
-                        return [
+                        return _with_deprecation(
+                            [
                             TextContent(
                                 type="text",
                                 text=f"Camera Info:\n{json.dumps(info, indent=2)}",
                             )
-                        ]
+                            ]
+                        )
 
                     case "camera_presets":
                         presets = await self._camera.get_presets()
-                        return [
+                        return _with_deprecation(
+                            [
                             TextContent(
                                 type="text",
                                 text=f"Camera Presets:\n{json.dumps(presets, indent=2)}",
                             )
-                        ]
+                            ]
+                        )
 
                     case "camera_go_to_preset":
                         preset_id = arguments.get("preset_id", "")
                         result = await self._camera.go_to_preset(preset_id)
-                        return [TextContent(type="text", text=result.message)]
+                        return _with_deprecation([TextContent(type="text", text=result.message)])
 
                     case "listen":
                         duration = min(arguments.get("duration", 5), 30)
@@ -475,7 +596,7 @@ class CameraMCPServer:
                         if result.transcript:
                             response_text += f"\n--- Transcript ---\n{result.transcript}"
 
-                        return [TextContent(type="text", text=response_text)]
+                        return _with_deprecation([TextContent(type="text", text=response_text)])
 
                     case "see_right":
                         if not self._camera_right:
@@ -690,7 +811,9 @@ class CameraMCPServer:
                         ]
 
                     case _:
-                        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+                        return _with_deprecation(
+                            [TextContent(type="text", text=f"Unknown tool: {name}")]
+                        )
 
             except Exception as e:
                 logger.exception(f"Error in tool {name}")

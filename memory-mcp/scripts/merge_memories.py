@@ -142,7 +142,10 @@ def main() -> None:
         imported, skipped = merge_collection(src_col, dst_col)
         after = dst_col.count()
 
-        print(f"[{col_name}] imported: {imported}, skipped (duplicate): {skipped}, total: {before} -> {after}")
+        print(
+            f"[{col_name}] imported: {imported}, skipped (duplicate): {skipped}, "
+            f"total: {before} -> {after}"
+        )
 
     print()
     print("Done!")

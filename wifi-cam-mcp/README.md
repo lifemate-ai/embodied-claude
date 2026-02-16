@@ -4,23 +4,38 @@ Tapo C210などのWiFiカメラをMCP経由で制御して、AIに部屋を見�
 
 ## 対応カメラ
 
+- TP-Link Tapo C200 (2MP, 1080p)
 - TP-Link Tapo C210 (3MP)
 - TP-Link Tapo C220 (4MP)
+- TP-Link Tapo C230 (5MP, 3K)
 - その他Tapoシリーズのパン・チルト対応カメラ
 
 ## できること
 
 | ツール | 説明 |
 |--------|------|
-| `camera_capture` | 今見えてる景色を撮影 |
-| `camera_pan_left` | 左を向く |
-| `camera_pan_right` | 右を向く |
-| `camera_tilt_up` | 上を向く |
-| `camera_tilt_down` | 下を向く |
-| `camera_look_around` | 部屋を見渡す（4方向撮影） |
+| `see` | 今見えてる景色を撮影 |
+| `look_left` | 左を向く |
+| `look_right` | 右を向く |
+| `look_up` | 上を向く |
+| `look_down` | 下を向く |
+| `look_around` | 部屋を見渡す（4方向撮影） |
 | `camera_info` | カメラ情報取得 |
 | `camera_presets` | プリセット位置一覧 |
 | `camera_go_to_preset` | プリセット位置に移動 |
+
+### 互換エイリアス（段階廃止）
+
+旧名のツールは互換のため当面利用可能です。呼び出すと非推奨メッセージが返ります。
+
+| 旧ツール名 | 新ツール名 |
+|-----------|------------|
+| `camera_capture` | `see` |
+| `camera_pan_left` | `look_left` |
+| `camera_pan_right` | `look_right` |
+| `camera_tilt_up` | `look_up` |
+| `camera_tilt_down` | `look_down` |
+| `camera_look_around` | `look_around` |
 
 ## セットアップ
 
@@ -167,6 +182,19 @@ uv run pytest
 
 - カメラのファームウェアを最新に更新
 - カメラを再起動
+
+### Windows での注意事項
+
+- `ffmpeg` が PATH に入っていること（RTSP フォールバックとオーディオ録音に必要）
+- キャプチャ画像のデフォルト保存先: `%LOCALAPPDATA%\wifi-cam-mcp`
+- `CAPTURE_DIR` を設定する場合はバックスラッシュ使用（例: `C:\Users\you\captures`）
+
+### C200 固有の注意事項
+
+- ONVIF スナップショットに対応していない場合があります（RTSP フォールバックが自動で動作します）
+- モーターが C210/C220 より遅いため、`TAPO_MOTOR_DELAY=0.8` を推奨
+- 赤外線LEDは 850nm（赤く光るタイプ）
+- microSD は最大128GBまで対応
 
 ## 注意事項
 

@@ -9,9 +9,9 @@
         "wifi-cam-mcp"
       ],
       "env": {
-        "TAPO_CAMERA_HOST": "192.168.1.145",
-        "TAPO_USERNAME": "kmizushima",
-        "TAPO_PASSWORD": "K0t0n0ha1983"
+        "TAPO_CAMERA_HOST": "192.168.1.100",
+        "TAPO_USERNAME": "your-username",
+        "TAPO_PASSWORD": "your-password"
       }
     }
   }

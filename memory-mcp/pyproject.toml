@@ -28,7 +28,7 @@ memory-mcp = "memory_mcp.server:main"
 packages = ["src/memory_mcp"]
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]

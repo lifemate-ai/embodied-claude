@@ -104,8 +104,12 @@ class TapoCamera:
     Supports C210, C220, and other ONVIF-compatible Tapo PTZ cameras.
     """
 
-    def __init__(self, config: CameraConfig, capture_dir: str = "/tmp/wifi-cam-mcp"):
+    def __init__(self, config: CameraConfig, capture_dir: str | None = None):
         self._config = config
+        if capture_dir is None:
+            from .config import _default_capture_dir
+
+            capture_dir = _default_capture_dir()
         self._capture_dir = Path(capture_dir)
         self._lock = asyncio.Lock()
 
@@ -297,7 +301,7 @@ class TapoCamera:
         width, height = image.size
 
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=85)
+        image.save(buffer, format="JPEG", quality=self._config.jpeg_quality)
         image_base64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -467,7 +471,7 @@ class TapoCamera:
                     self._sw_position.tilt = max(-90.0, self._sw_position.tilt - degrees)
 
             # Give the motor time to move
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(self._config.motor_delay)
 
             return MoveResult(
                 direction=direction,
@@ -604,7 +608,7 @@ class TapoCamera:
                     "PresetToken": preset_id,
                 }
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(self._config.preset_delay)
             return MoveResult(
                 direction=Direction.LEFT,
                 degrees=0,

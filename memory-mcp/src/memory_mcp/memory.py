@@ -269,7 +269,7 @@ class MemoryStore:
 
     def __init__(self, config: MemoryConfig):
         self._config = config
-        self._client: chromadb.PersistentClient | None = None
+        self._client: Any = None
         self._collection: chromadb.Collection | None = None  # claude_memories
         self._episodes_collection: chromadb.Collection | None = None  # Phase 4
         self._lock = asyncio.Lock()
@@ -283,10 +283,14 @@ class MemoryStore:
         """Initialize ChromaDB connection (Phase 4: with episodes collection)."""
         async with self._lock:
             if self._client is None:
-                self._client = await asyncio.to_thread(
-                    chromadb.PersistentClient,
-                    path=self._config.db_path,
-                )
+                if self._config.db_path == ":memory:":
+                    # Test-mode in-memory backend (portable on Windows/Linux/macOS).
+                    self._client = await asyncio.to_thread(chromadb.EphemeralClient)
+                else:
+                    self._client = await asyncio.to_thread(
+                        chromadb.PersistentClient,
+                        path=self._config.db_path,
+                    )
                 # Phase 3: メインの記憶コレクション
                 self._collection = await asyncio.to_thread(
                     self._client.get_or_create_collection,
