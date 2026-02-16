@@ -56,7 +56,7 @@ class ElevenLabsConfig:
 
         return cls(
             api_key=api_key,
-            voice_id=os.getenv("ELEVENLABS_VOICE_ID", "uYp2UUDeS74htH10iY2e"),
+            voice_id=os.getenv("ELEVENLABS_VOICE_ID", "").strip(),
             model_id=os.getenv("ELEVENLABS_MODEL_ID", "eleven_v3"),
             output_format=os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"),
             play_audio=_parse_bool(os.getenv("ELEVENLABS_PLAY_AUDIO"), True),
