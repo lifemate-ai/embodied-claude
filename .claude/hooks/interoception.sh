@@ -9,7 +9,9 @@ STATE_FILE="/tmp/interoception_state.json"
 # state file がなければフォールバック（デーモン未起動時）
 if [ ! -f "$STATE_FILE" ]; then
     CURRENT_TIME=$(date '+%H:%M:%S')
-    echo "[interoception] time=${CURRENT_TIME} (heartbeat daemon not running)"
+    CURRENT_DOW=$(date '+%a')
+    CURRENT_DATE=$(date '+%Y-%m-%d')
+    echo "[interoception] time=${CURRENT_TIME} day=${CURRENT_DOW} date=${CURRENT_DATE} (heartbeat daemon not running)"
     exit 0
 fi
 
