@@ -59,3 +59,7 @@ Thumbs.db
 
 # Autonomous action (contains credentials)
 autonomous-mcp.json
+
+# Google API credentials (NEVER commit)
+scripts/credentials.json
+scripts/token.json

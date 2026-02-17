@@ -1,0 +1,38 @@
+[project]
+name = "mobility-mcp"
+version = "0.1.0"
+description = "MCP server for robot vacuum mobility control via Tuya - Let AI walk!"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "tinytuya>=1.15.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+]
+
+[project.scripts]
+mobility-mcp = "mobility_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mobility_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

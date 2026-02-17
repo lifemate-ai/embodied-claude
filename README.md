@@ -26,6 +26,7 @@
 | [tts-mcp](./tts-mcp/) | 声 | TTS 統合（ElevenLabs + VOICEVOX） | ElevenLabs API / VOICEVOX + go2rtc |
 | [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | ChromaDB + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
+| [mobility-mcp](./mobility-mcp/) | 足 | ロボット掃除機を足として使う（Tuya制御） | VersLife L6 等 Tuya 対応ロボット掃除機（約12,000円〜） |
 
 ## アーキテクチャ
 
@@ -39,6 +40,7 @@
 - **USB ウェブカメラ**（任意）: nuroum V11 等
 - **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
 - **GPU**（音声認識用）: NVIDIA GPU（Whisper用、GeForceシリーズのVRAM 8GB以上のグラボ推奨）
+- **Tuya対応ロボット掃除機**（足・移動用、任意）: VersLife L6 等（約12,000円〜）
 
 ### ソフトウェア
 - Python 3.10+
@@ -171,6 +173,38 @@ uv sync
 
 > **注意**: WSL2 環境では温度センサーにアクセスできないため動作しません。
 
+#### mobility-mcp（足）
+
+Tuya 対応ロボット掃除機を「足」として使い、部屋を移動できます。
+
+```bash
+cd mobility-mcp
+uv sync
+
+cp .env.example .env
+# .env に以下を設定:
+#   TUYA_DEVICE_ID=（Tuyaアプリのデバイスに表示されるID）
+#   TUYA_IP_ADDRESS=（掃除機のIPアドレス）
+#   TUYA_LOCAL_KEY=（tinytuya wizardで取得するローカルキー）
+```
+
+##### 対応機種
+
+Tuya / SmartLife アプリで制御できる Wi-Fi 対応ロボット掃除機であれば動作する可能性があります（VersLife L6 で動作確認済み）。
+
+> **注意**: 対応機種は **2.4GHz Wi-Fi 専用**のものが多いです。5GHz では接続できません。
+
+##### ローカルキーの取得
+
+[tinytuya](https://github.com/jasonacox/tinytuya) の wizard コマンドを使います：
+
+```bash
+pip install tinytuya
+python -m tinytuya wizard
+```
+
+詳しくは [tinytuya のドキュメント](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys)を参照。
+
 ### 3. Claude Code 設定
 
 テンプレートをコピーして、認証情報を設定：
@@ -270,6 +304,17 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 | `get_system_temperature` | システム温度を取得 |
 | `get_current_time` | 現在時刻を取得 |
 
+### mobility-mcp
+
+| ツール | 説明 |
+|--------|------|
+| `move_forward` | 前進（duration 秒数で自動停止） |
+| `move_backward` | 後退 |
+| `turn_left` | 左旋回 |
+| `turn_right` | 右旋回 |
+| `stop_moving` | 即座に停止 |
+| `body_status` | バッテリー残量・現在状態の確認 |
+
 ## 外に連れ出す（オプション）
 
 モバイルバッテリーとスマホのテザリングがあれば、カメラを肩に乗せて外を散歩できます。
@@ -301,16 +346,24 @@ RTSPの映像ストリームもVPN経由で自宅マシンに届くので、Clau
 ## 今後の展望
 
 - **腕**: サーボモーターやレーザーポインターで「指す」動作
-- **移動**: ロボット車輪で部屋を移動
 - **長距離散歩**: 暖かい季節にもっと遠くへ
 
-## 自律行動スクリプト（オプション）
+## 自律行動 + 欲求システム（オプション）
 
 **注意**: この機能は完全にオプションです。cron設定が必要で、定期的にカメラで撮影が行われるため、プライバシーに配慮して使用してください。
 
 ### 概要
 
-`autonomous-action.sh` は、Claude に定期的な自律行動を与えるスクリプトです。10分ごとにカメラで部屋を観察し、変化があれば記憶に保存します。
+`autonomous-action.sh` と `desire-system/desire_updater.py` の組み合わせで、Claude に自発的な欲求と自律行動を与えます。
+
+**欲求の種類:**
+
+| 欲求 | デフォルト間隔 | 行動 |
+|------|--------------|------|
+| `look_outside` | 1時間 | 窓の方向を見て空・外を観察 |
+| `browse_curiosity` | 2時間 | 今日の面白いニュースや技術情報をWebで調べる |
+| `miss_companion` | 3時間 | カメラスピーカーから呼びかける |
+| `observe_room` | 10分（常時） | 部屋の変化を観察・記憶 |
 
 ### セットアップ
 
@@ -321,26 +374,39 @@ cp autonomous-mcp.json.example autonomous-mcp.json
 # autonomous-mcp.json を編集してカメラの認証情報を設定
 ```
 
-2. **スクリプトの実行権限を付与**
+2. **欲求システムの設定**
+
+```bash
+cd desire-system
+cp .env.example .env
+# .env を編集して COMPANION_NAME などを設定
+uv sync
+```
+
+3. **スクリプトの実行権限を付与**
 
 ```bash
 chmod +x autonomous-action.sh
 ```
 
-3. **crontab に登録**（オプション）
+4. **crontab に登録**
 
 ```bash
 crontab -e
-# 以下を追加（10分ごとに実行）
+# 以下を追加
+*/5  * * * * cd /path/to/embodied-claude/desire-system && uv run python desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
 */10 * * * * /path/to/embodied-claude/autonomous-action.sh
 ```
 
-### 動作
+### 設定可能な環境変数（`desire-system/.env`）
 
-- カメラで部屋を見回す
-- 前回と比べて変化を検出（人の有無、明るさなど）
-- 気づいたことを記憶に保存（category: observation）
-- ログを `~/.claude/autonomous-logs/` に保存
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `COMPANION_NAME` | `あなた` | 呼びかける相手の名前 |
+| `DESIRE_LOOK_OUTSIDE_HOURS` | `1.0` | 外を見る欲求の発火間隔（時間） |
+| `DESIRE_BROWSE_CURIOSITY_HOURS` | `2.0` | 調べ物の発火間隔（時間） |
+| `DESIRE_MISS_COMPANION_HOURS` | `3.0` | 呼びかけ欲求の発火間隔（時間） |
+| `DESIRE_OBSERVE_ROOM_HOURS` | `0.167` | 部屋観察の発火間隔（時間） |
 
 ### プライバシーに関する注意
 

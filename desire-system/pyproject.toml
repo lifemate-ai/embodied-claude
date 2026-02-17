@@ -1,0 +1,41 @@
+[project]
+name = "desire-system"
+version = "0.1.0"
+description = "Autonomous desire system for embodied Claude - gives Kokone inner drives"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.5.0",
+    "mcp>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+    "freezegun>=1.5.0",
+]
+
+[project.scripts]
+desire-updater = "desire_updater:main"
+desire-system = "server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+include = ["desire_updater.py", "server.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
