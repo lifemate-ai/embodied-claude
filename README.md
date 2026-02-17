@@ -19,33 +19,14 @@
 | [usb-webcam-mcp](./usb-webcam-mcp/) | 目 | USB カメラから画像取得 | nuroum V11 等 |
 | [wifi-cam-mcp](./wifi-cam-mcp/) | 目・首・耳 | ONVIF PTZ カメラ制御 + 音声認識 | TP-Link Tapo C210/C220 等 |
 | [elevenlabs-t2s-mcp](./elevenlabs-t2s-mcp/) | 声 | ElevenLabs で音声合成（Audio Tags対応） | ElevenLabs API + go2rtc |
-| [memory-mcp](./memory-mcp/) | 脳 | 長期記憶（セマンティック検索） | ChromaDB |
+| [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | ChromaDB + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
 
 ## アーキテクチャ
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Claude Code                              │
-│                    (MCP Client / AI Brain)                      │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │ MCP Protocol (stdio)
-          ┌───────────────┼───────────────┬───────────────┐
-          │               │               │               │
-          ▼               ▼               ▼               ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│ usb-webcam  │   │  wifi-cam   │   │   memory    │   │   system    │
-│    -mcp     │   │    -mcp     │   │    -mcp     │   │ temperature │
-│             │   │             │   │             │   │    -mcp     │
-│   (目)      │   │ (目/首/耳)  │   │   (脳)      │   │ (体温感覚)  │
-└──────┬──────┘   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-       │                 │                 │                 │
-       ▼                 ▼                 ▼                 ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│ USB Webcam  │   │ Tapo Camera │   │  ChromaDB   │   │Linux Sensors│
-│ (nuroum V11)│   │  (C210等)   │   │  (Vector)   │   │(/sys/class) │
-└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="Architecture" width="100%">
+</p>
 
 ## 必要なもの
 
@@ -57,9 +38,12 @@
 ### ソフトウェア
 - Python 3.10+
 - uv（Python パッケージマネージャー）
-- ffmpeg（画像・音声キャプチャ用）
+- ffmpeg 5+（画像・音声キャプチャ用）
 - OpenCV（USB カメラ用）
+- Pillow（視覚記憶の画像リサイズ・base64エンコード用）
+- OpenAI Whisper（音声認識用、ローカル実行）
 - ElevenLabs API キー（音声合成用）
+- go2rtc（カメラスピーカー出力用、自動ダウンロード対応）
 
 ## セットアップ
 
@@ -267,21 +251,26 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 
 | ツール | 説明 |
 |--------|------|
-| `say` | テキストを音声合成して発話（`[excited]` 等の Audio Tags 対応） |
+| `say` | テキストを音声合成して発話（`[excited]` 等の Audio Tags 対応、speaker: camera/local/both で出力先選択） |
 
 ### memory-mcp
 
 | ツール | 説明 |
 |--------|------|
-| `remember` | 記憶を保存 |
-| `search_memories` | セマンティック検索 |
+| `remember` | 記憶を保存（emotion, importance, category 指定可） |
+| `search_memories` | セマンティック検索（フィルタ対応） |
 | `recall` | 文脈に基づく想起 |
-| `recall_divergent` | 連想を発散させた想起（新） |
-| `list_recent_memories` | 最近の記憶一覧 |
-| `get_memory_stats` | 記憶の統計情報 |
-| `consolidate_memories` | 手動の再生・統合処理（新） |
-| `get_association_diagnostics` | 連想探索の診断情報（新） |
-| `その他` | 連鎖・エピソード・関連記憶（`memory-mcp/README.md`） |
+| `recall_divergent` | 連想を発散させた想起 |
+| `recall_with_associations` | 関連記憶を辿って想起 |
+| `save_visual_memory` | 画像付き記憶保存（base64埋め込み、resolution: low/medium/high） |
+| `save_audio_memory` | 音声付き記憶保存（Whisper文字起こし付き） |
+| `recall_by_camera_position` | カメラの方向から視覚記憶を想起 |
+| `create_episode` / `search_episodes` | エピソード（体験の束）の作成・検索 |
+| `link_memories` / `get_causal_chain` | 記憶間の因果リンク・チェーン |
+| `tom` | Theory of Mind（相手の気持ちの推測） |
+| `get_working_memory` / `refresh_working_memory` | 作業記憶（短期バッファ） |
+| `consolidate_memories` | 記憶の再生・統合（海馬リプレイ風） |
+| `list_recent_memories` / `get_memory_stats` | 最近の記憶一覧・統計情報 |
 
 ### system-temperature-mcp
 
@@ -387,4 +376,5 @@ MIT License
 3,980円のカメラで始まった小さな一歩が、AIと人間の新しい関係性を探る旅になりました。
 
 - [Rumia-Channel](https://github.com/Rumia-Channel) - ONVIF対応のプルリクエスト（[#5](https://github.com/kmizu/embodied-claude/pull/5)）
+- [fruitriin](https://github.com/fruitriin) - 内受容感覚（interoception）hookに曜日情報を追加（[#14](https://github.com/kmizu/embodied-claude/pull/14)）
 - [sugyan](https://github.com/sugyan) - [claude-code-webui](https://github.com/sugyan/claude-code-webui)（外出散歩時の操作UIとして使用）

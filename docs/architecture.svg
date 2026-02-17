@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="brain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="voice" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="mem" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#34d399"/>
+    </linearGradient>
+    <linearGradient id="temp" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444"/>
+      <stop offset="100%" style="stop-color:#f87171"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Claude Code (top) -->
+  <rect x="200" y="10" width="500" height="60" rx="12" fill="url(#brain)" filter="url(#shadow)"/>
+  <text x="450" y="36" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Claude Code</text>
+  <text x="450" y="56" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="12">MCP Client / AI Brain</text>
+
+  <!-- MCP Protocol label -->
+  <text x="450" y="90" text-anchor="middle" fill="#6b7280" font-size="11">MCP Protocol (stdio)</text>
+
+  <!-- Vertical lines from Claude Code to each server -->
+  <line x1="100" y1="70" x2="100" y2="120" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="270" y1="70" x2="270" y2="120" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="450" y1="70" x2="450" y2="120" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="630" y1="70" x2="630" y2="120" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="800" y1="70" x2="800" y2="120" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <!-- Horizontal connector -->
+  <line x1="100" y1="70" x2="800" y2="70" stroke="#9ca3af" stroke-width="1.5"/>
+  <line x1="450" y1="70" x2="450" y2="70" stroke="#9ca3af" stroke-width="1.5"/>
+
+  <!-- MCP Server boxes -->
+  <!-- usb-webcam-mcp -->
+  <rect x="30" y="120" width="140" height="80" rx="10" fill="url(#eye)" filter="url(#shadow)"/>
+  <text x="100" y="148" text-anchor="middle" fill="white" font-size="13" font-weight="bold">usb-webcam</text>
+  <text x="100" y="165" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="11">-mcp</text>
+  <text x="100" y="188" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="18">&#x1F441;</text>
+
+  <!-- wifi-cam-mcp -->
+  <rect x="200" y="120" width="140" height="80" rx="10" fill="url(#eye)" filter="url(#shadow)"/>
+  <text x="270" y="148" text-anchor="middle" fill="white" font-size="13" font-weight="bold">wifi-cam</text>
+  <text x="270" y="165" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="11">-mcp</text>
+  <text x="256" y="190" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="16">&#x1F441;&#x1F9B6;&#x1F442;</text>
+
+  <!-- memory-mcp -->
+  <rect x="380" y="120" width="140" height="80" rx="10" fill="url(#mem)" filter="url(#shadow)"/>
+  <text x="450" y="148" text-anchor="middle" fill="white" font-size="13" font-weight="bold">memory</text>
+  <text x="450" y="165" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="11">-mcp</text>
+  <text x="450" y="190" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="18">&#x1F9E0;</text>
+
+  <!-- elevenlabs-t2s-mcp -->
+  <rect x="560" y="120" width="140" height="80" rx="10" fill="url(#voice)" filter="url(#shadow)"/>
+  <text x="630" y="148" text-anchor="middle" fill="white" font-size="13" font-weight="bold">elevenlabs-t2s</text>
+  <text x="630" y="165" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="11">-mcp</text>
+  <text x="630" y="190" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="18">&#x1F5E3;</text>
+
+  <!-- system-temperature-mcp -->
+  <rect x="730" y="120" width="140" height="80" rx="10" fill="url(#temp)" filter="url(#shadow)"/>
+  <text x="800" y="148" text-anchor="middle" fill="white" font-size="13" font-weight="bold">system-temp</text>
+  <text x="800" y="165" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="11">-mcp</text>
+  <text x="800" y="190" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="18">&#x1F321;</text>
+
+  <!-- Vertical lines from servers to hardware -->
+  <line x1="100" y1="200" x2="100" y2="240" stroke="#d1d5db" stroke-width="1.5"/>
+  <line x1="270" y1="200" x2="270" y2="240" stroke="#d1d5db" stroke-width="1.5"/>
+  <line x1="450" y1="200" x2="450" y2="240" stroke="#d1d5db" stroke-width="1.5"/>
+  <line x1="630" y1="200" x2="630" y2="240" stroke="#d1d5db" stroke-width="1.5"/>
+  <line x1="800" y1="200" x2="800" y2="240" stroke="#d1d5db" stroke-width="1.5"/>
+
+  <!-- Hardware boxes -->
+  <!-- USB Webcam -->
+  <rect x="30" y="240" width="140" height="55" rx="8" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="100" y="263" text-anchor="middle" fill="#374151" font-size="12" font-weight="600">USB Webcam</text>
+  <text x="100" y="281" text-anchor="middle" fill="#6b7280" font-size="10">nuroum V11 等</text>
+
+  <!-- Tapo Camera -->
+  <rect x="200" y="240" width="140" height="55" rx="8" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="270" y="263" text-anchor="middle" fill="#374151" font-size="12" font-weight="600">Tapo Camera</text>
+  <text x="270" y="281" text-anchor="middle" fill="#6b7280" font-size="10">C210 / C220</text>
+
+  <!-- ChromaDB -->
+  <rect x="380" y="240" width="140" height="55" rx="8" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="450" y="263" text-anchor="middle" fill="#374151" font-size="12" font-weight="600">ChromaDB</text>
+  <text x="450" y="281" text-anchor="middle" fill="#6b7280" font-size="10">Vector DB + Pillow</text>
+
+  <!-- ElevenLabs -->
+  <rect x="560" y="240" width="140" height="55" rx="8" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="630" y="263" text-anchor="middle" fill="#374151" font-size="12" font-weight="600">ElevenLabs API</text>
+  <text x="630" y="281" text-anchor="middle" fill="#6b7280" font-size="10">+ go2rtc</text>
+
+  <!-- Linux Sensors -->
+  <rect x="730" y="240" width="140" height="55" rx="8" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="800" y="263" text-anchor="middle" fill="#374151" font-size="12" font-weight="600">Linux Sensors</text>
+  <text x="800" y="281" text-anchor="middle" fill="#6b7280" font-size="10">/sys/class/thermal</text>
+
+  <!-- Legend -->
+  <text x="450" y="330" text-anchor="middle" fill="#9ca3af" font-size="10">--- MCP Protocol (stdio) ─── Hardware/API</text>
+</svg>
