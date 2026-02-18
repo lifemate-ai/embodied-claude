@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable
 
 from .predictive import query_ambiguity_score
-from .types import Memory
 
 
 def adaptive_search_params(
@@ -40,83 +38,4 @@ class AssociationDiagnostics:
     traversed_edges: int
     expanded_nodes: int
     avg_branching_factor: float
-
-
-class AssociationEngine:
-    """Graph traversal based on explicit and implicit links."""
-
-    async def spread(
-        self,
-        seeds: list[Memory],
-        fetch_memory_by_id: Callable[[str], Awaitable[Memory | None]],
-        max_branches: int,
-        max_depth: int,
-    ) -> tuple[list[Memory], AssociationDiagnostics]:
-        """Expand associative neighborhood from seed memories."""
-        if not seeds:
-            return [], AssociationDiagnostics(max_branches, max_depth, 0, 0, 0.0)
-
-        visited: set[str] = {m.id for m in seeds}
-        frontier: list[tuple[Memory, int]] = [(m, 0) for m in seeds]
-        expanded: list[Memory] = []
-        traversed_edges = 0
-        branching_counts: list[int] = []
-
-        while frontier:
-            current, depth = frontier.pop(0)
-            if depth >= max_depth:
-                continue
-
-            neighbors = self._neighbor_candidates(current)
-            neighbors = neighbors[:max_branches]
-            branching_counts.append(len(neighbors))
-
-            for neighbor_id in neighbors:
-                traversed_edges += 1
-                if neighbor_id in visited:
-                    continue
-                neighbor = await fetch_memory_by_id(neighbor_id)
-                if neighbor is None:
-                    continue
-
-                visited.add(neighbor_id)
-                expanded.append(neighbor)
-                frontier.append((neighbor, depth + 1))
-
-        avg_branch = 0.0
-        if branching_counts:
-            avg_branch = sum(branching_counts) / len(branching_counts)
-
-        diagnostics = AssociationDiagnostics(
-            branches_used=max_branches,
-            depth_used=max_depth,
-            traversed_edges=traversed_edges,
-            expanded_nodes=len(expanded),
-            avg_branching_factor=avg_branch,
-        )
-        return expanded, diagnostics
-
-    def _neighbor_candidates(self, memory: Memory) -> list[str]:
-        """Collect neighbors ordered by confidence."""
-        weighted_ids: list[tuple[str, float]] = []
-        weighted_ids.extend((item_id, 1.0) for item_id in memory.linked_ids)
-
-        for link in memory.links:
-            base = 0.8
-            if link.link_type == "similar":
-                base = 1.0
-            elif link.link_type in {"related", "caused_by", "leads_to"}:
-                base = 0.85
-            weighted_ids.append((link.target_id, base))
-
-        for target_id, weight in memory.coactivation_weights:
-            weighted_ids.append((target_id, max(0.0, min(1.0, weight))))
-
-        dedup: dict[str, float] = {}
-        for target_id, weight in weighted_ids:
-            if target_id not in dedup or dedup[target_id] < weight:
-                dedup[target_id] = weight
-
-        ordered = sorted(dedup.items(), key=lambda item: item[1], reverse=True)
-        return [target_id for target_id, _ in ordered]
 

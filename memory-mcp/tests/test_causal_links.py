@@ -106,11 +106,9 @@ class TestCausalLinksIntegration:
     @pytest.mark.asyncio
     async def test_add_causal_link(self, memory_store) -> None:
         """Test adding a causal link between memories."""
-        # Create two memories
         mem1 = await memory_store.save(content="Memory 1: The cause")
         mem2 = await memory_store.save(content="Memory 2: The effect")
 
-        # Add causal link
         await memory_store.add_causal_link(
             source_id=mem2.id,
             target_id=mem1.id,
@@ -118,13 +116,12 @@ class TestCausalLinksIntegration:
             note="mem1 caused mem2",
         )
 
-        # Verify link was added
-        updated_mem2 = await memory_store.get_by_id(mem2.id)
-        assert updated_mem2 is not None
-        assert len(updated_mem2.links) == 1
-        assert updated_mem2.links[0].target_id == mem1.id
-        assert updated_mem2.links[0].link_type == "caused_by"
-        assert updated_mem2.links[0].note == "mem1 caused mem2"
+        # Verify link via get_links on the store
+        links = await memory_store._store.get_links(mem2.id)
+        assert len(links) == 1
+        assert links[0].target_id == mem1.id
+        assert links[0].link_type == "caused_by"
+        assert links[0].note == "mem1 caused mem2"
 
     @pytest.mark.asyncio
     async def test_add_causal_link_duplicate_prevention(self, memory_store) -> None:
@@ -132,12 +129,11 @@ class TestCausalLinksIntegration:
         mem1 = await memory_store.save(content="Memory 1")
         mem2 = await memory_store.save(content="Memory 2")
 
-        # Add same link twice
         await memory_store.add_causal_link(mem2.id, mem1.id, "caused_by")
         await memory_store.add_causal_link(mem2.id, mem1.id, "caused_by")
 
-        updated_mem2 = await memory_store.get_by_id(mem2.id)
-        assert len(updated_mem2.links) == 1  # Should only be one link
+        links = await memory_store._store.get_links(mem2.id)
+        assert len(links) == 1
 
     @pytest.mark.asyncio
     async def test_add_causal_link_different_types(self, memory_store) -> None:
@@ -145,21 +141,22 @@ class TestCausalLinksIntegration:
         mem1 = await memory_store.save(content="Memory 1")
         mem2 = await memory_store.save(content="Memory 2")
 
-        # Add different link types
         await memory_store.add_causal_link(mem2.id, mem1.id, "caused_by")
         await memory_store.add_causal_link(mem2.id, mem1.id, "related")
 
-        updated_mem2 = await memory_store.get_by_id(mem2.id)
-        assert len(updated_mem2.links) == 2
+        links = await memory_store._store.get_links(mem2.id)
+        assert len(links) == 2
 
     @pytest.mark.asyncio
     async def test_add_causal_link_invalid_source(self, memory_store) -> None:
         """Test adding link with invalid source ID."""
+        import uuid
         mem1 = await memory_store.save(content="Memory 1")
+        fake_id = str(uuid.uuid4())
 
         with pytest.raises(ValueError, match="Source memory not found"):
             await memory_store.add_causal_link(
-                source_id="invalid-id",
+                source_id=fake_id,
                 target_id=mem1.id,
                 link_type="caused_by",
             )
@@ -167,12 +164,14 @@ class TestCausalLinksIntegration:
     @pytest.mark.asyncio
     async def test_add_causal_link_invalid_target(self, memory_store) -> None:
         """Test adding link with invalid target ID."""
+        import uuid
         mem1 = await memory_store.save(content="Memory 1")
+        fake_id = str(uuid.uuid4())
 
         with pytest.raises(ValueError, match="Target memory not found"):
             await memory_store.add_causal_link(
                 source_id=mem1.id,
-                target_id="invalid-id",
+                target_id=fake_id,
                 link_type="caused_by",
             )
 

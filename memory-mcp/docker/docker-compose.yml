@@ -1,0 +1,85 @@
+name: embodied-claude
+
+services:
+  # ========================================
+  # PostgreSQL + pgvector + pgroonga
+  # ========================================
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: embodied-claude-db
+    restart: unless-stopped
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-embodied_claude}
+      POSTGRES_USER: ${PG_USER:-memory_mcp}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=ja_JP.UTF-8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+        -c shared_preload_libraries=''
+        -c shared_buffers=256MB
+        -c effective_cache_size=512MB
+        -c work_mem=64MB
+        -c maintenance_work_mem=128MB
+        -c max_connections=20
+        -c random_page_cost=1.1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-memory_mcp} -d ${PG_DATABASE:-embodied_claude}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    shm_size: 256mb
+
+  # ========================================
+  # Embedding model API server
+  # ========================================
+  embedding-api:
+    build:
+      context: ./embedding-api
+      dockerfile: Dockerfile
+    container_name: embodied-claude-embedding
+    restart: unless-stopped
+    ports:
+      - "${EMBEDDING_PORT:-8100}:8100"
+    environment:
+      MODEL_NAME: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-base}
+      MAX_BATCH_SIZE: 64
+    volumes:
+      - model-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+  # ========================================
+  # go2rtc camera stream relay (optional)
+  # ========================================
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: embodied-claude-go2rtc
+    restart: unless-stopped
+    ports:
+      - "${GO2RTC_API_PORT:-1984}:1984"
+      - "${GO2RTC_RTSP_PORT:-8554}:8554"
+    volumes:
+      - ./go2rtc/config.yaml:/config/go2rtc.yaml:ro
+    profiles:
+      - camera
+
+volumes:
+  pgdata:
+    name: embodied-claude-pgdata
+  model-cache:
+    name: embodied-claude-model-cache

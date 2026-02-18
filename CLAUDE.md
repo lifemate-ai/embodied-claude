@@ -27,12 +27,20 @@ embodied-claude/
 │           ├── elevenlabs.py  # ElevenLabs エンジン
 │           └── voicevox.py    # VOICEVOX エンジン
 │
-├── memory-mcp/            # 長期記憶システム（Python）
-│   └── src/memory_mcp/
-│       ├── server.py      # MCP サーバー実装
-│       ├── memory.py      # ChromaDB 操作
-│       ├── types.py       # 型定義（Emotion, Category）
-│       └── config.py      # 設定管理
+├── memory-mcp/            # 長期記憶システム（PostgreSQL + pgvector + pgroonga）
+│   ├── src/memory_mcp/
+│   │   ├── server.py        # MCP サーバー実装
+│   │   ├── memory.py        # MemoryStore ファサード
+│   │   ├── postgres_store.py # PostgreSQL バックエンド（CRUD・検索・連想グラフ）
+│   │   ├── schema.py        # DDL 定義（テーブル・インデックス）
+│   │   ├── embeddings.py    # 埋め込みモデル抽象化（ローカル / HTTP API）
+│   │   ├── episode.py       # エピソード記憶管理
+│   │   ├── association.py   # 連想パラメータ調整
+│   │   ├── types.py         # 型定義（Emotion, Category, Memory, Episode）
+│   │   ├── config.py        # 設定管理（PostgreSQL DSN, 検索パラメータ）
+│   │   └── migrate.py       # ChromaDB → PostgreSQL 移行スクリプト
+│   ├── docker/              # Docker Compose 環境一式
+│   └── benchmarks/          # パフォーマンスベンチマーク
 │
 ├── system-temperature-mcp/ # 体温感覚（Python）
 │   └── src/system_temperature_mcp/
@@ -40,6 +48,37 @@ embodied-claude/
 │
 └── .claude/               # Claude Code ローカル設定
     └── settings.local.json
+```
+
+## memory-mcp セットアップ
+
+### 必要なサービス
+
+memory-mcp は PostgreSQL + pgvector + pgroonga が必須です。Docker Compose で一括起動できます。
+
+```bash
+cd memory-mcp/docker
+cp .env.example .env   # PG_PASSWORD を設定
+docker compose up -d   # PostgreSQL + embedding-api を起動
+```
+
+### 環境変数
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `MEMORY_PG_DSN` | `postgresql://memory_mcp:changeme@localhost:5432/embodied_claude` | PostgreSQL 接続文字列 |
+| `MEMORY_PG_POOL_MIN` | `2` | 接続プール最小サイズ |
+| `MEMORY_PG_POOL_MAX` | `10` | 接続プール最大サイズ |
+| `MEMORY_EMBEDDING_MODEL` | `intfloat/multilingual-e5-base` | 埋め込みモデル名 |
+| `MEMORY_EMBEDDING_API_URL` | (未設定=ローカル実行) | Embedding API サーバーの URL |
+| `MEMORY_VECTOR_WEIGHT` | `0.7` | ハイブリッド検索のベクトル重み |
+| `MEMORY_TEXT_WEIGHT` | `0.3` | ハイブリッド検索のテキスト重み |
+| `MEMORY_HALF_LIFE_DAYS` | `30.0` | 時間減衰の半減期（日） |
+
+### ChromaDB からの移行
+
+```bash
+uv run memory-migrate --chroma-path ~/.claude/memories/chroma --pg-dsn "$MEMORY_PG_DSN"
 ```
 
 ## 開発ガイドライン
@@ -178,7 +217,7 @@ uv run pytest -v       # テストが通ること
 - `.env` ファイルはコミットしない（.gitignore に追加済み）
 - カメラパスワードは環境変数で管理
 - ElevenLabs API キーは環境変数で管理
-- 長期記憶は `~/.claude/memories/` に保存される
+- 長期記憶は PostgreSQL に保存される（DSN は `MEMORY_PG_DSN` 環境変数で管理）
 
 ## デバッグ
 
@@ -225,6 +264,7 @@ cd wifi-cam-mcp && uv run wifi-cam-mcp
 - [go2rtc](https://github.com/AlexxIT/go2rtc) - RTSPストリーム中継・オーディオバックチャンネル
 - [claude-code-webui](https://github.com/sugyan/claude-code-webui) - Claude Code の Web UI
 - [Tailscale](https://tailscale.com/) - メッシュ VPN
-- [ChromaDB](https://www.trychroma.com/) - ベクトルデータベース
+- [pgvector](https://github.com/pgvector/pgvector) - PostgreSQL ベクトル検索拡張
+- [pgroonga](https://pgroonga.github.io/) - PostgreSQL 日本語全文検索拡張
 - [OpenAI Whisper](https://github.com/openai/whisper) - 音声認識
 - [ElevenLabs](https://elevenlabs.io/) - 音声合成 API

@@ -632,7 +632,8 @@ class MemoryMCPServer:
                                 category=arguments.get("category", "daily"),
                                 link_threshold=arguments.get("link_threshold", 0.8),
                             )
-                            linked_info = f"\nLinked to: {len(memory.linked_ids)} memories"
+                            linked_ids = await self._memory_store._store.get_linked_memory_ids(memory.id)
+                            linked_info = f"\nLinked to: {len(linked_ids)} memories"
                         else:
                             memory = await self._memory_store.save(
                                 content=content,
@@ -882,11 +883,12 @@ Date Range:
                         output_lines = [f"Memory chain starting from {memory_id}:\n"]
 
                         output_lines.append("=== Starting Memory ===\n")
+                        start_linked_ids = await self._memory_store._store.get_linked_memory_ids(memory_id)
                         output_lines.append(
                             f"ID: {start_memory.id}\n"
                             f"[{start_memory.timestamp}] [{start_memory.emotion}] [{start_memory.category}]\n"
                             f"{start_memory.content}\n"
-                            f"Linked to: {len(start_memory.linked_ids)} memories\n"
+                            f"Linked to: {len(start_linked_ids)} memories\n"
                         )
 
                         if linked_memories:
@@ -1286,18 +1288,17 @@ Date Range:
                 return [TextContent(type="text", text=f"Error: {e!s}")]
 
     async def connect_memory(self) -> None:
-        """Connect to memory store (Phase 4: with episode manager & sensory integration)."""
+        """Connect to memory store (PostgreSQL backend)."""
         config = MemoryConfig.from_env()
         self._memory_store = MemoryStore(config)
         await self._memory_store.connect()
-        logger.info(f"Connected to memory store at {config.db_path}")
+        logger.info(f"Connected to memory store (PostgreSQL: {config.pg_dsn})")
 
-        # Phase 4.2: Initialize episode manager
-        episodes_collection = self._memory_store.get_episodes_collection()
-        self._episode_manager = EpisodeManager(self._memory_store, episodes_collection)
+        # Initialize episode manager
+        self._episode_manager = EpisodeManager(self._memory_store)
         logger.info("Episode manager initialized")
 
-        # Phase 4.3: Initialize sensory integration
+        # Initialize sensory integration
         self._sensory_integration = SensoryIntegration(self._memory_store)
         logger.info("Sensory integration initialized")
 

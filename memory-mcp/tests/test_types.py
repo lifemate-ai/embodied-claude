@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from src.memory_mcp.types import (
+from memory_mcp.types import (
     CameraPosition,
     Episode,
     Memory,

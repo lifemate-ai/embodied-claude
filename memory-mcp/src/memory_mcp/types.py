@@ -154,7 +154,7 @@ class Episode:
     importance: int  # 1-5
 
     def to_metadata(self) -> dict[str, Any]:
-        """Convert to dictionary for ChromaDB metadata."""
+        """Convert to flat dictionary (legacy, used by migration)."""
         return {
             "title": self.title,
             "start_time": self.start_time,
@@ -170,7 +170,7 @@ class Episode:
     def from_metadata(
         cls, id: str, summary: str, metadata: dict[str, Any]
     ) -> "Episode":
-        """Create from ChromaDB metadata."""
+        """Create from flat metadata dictionary (legacy, used by migration)."""
         return cls(
             id=id,
             title=metadata["title"],
@@ -222,7 +222,7 @@ class Memory:
     coactivation_weights: tuple[tuple[str, float], ...] = field(default_factory=tuple)
 
     def to_metadata(self) -> dict[str, Any]:
-        """Convert to dictionary for ChromaDB metadata."""
+        """Convert to flat dictionary (legacy, used by migration)."""
         metadata: dict[str, Any] = {
             "timestamp": self.timestamp,
             "emotion": self.emotion,
@@ -265,7 +265,7 @@ class ScoredMemory:
     """スコアリング済み検索結果."""
 
     memory: Memory
-    semantic_distance: float  # ChromaDBからの生距離
+    semantic_distance: float  # ベクトル距離（cosine distance）
     time_decay_factor: float  # 時間減衰係数 (0.0-1.0)
     emotion_boost: float  # 感情ブースト
     importance_boost: float  # 重要度ブースト

@@ -1,37 +1,14 @@
 """Tests for SensoryIntegration."""
 
-import shutil
-import tempfile
-
 import pytest
 
-from src.memory_mcp.config import MemoryConfig
-from src.memory_mcp.memory import MemoryStore
-from src.memory_mcp.sensory import SensoryIntegration
-from src.memory_mcp.types import CameraPosition
+from memory_mcp.memory import MemoryStore
+from memory_mcp.sensory import SensoryIntegration
+from memory_mcp.types import CameraPosition
 
 
 @pytest.fixture
-async def memory_store():
-    """Create a MemoryStore instance for testing with isolated temp DB."""
-    # Create unique temp directory for each test
-    temp_dir = tempfile.mkdtemp(prefix="test_sensory_")
-
-    config = MemoryConfig(
-        db_path=temp_dir,
-        collection_name="test_memories",
-    )
-    store = MemoryStore(config)
-    await store.connect()
-    yield store
-    await store.disconnect()
-
-    # Cleanup temp directory
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@pytest.fixture
-def sensory_integration(memory_store):
+def sensory_integration(memory_store: MemoryStore):
     """Create a SensoryIntegration instance."""
     return SensoryIntegration(memory_store)
 
