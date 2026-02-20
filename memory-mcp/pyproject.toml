@@ -14,6 +14,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "Pillow>=10.0.0",
     "sentence-transformers>=2.0.0",
+    "rank-bm25>=0.2.2",
+    "sudachipy>=0.6.10",
+    "sudachidict-core>=20260116",
 ]
 
 [project.optional-dependencies]
@@ -40,3 +43,13 @@ per-file-ignores = {"src/memory_mcp/server.py" = ["E501"]}
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+]

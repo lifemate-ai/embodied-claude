@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import chromadb
 
@@ -140,11 +140,12 @@ class EpisodeManager:
         episodes: list[Episode] = []
 
         if results and results.get("ids") and results["ids"][0]:
+            ep_documents = (results.get("documents") or [[]])[0]
+            ep_metadatas = (results.get("metadatas") or [[]])[0]
             for i, episode_id in enumerate(results["ids"][0]):
-                summary = results["documents"][0][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][0][i] if results.get("metadatas") else {}
-                )
+                summary = ep_documents[i] if i < len(ep_documents) else ""
+                raw_metadata = ep_metadatas[i] if i < len(ep_metadatas) else {}
+                metadata: dict[str, Any] = dict(raw_metadata)
 
                 episode = Episode.from_metadata(
                     id=episode_id,
@@ -173,8 +174,11 @@ class EpisodeManager:
         if not results or not results.get("ids"):
             return None
 
-        summary = results["documents"][0] if results.get("documents") else ""
-        metadata = results["metadatas"][0] if results.get("metadatas") else {}
+        ep_docs = results.get("documents") or []
+        ep_metas = results.get("metadatas") or []
+        summary = ep_docs[0] if ep_docs else ""
+        raw_metadata = ep_metas[0] if ep_metas else {}
+        metadata: dict[str, Any] = dict(raw_metadata)
 
         return Episode.from_metadata(
             id=episode_id,
@@ -223,14 +227,17 @@ class EpisodeManager:
         episodes: list[Episode] = []
 
         if results and results.get("ids"):
+            all_docs = results.get("documents") or []
+            all_metas = results.get("metadatas") or []
             for i, episode_id in enumerate(results["ids"]):
-                summary = results["documents"][i] if results.get("documents") else ""
-                metadata = results["metadatas"][i] if results.get("metadatas") else {}
+                summary = all_docs[i] if i < len(all_docs) else ""
+                raw_metadata_item = all_metas[i] if i < len(all_metas) else {}
+                metadata_item: dict[str, Any] = dict(raw_metadata_item)
 
                 episode = Episode.from_metadata(
                     id=episode_id,
                     summary=summary,
-                    metadata=metadata,
+                    metadata=metadata_item,
                 )
                 episodes.append(episode)
 

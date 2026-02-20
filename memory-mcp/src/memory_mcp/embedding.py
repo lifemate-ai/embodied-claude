@@ -8,6 +8,7 @@ e5 モデルはクエリと文書で異なるプレフィックスが必要な�
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from chromadb import EmbeddingFunction
 
@@ -32,12 +33,13 @@ class E5EmbeddingFunction(EmbeddingFunction):
 
     def __init__(self, model_name: str = "intfloat/multilingual-e5-base") -> None:
         self._model_name = model_name
-        self._model = None  # lazy load
+        self._model: Any = None  # lazy load; actual type is SentenceTransformer
 
-    def name(self) -> str:
-        return f"E5EmbeddingFunction({self._model_name})"
+    @staticmethod
+    def name() -> str:
+        return "E5EmbeddingFunction"
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, str]:
         return {"model_name": self._model_name}
 
     def _load_model(self) -> None:
@@ -54,7 +56,7 @@ class E5EmbeddingFunction(EmbeddingFunction):
                     "`uv add sentence-transformers` を実行してください。"
                 ) from e
 
-    def __call__(self, input: list[str]) -> list[list[float]]:
+    def __call__(self, input: list[str]) -> list[list[float]]:  # type: ignore[override]
         """文書保存用埋め込み（passage: プレフィックス）。
 
         ChromaDB の EmbeddingFunction プロトコルに準拠。
@@ -67,7 +69,7 @@ class E5EmbeddingFunction(EmbeddingFunction):
         """
         self._load_model()
         prefixed = [f"passage: {doc}" for doc in input]
-        embeddings = self._model.encode(  # type: ignore[union-attr]
+        embeddings = self._model.encode(
             prefixed,
             normalize_embeddings=True,
             show_progress_bar=False,
@@ -87,7 +89,7 @@ class E5EmbeddingFunction(EmbeddingFunction):
         """
         self._load_model()
         prefixed = [f"query: {t}" for t in texts]
-        embeddings = self._model.encode(  # type: ignore[union-attr]
+        embeddings = self._model.encode(
             prefixed,
             normalize_embeddings=True,
             show_progress_bar=False,

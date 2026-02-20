@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Type check
+        run: uv run mypy src/memory_mcp/ --ignore-missing-imports
+
       - name: Run tests
         run: uv run pytest -v
 

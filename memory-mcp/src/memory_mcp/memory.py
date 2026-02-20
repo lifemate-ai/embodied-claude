@@ -4,21 +4,24 @@ import asyncio
 import json
 import math
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
 import chromadb
+from chromadb.api import ClientAPI
 
 from .association import (
     AssociationDiagnostics,
     AssociationEngine,
     adaptive_search_params,
 )
+from .bm25 import BM25Index
 from .config import MemoryConfig
 from .consolidation import ConsolidationEngine
 from .embedding import E5EmbeddingFunction
 from .hopfield import HopfieldRecallResult, ModernHopfieldNetwork
-from .normalizer import normalize_japanese
+from .normalizer import get_reading, normalize_japanese
 from .predictive import (
     PredictiveDiagnostics,
     calculate_context_relevance,
@@ -234,7 +237,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 def _memory_from_metadata(
     memory_id: str,
     content: str,
-    metadata: dict[str, Any],
+    metadata: Mapping[str, Any],
 ) -> Memory:
     """メタデータからMemoryオブジェクトを作成（Phase 4対応）。
 
@@ -278,7 +281,7 @@ class MemoryStore:
 
     def __init__(self, config: MemoryConfig):
         self._config = config
-        self._client: chromadb.PersistentClient | None = None
+        self._client: ClientAPI | None = None
         self._collection: chromadb.Collection | None = None  # claude_memories
         self._episodes_collection: chromadb.Collection | None = None  # Phase 4
         self._lock = asyncio.Lock()
@@ -291,6 +294,8 @@ class MemoryStore:
         self._hopfield = ModernHopfieldNetwork(beta=4.0, n_iters=3)
         # Phase 8: 多言語埋め込み関数（e5モデル）
         self._embedding_fn = E5EmbeddingFunction(config.embedding_model)
+        # Phase 9: BM25 インメモリインデックス
+        self._bm25_index = BM25Index()
 
     async def connect(self) -> None:
         """Initialize ChromaDB connection (Phase 4: with episodes collection)."""
@@ -368,12 +373,22 @@ class MemoryStore:
 
         # Phase 8: 正規化済みテキストをChromaDBに保存（元テキストはMemoryオブジェクトで保持）
         normalized_content = normalize_japanese(content)
+
+        # Phase 9: 読み（カタカナ）をメタデータに保存（送り仮名ゆれ対応）
+        meta = memory.to_metadata()
+        reading = get_reading(content)
+        if reading:
+            meta = {**meta, "reading": reading}
+
         await asyncio.to_thread(
             collection.add,
             ids=[memory_id],
             documents=[normalized_content],
-            metadatas=[memory.to_metadata()],
+            metadatas=[meta],
         )
+
+        # Phase 9: BM25 インデックスを無効化（次回検索時に再ビルド）
+        self._bm25_index.mark_dirty()
 
         # Phase 4: 作業記憶にも追加
         await self._working_memory.add(memory)
@@ -417,7 +432,7 @@ class MemoryStore:
         )
         results = await asyncio.to_thread(
             collection.query,
-            query_embeddings=query_embeddings,
+            query_embeddings=query_embeddings,  # type: ignore[arg-type]
             n_results=n_results,
             where=where,
         )
@@ -426,9 +441,9 @@ class MemoryStore:
 
         if results and results.get("ids") and results["ids"][0]:
             ids = results["ids"][0]
-            documents = results.get("documents", [[]])[0]
-            metadatas = results.get("metadatas", [[]])[0]
-            distances = results.get("distances", [[]])[0]
+            documents = (results.get("documents") or [[]])[0]
+            metadatas = (results.get("metadatas") or [[]])[0]
+            distances = (results.get("distances") or [[]])[0]
 
             for i, memory_id in enumerate(ids):
                 metadata = metadatas[i] if i < len(metadatas) else {}
@@ -520,8 +535,8 @@ class MemoryStore:
 
         if results and results.get("ids"):
             ids = results["ids"]
-            documents = results.get("documents", [])
-            metadatas = results.get("metadatas", [])
+            documents = results.get("documents") or []
+            metadatas = results.get("metadatas") or []
 
             for i, memory_id in enumerate(ids):
                 metadata = metadatas[i] if i < len(metadatas) else {}
@@ -544,10 +559,11 @@ class MemoryStore:
         by_emotion: dict[str, int] = {}
         timestamps: list[str] = []
 
-        for metadata in results.get("metadatas", []):
-            category = metadata.get("category", "daily")
-            emotion = metadata.get("emotion", "neutral")
-            timestamp = metadata.get("timestamp", "")
+        for raw_metadata in (results.get("metadatas") or []):
+            metadata: dict[str, Any] = dict(raw_metadata)
+            category = str(metadata.get("category", "daily"))
+            emotion = str(metadata.get("emotion", "neutral"))
+            timestamp = str(metadata.get("timestamp", ""))
 
             by_category[category] = by_category.get(category, 0) + 1
             by_emotion[emotion] = by_emotion.get(emotion, 0) + 1
@@ -624,7 +640,7 @@ class MemoryStore:
         )
         results = await asyncio.to_thread(
             collection.query,
-            query_embeddings=query_embeddings,
+            query_embeddings=query_embeddings,  # type: ignore[arg-type]
             n_results=fetch_count,
             where=where,
         )
@@ -634,9 +650,9 @@ class MemoryStore:
 
         if results and results.get("ids") and results["ids"][0]:
             ids = results["ids"][0]
-            documents = results.get("documents", [[]])[0]
-            metadatas = results.get("metadatas", [[]])[0]
-            distances = results.get("distances", [[]])[0]
+            documents = (results.get("documents") or [[]])[0]
+            metadatas = (results.get("metadatas") or [[]])[0]
+            distances = (results.get("distances") or [[]])[0]
 
             for i, memory_id in enumerate(ids):
                 metadata = metadatas[i] if i < len(metadatas) else {}
@@ -676,6 +692,44 @@ class MemoryStore:
                     )
                 )
 
+        # Phase 9: BM25 ハイブリッドスコアリング
+        if self._config.enable_bm25 and scored_results:
+            if self._bm25_index.is_dirty:
+                all_memories = await self.get_all()
+                await asyncio.to_thread(
+                    self._bm25_index.build,
+                    [(m.id, m.content) for m in all_memories],
+                )
+            result_ids = [sr.memory.id for sr in scored_results]
+            bm25_scores = self._bm25_index.scores(query, result_ids)
+
+            # Phase 9: 読みスコアリング（送り仮名ゆれ対応）
+            query_reading = get_reading(query)
+
+            bm25_weight = 0.2
+            reading_weight = 0.15
+            reranked: list[ScoredMemory] = []
+            for sr in scored_results:
+                boost = bm25_scores.get(sr.memory.id, 0.0) * bm25_weight
+
+                # 読み一致ボーナス（打ち合わせ ↔ 打合せ）
+                if query_reading:
+                    doc_reading = get_reading(sr.memory.content) or ""
+                    if doc_reading and query_reading == doc_reading:
+                        boost += reading_weight
+
+                reranked.append(
+                    ScoredMemory(
+                        memory=sr.memory,
+                        semantic_distance=sr.semantic_distance,
+                        time_decay_factor=sr.time_decay_factor,
+                        emotion_boost=sr.emotion_boost,
+                        importance_boost=sr.importance_boost,
+                        final_score=sr.final_score - boost,
+                    )
+                )
+            scored_results = reranked
+
         # final_score昇順でソート
         scored_results.sort(key=lambda x: x.final_score)
         return scored_results[:n_results]
@@ -698,12 +752,12 @@ class MemoryStore:
         if not results or not results.get("ids"):
             return  # 記憶が見つからない
 
-        metadatas = results.get("metadatas", [])
+        metadatas = results.get("metadatas") or []
         if not metadatas:
             return
 
-        current_metadata = metadatas[0]
-        current_access_count = current_metadata.get("access_count", 0)
+        current_metadata: dict[str, Any] = dict(metadatas[0])
+        current_access_count = int(current_metadata.get("access_count", 0))
 
         # 更新
         new_metadata = {
@@ -739,8 +793,8 @@ class MemoryStore:
             return None
 
         ids = results["ids"]
-        documents = results.get("documents", [])
-        metadatas = results.get("metadatas", [])
+        documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
 
         if not ids:
             return None
@@ -773,27 +827,27 @@ class MemoryStore:
             return
 
         ids = results["ids"]
-        metadatas = results.get("metadatas", [])
+        metadatas = results.get("metadatas") or []
 
         if len(ids) < 2:
             return  # 両方見つからない場合はスキップ
 
         # ID -> メタデータのマッピング
-        id_to_metadata = {}
+        id_to_metadata: dict[str, dict[str, Any]] = {}
         for i, mem_id in enumerate(ids):
             if i < len(metadatas):
-                id_to_metadata[mem_id] = metadatas[i]
+                id_to_metadata[mem_id] = dict(metadatas[i])
 
         # 各記憶のlinked_idsを更新
-        updates_ids = []
-        updates_metadatas = []
+        updates_ids: list[str] = []
+        updates_metadatas: list[dict[str, Any]] = []
 
         for mem_id, other_id in [(source_id, target_id), (target_id, source_id)]:
             if mem_id not in id_to_metadata:
                 continue
 
             metadata = id_to_metadata[mem_id]
-            current_linked_ids = _parse_linked_ids(metadata.get("linked_ids", ""))
+            current_linked_ids = _parse_linked_ids(str(metadata.get("linked_ids", "")))
 
             if other_id not in current_linked_ids:
                 new_linked_ids = current_linked_ids + (other_id,)
@@ -808,7 +862,7 @@ class MemoryStore:
             await asyncio.to_thread(
                 collection.update,
                 ids=updates_ids,
-                metadatas=updates_metadatas,
+                metadatas=updates_metadatas,  # type: ignore[arg-type]
             )
 
     async def save_with_auto_link(
@@ -868,12 +922,22 @@ class MemoryStore:
 
         # Phase 8: 正規化済みテキストをChromaDBに保存
         normalized_content = normalize_japanese(content)
+
+        # Phase 9: 読み（カタカナ）をメタデータに保存
+        meta = memory.to_metadata()
+        reading = get_reading(content)
+        if reading:
+            meta = {**meta, "reading": reading}
+
         await asyncio.to_thread(
             collection.add,
             ids=[memory_id],
             documents=[normalized_content],
-            metadatas=[memory.to_metadata()],
+            metadatas=[meta],
         )
+
+        # Phase 9: BM25 インデックスを無効化
+        self._bm25_index.mark_dirty()
 
         # 双方向リンクを追加
         for target_id in linked_ids:
@@ -1015,11 +1079,11 @@ class MemoryStore:
 
         memories: list[Memory] = []
         if results and results.get("ids"):
+            docs = results.get("documents") or []
+            metas = results.get("metadatas") or []
             for i, memory_id in enumerate(results["ids"]):
-                content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                content = docs[i] if i < len(docs) else ""
+                metadata = metas[i] if i < len(metas) else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1047,7 +1111,9 @@ class MemoryStore:
         if not result or not result.get("ids"):
             raise ValueError(f"Memory not found: {memory_id}")
 
-        metadata = result["metadatas"][0] if result.get("metadatas") else {}
+        result_metas = result.get("metadatas") or []
+        raw_metadata = result_metas[0] if result_metas else {}
+        metadata: dict[str, Any] = dict(raw_metadata)
         metadata["episode_id"] = episode_id
 
         # メタデータを更新
@@ -1097,11 +1163,11 @@ class MemoryStore:
 
         memories: list[Memory] = []
         if results and results.get("ids"):
+            docs2 = results.get("documents") or []
+            metas2 = results.get("metadatas") or []
             for i, memory_id in enumerate(results["ids"]):
-                content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                content = docs2[i] if i < len(docs2) else ""
+                metadata = metas2[i] if i < len(metas2) else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1124,11 +1190,11 @@ class MemoryStore:
 
         memories: list[Memory] = []
         if results and results.get("ids"):
+            docs3 = results.get("documents") or []
+            metas3 = results.get("metadatas") or []
             for i, memory_id in enumerate(results["ids"]):
-                content = results["documents"][i] if results.get("documents") else ""
-                metadata = (
-                    results["metadatas"][i] if results.get("metadatas") else {}
-                )
+                content = docs3[i] if i < len(docs3) else ""
+                metadata = metas3[i] if i < len(metas3) else {}
                 memory = _memory_from_metadata(memory_id, content, metadata)
                 memories.append(memory)
 
@@ -1185,15 +1251,17 @@ class MemoryStore:
             ids=[source_id],
         )
 
-        if results and results.get("metadatas"):
-            metadata = results["metadatas"][0]
-            metadata["links"] = json.dumps([link.to_dict() for link in updated_links])
+        if results:
+            result_metas2 = results.get("metadatas") or []
+            if result_metas2:
+                metadata: dict[str, Any] = dict(result_metas2[0])
+                metadata["links"] = json.dumps([link.to_dict() for link in updated_links])
 
-            await asyncio.to_thread(
-                collection.update,
-                ids=[source_id],
-                metadatas=[metadata],
-            )
+                await asyncio.to_thread(
+                    collection.update,
+                    ids=[source_id],
+                    metadatas=[metadata],
+                )
 
     async def get_causal_chain(
         self,
@@ -1260,7 +1328,8 @@ class MemoryStore:
         if not result or not result.get("ids"):
             return False
 
-        metadata = result["metadatas"][0] if result.get("metadatas") else {}
+        result_metas3 = result.get("metadatas") or []
+        metadata: dict[str, Any] = dict(result_metas3[0] if result_metas3 else {})
         metadata.update(fields)
         await asyncio.to_thread(collection.update, ids=[memory_id], metadatas=[metadata])
         return True
@@ -1559,7 +1628,7 @@ class MemoryStore:
             query_embedding = query_embeddings[0]
 
             # Hopfield更新則でパターン補完
-            _, similarities = self._hopfield.retrieve(query_embedding)
+            _, similarities = self._hopfield.retrieve(query_embedding.tolist())
 
             # 上位n件を取得
             results = self._hopfield.recall_results(similarities, k=n_results)

@@ -850,7 +850,7 @@ Date Range:
                         ]
 
                     case "consolidate_memories":
-                        stats = await self._memory_store.consolidate_memories(
+                        consolidation_stats = await self._memory_store.consolidate_memories(
                             window_hours=arguments.get("window_hours", 24),
                             max_replay_events=arguments.get("max_replay_events", 200),
                             link_update_strength=arguments.get("link_update_strength", 0.2),
@@ -860,7 +860,7 @@ Date Range:
                             TextContent(
                                 type="text",
                                 text="Consolidation completed:\n"
-                                f"{json.dumps(stats, indent=2, ensure_ascii=False)}",
+                                f"{json.dumps(consolidation_stats, indent=2, ensure_ascii=False)}",
                             )
                         ]
 
@@ -1235,15 +1235,15 @@ Date Range:
                         person = arguments.get("person", "コウタ")
 
                         # Pull relevant memories: personality, communication patterns
-                        memories = await self._memory_store.recall(
+                        tom_memories = await self._memory_store.recall(
                             context=f"{person} コミュニケーション 性格 会話パターン {situation}",
                             n_results=5,
                         )
 
                         memory_context = ""
-                        if memories:
+                        if tom_memories:
                             memory_lines = []
-                            for r in memories:
+                            for r in tom_memories:
                                 m = r.memory
                                 memory_lines.append(
                                     f"- [{m.emotion}] {m.content}"

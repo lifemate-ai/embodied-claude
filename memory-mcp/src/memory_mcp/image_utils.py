@@ -5,6 +5,7 @@ import logging
 from io import BytesIO
 
 from PIL import Image
+from PIL.Image import Image as PilImage
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ def encode_image_for_memory(
         base64エンコードされたJPEG文字列、失敗時はNone
     """
     try:
-        with Image.open(image_path) as img:
+        with Image.open(image_path) as img_file:
+            img: PilImage = img_file
             # RGBA等をRGBに変換（JPEG保存のため）
             if img.mode in ("RGBA", "LA", "P"):
                 img = img.convert("RGB")

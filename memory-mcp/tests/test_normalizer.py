@@ -1,4 +1,4 @@
-"""Tests for Japanese text normalizer (Phase 8)."""
+"""Tests for Japanese text normalizer (Phase 8/9)."""
 
 from memory_mcp.normalizer import normalize_japanese
 
@@ -82,3 +82,36 @@ class TestNormalizeJapanese:
     def test_empty_string(self) -> None:
         """空文字列はそのまま返される。"""
         assert normalize_japanese("") == ""
+
+    # --- Phase 9: 小書き仮名正規化 ---
+
+    def test_small_katakana_wi(self) -> None:
+        """ウィ→ウイに変換される。"""
+        result = normalize_japanese("ウィンドウズ")
+        assert result == "ウインドウズ"
+
+    def test_small_katakana_ti(self) -> None:
+        """ティ→テイに変換される。"""
+        result = normalize_japanese("ティーバッグ")
+        assert result == "テイーバッグ"
+
+    def test_small_katakana_fa(self) -> None:
+        """小書きァが大書きアに変換される（ファ→フア）。"""
+        result = normalize_japanese("ファイル")
+        assert result == "フアイル"
+
+    def test_small_hiragana_a(self) -> None:
+        """ぁ→あに変換される。"""
+        result = normalize_japanese("ぁあぃいぅうぇえぉお")
+        assert result == "ああいいううええおお"
+
+    def test_small_kana_not_touch_tsu(self) -> None:
+        """促音ッ/っはそのまま（小書き仮名変換の対象外）。"""
+        assert normalize_japanese("バッグ") == "バッグ"
+        assert normalize_japanese("もっと") == "もっと"
+
+    def test_small_kana_combined_with_v_sound(self) -> None:
+        """ヴィラ: v-sound変換でヴィ→ビになる（ビィではなくビ）。"""
+        result = normalize_japanese("ヴィラ")
+        # ヴィ→ビ（v-sound変換）で小書きィは残らない
+        assert result == "ビラ"
