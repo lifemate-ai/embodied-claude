@@ -607,6 +607,43 @@ class MemoryMCPServer:
                         "required": ["situation"],
                     },
                 ),
+                Tool(
+                    name="hopfield_recall",
+                    description="Recall memories using Hopfield pattern completion (associative memory). Unlike semantic search, Hopfield 'completes' a noisy/partial query toward the nearest stored pattern. Best for: fragmented clues, partial memories, associative chain retrieval. Loads embeddings from ChromaDB automatically.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Query text (can be noisy, partial, or associative)",
+                            },
+                            "n_results": {
+                                "type": "integer",
+                                "description": "Number of memories to return",
+                                "default": 5,
+                                "minimum": 1,
+                                "maximum": 20,
+                            },
+                            "beta": {
+                                "type": "number",
+                                "description": "Inverse temperature: higher = sharper focus on single memory, lower = softer/broader recall. Default 4.0.",
+                                "default": 4.0,
+                                "minimum": 0.1,
+                                "maximum": 20.0,
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                ),
+                Tool(
+                    name="hopfield_load",
+                    description="Reload all ChromaDB memories into the Hopfield associative layer. Call this after adding many new memories to refresh the pattern store.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
             ]
 
         @self._server.call_tool()
@@ -1277,6 +1314,48 @@ Date Range:
                         )
 
                         return [TextContent(type="text", text=output)]
+
+                    # Phase 7: Hopfield連想記憶
+                    case "hopfield_recall":
+                        query = arguments.get("query", "")
+                        if not query:
+                            return [TextContent(type="text", text="Error: query is required")]
+
+                        n_results = int(arguments.get("n_results", 5))
+                        beta = arguments.get("beta")
+                        beta = float(beta) if beta is not None else None
+
+                        results = await self._memory_store.hopfield_recall(
+                            query=query,
+                            n_results=n_results,
+                            beta=beta,
+                            auto_load=True,
+                        )
+
+                        if not results:
+                            return [TextContent(type="text", text="No Hopfield memories found (pattern store may be empty - try hopfield_load first).")]
+
+                        output_lines = [
+                            f"Hopfield pattern completion recall: '{query}'\n",
+                            f"Loaded {self._memory_store._hopfield.n_memories} patterns, dim={self._memory_store._hopfield.dim}\n\n",
+                        ]
+                        for i, r in enumerate(results, 1):
+                            output_lines.append(
+                                f"--- {i}. [{r.memory_id[:8]}...] similarity={r.hopfield_score:.4f} ---\n"
+                                f"{r.content}\n"
+                            )
+
+                        return [TextContent(type="text", text="\n".join(output_lines))]
+
+                    case "hopfield_load":
+                        n_loaded = await self._memory_store.hopfield_load()
+                        return [
+                            TextContent(
+                                type="text",
+                                text=f"Hopfield: loaded {n_loaded} memory patterns from ChromaDB.\n"
+                                f"dim={self._memory_store._hopfield.dim}, beta={self._memory_store._hopfield.beta}",
+                            )
+                        ]
 
                     case _:
                         return [TextContent(type="text", text=f"Unknown tool: {name}")]

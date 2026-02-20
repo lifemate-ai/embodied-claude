@@ -16,6 +16,7 @@ from .association import (
 )
 from .config import MemoryConfig
 from .consolidation import ConsolidationEngine
+from .hopfield import HopfieldRecallResult, ModernHopfieldNetwork
 from .predictive import (
     PredictiveDiagnostics,
     calculate_context_relevance,
@@ -278,6 +279,8 @@ class MemoryStore:
         # Phase 6: 連想・統合エンジン
         self._association_engine = AssociationEngine()
         self._consolidation_engine = ConsolidationEngine()
+        # Phase 7: Hopfield連想記憶
+        self._hopfield = ModernHopfieldNetwork(beta=4.0, n_iters=3)
 
     async def connect(self) -> None:
         """Initialize ChromaDB connection (Phase 4: with episodes collection)."""
@@ -1402,6 +1405,97 @@ class MemoryStore:
             link_update_strength=link_update_strength,
         )
         return stats.to_dict()
+
+    # Phase 7: Hopfield連想記憶
+
+    async def hopfield_load(self) -> int:
+        """ChromaDBの全記憶をHopfieldに読み込む.
+
+        ChromaDB embeddings → Hopfield weight matrix に格納。
+        記憶が追加/変更されたら再ロードが必要。
+
+        Returns:
+            ロードした記憶数
+        """
+        collection = self._ensure_connected()
+
+        # ChromaDBから全記憶の埋め込みを取得
+        result = await asyncio.to_thread(
+            collection.get,
+            include=["embeddings", "documents"],
+        )
+
+        if not result or not result.get("ids"):
+            self._hopfield.store([], [], [])
+            return 0
+
+        ids = result["ids"]
+        embeddings = result.get("embeddings") or []
+        documents = result.get("documents") or []
+
+        # 埋め込みがない場合はスキップ
+        valid_embeddings = []
+        valid_ids = []
+        valid_contents = []
+        for i, (emb, doc) in enumerate(zip(embeddings, documents)):
+            if emb is not None and len(emb) > 0:
+                valid_embeddings.append(emb)
+                valid_ids.append(ids[i])
+                valid_contents.append(doc or "")
+
+        self._hopfield.store(valid_embeddings, valid_ids, valid_contents)
+        return self._hopfield.n_memories
+
+    async def hopfield_recall(
+        self,
+        query: str,
+        n_results: int = 5,
+        beta: float | None = None,
+        auto_load: bool = True,
+    ) -> list[HopfieldRecallResult]:
+        """Hopfieldパターン補完で記憶を連想想起する.
+
+        通常のベクトル検索と違い、クエリを格納済みパターンに「引き寄せる」補完を行う。
+        ノイズの多いクエリや、断片的な手がかりからの想起に強い。
+
+        Args:
+            query: 検索クエリテキスト
+            n_results: 返す記憶の数 (1-20)
+            beta: 逆温度（None でデフォルト 4.0 を使用）
+            auto_load: True の場合、未ロードなら自動でChromaDBからロードする
+
+        Returns:
+            HopfieldRecallResultのリスト（Hopfield類似度降順）
+        """
+        import chromadb.utils.embedding_functions as ef_utils
+
+        # 自動ロード
+        if auto_load and not self._hopfield.is_loaded:
+            await self.hopfield_load()
+
+        if not self._hopfield.is_loaded:
+            return []
+
+        # Hopfieldのbetaを一時的に変更（指定ありの場合）
+        original_beta = self._hopfield.beta
+        if beta is not None:
+            self._hopfield.beta = beta
+
+        try:
+            # ChromaDBのデフォルト埋め込み関数でクエリを埋め込む
+            embed_fn = ef_utils.DefaultEmbeddingFunction()
+            query_embeddings = await asyncio.to_thread(embed_fn, [query])
+            query_embedding = query_embeddings[0]
+
+            # Hopfield更新則でパターン補完
+            _, similarities = self._hopfield.retrieve(query_embedding)
+
+            # 上位n件を取得
+            results = self._hopfield.recall_results(similarities, k=n_results)
+        finally:
+            self._hopfield.beta = original_beta
+
+        return results
 
     def _build_divergent_diagnostics(
         self,
