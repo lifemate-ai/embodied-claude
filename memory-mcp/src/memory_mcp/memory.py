@@ -16,9 +16,7 @@ from .association import (
 )
 from .config import MemoryConfig
 from .consolidation import ConsolidationEngine
-from .embedding import E5EmbeddingFunction
 from .hopfield import HopfieldRecallResult, ModernHopfieldNetwork
-from .normalizer import normalize_japanese
 from .predictive import (
     PredictiveDiagnostics,
     calculate_context_relevance,
@@ -283,8 +281,6 @@ class MemoryStore:
         self._consolidation_engine = ConsolidationEngine()
         # Phase 7: Hopfield連想記憶
         self._hopfield = ModernHopfieldNetwork(beta=4.0, n_iters=3)
-        # Phase 8: 多言語埋め込み関数（e5モデル）
-        self._embedding_fn = E5EmbeddingFunction(config.embedding_model)
 
     async def connect(self) -> None:
         """Initialize ChromaDB connection (Phase 4: with episodes collection)."""
@@ -294,15 +290,11 @@ class MemoryStore:
                     chromadb.PersistentClient,
                     path=self._config.db_path,
                 )
-                # Phase 3: メインの記憶コレクション（Phase 8: e5埋め込み関数）
+                # Phase 3: メインの記憶コレクション
                 self._collection = await asyncio.to_thread(
                     self._client.get_or_create_collection,
                     name=self._config.collection_name,
-                    embedding_function=self._embedding_fn,
-                    metadata={
-                        "description": "Claude's long-term memories",
-                        "embedding_model": self._config.embedding_model,
-                    },
+                    metadata={"description": "Claude's long-term memories"},
                 )
                 # Phase 4: エピソード記憶コレクション
                 self._episodes_collection = await asyncio.to_thread(
@@ -357,12 +349,10 @@ class MemoryStore:
             tags=tags,
         )
 
-        # Phase 8: 正規化済みテキストをChromaDBに保存（元テキストはMemoryオブジェクトで保持）
-        normalized_content = normalize_japanese(content)
         await asyncio.to_thread(
             collection.add,
             ids=[memory_id],
-            documents=[normalized_content],
+            documents=[content],
             metadatas=[memory.to_metadata()],
         )
 
@@ -401,14 +391,9 @@ class MemoryStore:
         elif len(where_conditions) > 1:
             where = {"$and": where_conditions}
 
-        # Phase 8: クエリを正規化してe5のquery埋め込みで検索
-        normalized_query = normalize_japanese(query)
-        query_embeddings = await asyncio.to_thread(
-            self._embedding_fn.encode_query, [normalized_query]
-        )
         results = await asyncio.to_thread(
             collection.query,
-            query_embeddings=query_embeddings,
+            query_texts=[query],
             n_results=n_results,
             where=where,
         )
@@ -608,14 +593,9 @@ class MemoryStore:
         # 多めに取得してリスコアリング後にn_resultsに絞る
         fetch_count = min(n_results * 3, 50)
 
-        # Phase 8: クエリを正規化してe5のquery埋め込みで検索
-        normalized_query = normalize_japanese(query)
-        query_embeddings = await asyncio.to_thread(
-            self._embedding_fn.encode_query, [normalized_query]
-        )
         results = await asyncio.to_thread(
             collection.query,
-            query_embeddings=query_embeddings,
+            query_texts=[query],
             n_results=fetch_count,
             where=where,
         )
@@ -857,12 +837,10 @@ class MemoryStore:
             linked_ids=linked_ids,
         )
 
-        # Phase 8: 正規化済みテキストをChromaDBに保存
-        normalized_content = normalize_japanese(content)
         await asyncio.to_thread(
             collection.add,
             ids=[memory_id],
-            documents=[normalized_content],
+            documents=[content],
             metadatas=[memory.to_metadata()],
         )
 
