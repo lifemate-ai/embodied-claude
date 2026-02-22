@@ -60,8 +60,13 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Autonomous action (contains credentials)
+# Autonomous action (contains credentials and user-specific settings)
 autonomous-mcp.json
+autonomous-action.sh
+
+# Autonomous action logs and session
+.autonomous-logs/
+.heartbeat-session-id
 
 # Google API credentials (NEVER commit)
 scripts/credentials.json
