@@ -108,12 +108,17 @@ class ServerConfig:
     name: str = "wifi-cam-mcp"
     version: str = "0.1.0"
     capture_dir: str = "/tmp/wifi-cam-mcp"
+    mic_source: str = "camera"  # "camera" (RTSP) or "local" (PC microphone)
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
         """Create config from environment variables."""
+        mic_source = os.getenv("MIC_SOURCE", "camera").lower()
+        if mic_source not in ("camera", "local"):
+            raise ValueError(f"Invalid MIC_SOURCE '{mic_source}'. Must be 'camera' or 'local'.")
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "wifi-cam-mcp"),
             version=os.getenv("MCP_SERVER_VERSION", "0.1.0"),
             capture_dir=os.getenv("CAPTURE_DIR", "/tmp/wifi-cam-mcp"),
+            mic_source=mic_source,
         )
