@@ -623,42 +623,73 @@ class TapoCamera:
     # Audio
     # ------------------------------------------------------------------
 
-    async def listen_audio(self, duration: float = 5.0, transcribe: bool = False) -> AudioResult:
-        """Record audio from the camera's microphone via RTSP stream.
+    async def listen_audio(
+        self, duration: float = 5.0, transcribe: bool = False, mic_source: str = "camera"
+    ) -> AudioResult:
+        """Record audio from the camera's microphone or local PC microphone.
 
         Args:
             duration: Duration in seconds to record (default: 5.0)
             transcribe: If True, transcribe audio using Whisper (default: False)
+            mic_source: Audio source - "camera" (RTSP) or "local" (PC microphone)
 
         Returns:
             AudioResult with base64 encoded audio and optional transcript
         """
-        await self._ensure_connected()
+        import platform
 
-        rtsp_url = self._get_rtsp_url()
+        if mic_source != "local":
+            await self._ensure_connected()
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_path = str(self._capture_dir / f"audio_{timestamp}.wav")
+        self._capture_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            cmd = [
-                "ffmpeg",
-                "-rtsp_transport",
-                "tcp",
-                "-i",
-                rtsp_url,
-                "-vn",  # No video
-                "-acodec",
-                "pcm_s16le",  # PCM 16-bit
-                "-ar",
-                "16000",  # 16kHz sample rate (good for speech)
-                "-ac",
-                "1",  # Mono
-                "-t",
-                str(duration),
-                "-y",
-                file_path,
-            ]
+            if mic_source == "local":
+                system = platform.system()
+                if system == "Darwin":
+                    cmd = [
+                        "ffmpeg",
+                        "-f", "avfoundation",
+                        "-i", ":0",
+                        "-ar", "16000",
+                        "-ac", "1",
+                        "-t", str(duration),
+                        "-y", file_path,
+                    ]
+                elif system == "Linux":
+                    cmd = [
+                        "ffmpeg",
+                        "-f", "alsa",
+                        "-i", "default",
+                        "-ar", "16000",
+                        "-ac", "1",
+                        "-t", str(duration),
+                        "-y", file_path,
+                    ]
+                else:
+                    raise RuntimeError(f"Unsupported platform for local microphone: {system}")
+            else:
+                rtsp_url = self._get_rtsp_url()
+                cmd = [
+                    "ffmpeg",
+                    "-rtsp_transport",
+                    "tcp",
+                    "-i",
+                    rtsp_url,
+                    "-vn",  # No video
+                    "-acodec",
+                    "pcm_s16le",  # PCM 16-bit
+                    "-ar",
+                    "16000",  # 16kHz sample rate (good for speech)
+                    "-ac",
+                    "1",  # Mono
+                    "-t",
+                    str(duration),
+                    "-y",
+                    file_path,
+                ]
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,

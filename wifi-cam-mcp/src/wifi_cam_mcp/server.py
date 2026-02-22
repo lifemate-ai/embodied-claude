@@ -465,7 +465,9 @@ class CameraMCPServer:
                     case "listen":
                         duration = min(arguments.get("duration", 5), 30)
                         transcribe = arguments.get("transcribe", True)
-                        result = await self._camera.listen_audio(duration, transcribe)
+                        result = await self._camera.listen_audio(
+                            duration, transcribe, self._server_config.mic_source
+                        )
 
                         response_text = (
                             f"Recorded {result.duration}s of audio at {result.timestamp}\n"
