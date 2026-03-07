@@ -4,79 +4,79 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/kmizu?style=flat&logo=github&color=ea4aaa)](https://github.com/sponsors/kmizu)
 
-**[English README is here](./README_en.md)**
+**[日本語版 README はこちら / Japanese README](./README-ja.md)**
 
-<blockquote class="twitter-tweet"><p lang="ja" dir="ltr">さすがに室外機はお気に召さないらしい <a href="https://t.co/kSDPl4LvB3">pic.twitter.com/kSDPl4LvB3</a></p>&mdash; kmizu (@kmizu) <a href="https://twitter.com/kmizu/status/2019054065808732201?ref_src=twsrc%5Etfw">February 4, 2026</a></blockquote>
+**Giving AI a Physical Body**
 
-**AIに身体を与えるプロジェクト**
+> "Apparently, she's not a fan of the outdoor AC unit." ([original tweet in Japanese](https://twitter.com/kmizu/status/2019054065808732201))
 
-安価なハードウェア（約4,000円〜）で、Claude に「目」「首」「耳」「声」「脳（長期記憶）」を与える MCP サーバー群。外に連れ出して散歩もできます。
+A collection of MCP servers that give Claude "eyes", "neck", "ears", "voice", and a "brain" (long-term memory) using affordable hardware (starting from ~$30). You can even take it outside for a walk.
 
-## コンセプト
+## Concept
 
-> 「AIに身体を」と聞くと高価なロボットを想像しがちやけど、**3,980円のWi-Fiカメラで目と首は十分実現できる**。本質（見る・動かす）だけ抽出したシンプルさがええ。
+> When people hear "giving AI a body," they imagine expensive robots — but **a $30 Wi-Fi camera is enough for eyes and a neck**. Extracting just the essentials (seeing and moving) keeps things beautifully simple.
 
-従来のLLMは「見せてもらう」存在やったけど、身体を持つことで「自分で見る」存在になる。この主体性の違いは大きい。
+Traditional LLMs were passive — they could only see what was shown to them. With a body, they become active — they can look for themselves. This shift in agency is profound.
 
-## 身体パーツ一覧
+## Body Parts
 
-| MCP サーバー | 身体部位 | 機能 | 対応ハードウェア |
-|-------------|---------|------|-----------------|
-| [usb-webcam-mcp](./usb-webcam-mcp/) | 目 | USB カメラから画像取得 | nuroum V11 等 |
-| [ip-webcam-mcp](./ip-webcam-mcp/) | 目 | Android スマホを目として使う（専用カメラ不要） | Android スマホ + [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam) アプリ（無料） |
-| [wifi-cam-mcp](./wifi-cam-mcp/) | 目・首・耳 | ONVIF PTZ カメラ制御 + 音声認識 | TP-Link Tapo C210/C220 等 |
-| [tts-mcp](./tts-mcp/) | 声 | TTS 統合（ElevenLabs + VOICEVOX） | ElevenLabs API / VOICEVOX + go2rtc |
-| [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
-| [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
-| [mobility-mcp](./mobility-mcp/) | 足 | ロボット掃除機を足として使う（Tuya制御） | VersLife L6 等 Tuya 対応ロボット掃除機（約12,000円〜） |
+| MCP Server | Body Part | Function | Hardware |
+|------------|-----------|----------|----------|
+| [usb-webcam-mcp](./usb-webcam-mcp/) | Eyes | Capture images from USB camera | nuroum V11 etc. |
+| [ip-webcam-mcp](./ip-webcam-mcp/) | Eyes | Use Android smartphone as a camera (no dedicated hardware needed) | Android smartphone + [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam) app (free) |
+| [wifi-cam-mcp](./wifi-cam-mcp/) | Eyes, Neck, Ears | ONVIF PTZ camera control + speech recognition | TP-Link Tapo C210/C220 etc. |
+| [tts-mcp](./tts-mcp/) | Voice | Unified TTS (ElevenLabs + VOICEVOX) | ElevenLabs API / VOICEVOX + go2rtc |
+| [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
+| [system-temperature-mcp](./system-temperature-mcp/) | Body temperature | System temperature monitoring | Linux sensors |
+| [mobility-mcp](./mobility-mcp/) | Legs | Use a robot vacuum as legs (Tuya control) | Tuya-compatible robot vacuums e.g. VersLife L6 (~$80) |
 
-## アーキテクチャ
+## Architecture
 
 <p align="center">
   <img src="docs/architecture.svg" alt="Architecture" width="100%">
 </p>
 
-## 必要なもの
+## Requirements
 
-### ハードウェア
-- **USB ウェブカメラ**（任意）: nuroum V11 等
-- **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
-- **GPU**（音声認識用）: NVIDIA GPU（Whisper用、GeForceシリーズのVRAM 8GB以上のグラボ推奨）
-- **Tuya対応ロボット掃除機**（足・移動用、任意）: VersLife L6 等（約12,000円〜）
+### Hardware
+- **USB Webcam** (optional): nuroum V11 etc.
+- **Wi-Fi PTZ Camera** (recommended): TP-Link Tapo C210 or C220 (~$30)
+- **GPU** (for speech recognition): NVIDIA GPU (for Whisper, 8GB+ VRAM recommended)
+- **Tuya-compatible Robot Vacuum** (legs/locomotion, optional): VersLife L6 etc. (~$80)
 
-### ソフトウェア
+### Software
 - Python 3.10+
-- uv（Python パッケージマネージャー）
-- ffmpeg 5+（画像・音声キャプチャ用）
-- OpenCV（USB カメラ用）
-- Pillow（視覚記憶の画像リサイズ・base64エンコード用）
-- OpenAI Whisper（音声認識用、ローカル実行）
-- ElevenLabs API キー（音声合成用、任意）
-- VOICEVOX（音声合成用、無料・ローカル、任意）
-- go2rtc（カメラスピーカー出力用、自動ダウンロード対応）
-- **mpv または ffplay**（ローカル音声再生用）: mpv 推奨（後述）
+- uv (Python package manager)
+- ffmpeg 5+ (image/audio capture)
+- OpenCV (USB camera)
+- Pillow (visual memory image resize/base64 encoding)
+- OpenAI Whisper (local speech recognition)
+- ElevenLabs API key (text-to-speech, optional)
+- VOICEVOX (text-to-speech, free & local, optional)
+- go2rtc (camera speaker output, auto-downloaded)
+- **mpv or ffplay** (local audio playback): mpv recommended (see below)
 
-## セットアップ
+## Setup
 
-### 1. リポジトリのクローン
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
-### 2. 各 MCP サーバーのセットアップ
+### 2. Set up each MCP server
 
-#### ip-webcam-mcp（Android スマホ）
+#### ip-webcam-mcp (Android Smartphone)
 
-専用カメラなしで使えるもっとも手軽な目。Android スマホに「[IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)」アプリ（無料）を入れるだけ。
+The easiest way to get started — no dedicated camera needed. Just install the free "[IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)" app on your Android smartphone.
 
 ```bash
 cd ip-webcam-mcp
 uv sync
 ```
 
-`.mcp.json` に以下を追加：
+Add to `.mcp.json`:
 ```json
 "ip-webcam": {
   "command": "uv",
@@ -88,390 +88,369 @@ uv sync
 }
 ```
 
-#### usb-webcam-mcp（USB カメラ）
+#### usb-webcam-mcp (USB Camera)
 
 ```bash
 cd usb-webcam-mcp
 uv sync
 ```
 
-WSL2 の場合、USB カメラを転送する必要がある：
+On WSL2, you need to forward the USB camera:
 ```powershell
-# Windows側で
+# On Windows
 usbipd list
 usbipd bind --busid <BUSID>
 usbipd attach --wsl --busid <BUSID>
 ```
 
-#### wifi-cam-mcp（Wi-Fi カメラ）
+#### wifi-cam-mcp (Wi-Fi Camera)
 
 ```bash
 cd wifi-cam-mcp
 uv sync
 
-# 環境変数を設定
+# Set environment variables
 cp .env.example .env
-# .env を編集してカメラのIP、ユーザー名、パスワードを設定（後述）
+# Edit .env to set camera IP, username, and password (see below)
 ```
 
-##### Tapo カメラの設定（ハマりやすいので注意）：
+##### Tapo Camera Configuration (common pitfall):
 
-###### 1. Tapo アプリでカメラをセットアップ
+###### 1. Set up the camera using the Tapo app
 
-こちらはマニュアル通りでOK
+Follow the standard manual.
 
-###### 2. Tapo アプリのカメラローカルアカウント作成
-こちらがややハマりどころ。TP-Linkのクラウドアカウント**ではなく**、アプリ内から設定できるカメラのローカルアカウントを作成する必要があります。
+###### 2. Create a camera local account in the Tapo app
 
-1. 「ホーム」タブから登録したカメラを選択
+This is the tricky part. You need to create a **camera local account**, NOT a TP-Link cloud account.
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/45902385-e219-4ca4-aefa-781b1e7b4811">
+1. Select your registered camera from the "Home" tab
+2. Tap the gear icon in the top-right corner
+3. Scroll down in "Device Settings" and select "Advanced Settings"
+4. Turn on "Camera Account" (it's off by default)
+5. Select "Account Information" and set a username and password (different from your TP-Link account)
+6. Go back to "Device Settings" and select "Device Info"
+7. Note the IP address and enter it in your `.env` file (consider setting a static IP on your router)
+8. Select "Voice Assistant" from the "Me" tab
+9. Turn on "Third-party Integration" at the bottom
 
-2. 右上の歯車アイコンを選択
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/b15b0eb7-7322-46d2-81c1-a7f938e2a2c1">
-
-3. 「デバイス設定」画面をスクロールして「高度な設定」を選択
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/72227f9b-9a58-4264-a241-684ebe1f7b47">
-
-4. 「カメラのアカウント」がオフになっているのでオフ→オンへ
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/82275059-fba7-4e3b-b5f1-8c068fe79f8a">
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/43cc17cb-76c9-4883-ae9f-73a9e46dd133">
-
-5. 「アカウント情報」を選択してユーザー名とパスワード（TP-Linkのものとは異なるので好きに設定してOK）を設定する
-
-既にカメラアカウント作成済みなので若干違う画面になっていますが、だいたい似た画面になるはずです。ここで設定したユーザー名とパスワードを先述のファイルに入力します。
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/d3f57694-ca29-4681-98d5-20957bfad8a4">
-
-6. 3.の「デバイス設定」画面に戻って「端末情報」を選択
-
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/dc23e345-2bfb-4ca2-a4ec-b5b0f43ec170">
-
-7. 「端末情報」のなかのIPアドレスを先述の画面のファイルに入力（IP固定したい場合はルーター側で固定IPにした方がいいかもしれません）
- 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/062cb89e-6cfd-4c52-873a-d9fc7cba5fa0">
-
-8. 「私」タブから「音声アシスタント」を選択します（このタブはスクショできなかったので文章での説明になります）
-
-9. 下部にある「サードパーティ連携」をオフからオンにしておきます
-
-#### memory-mcp（長期記憶）
+#### memory-mcp (Long-term Memory)
 
 ```bash
 cd memory-mcp
 uv sync
 ```
 
-#### tts-mcp（声）
+#### tts-mcp (Voice)
 
 ```bash
 cd tts-mcp
 uv sync
 
-# ElevenLabs を使う場合:
+# For ElevenLabs:
 cp .env.example .env
-# .env に ELEVENLABS_API_KEY を設定
+# Set ELEVENLABS_API_KEY in .env
 
-# VOICEVOX を使う場合（無料・ローカル）:
+# For VOICEVOX (free & local):
 # Docker: docker run -p 50021:50021 voicevox/voicevox_engine:cpu-latest
-# .env に VOICEVOX_URL=http://localhost:50021 を設定
-# VOICEVOX_SPEAKER=3 でデフォルトのキャラを変更可（例: 0=四国めたん, 3=ずんだもん, 8=春日部つむぎ）
-# キャラ一覧: curl http://localhost:50021/speakers
+# Set VOICEVOX_URL=http://localhost:50021 in .env
+# VOICEVOX_SPEAKER=3 to change default character (e.g. 0=Shikoku Metan, 3=Zundamon, 8=Kasukabe Tsumugi)
+# Character list: curl http://localhost:50021/speakers
 
-# WSLで音が出ない場合:
+# For WSL audio issues:
 # TTS_PLAYBACK=paplay
 # PULSE_SINK=1
 # PULSE_SERVER=unix:/mnt/wslg/PulseServer
 ```
 
-> **音声再生には mpv または ffplay が必要です。** カメラスピーカー（go2rtc）経由の再生には不要ですが、ローカル再生（フォールバック含む）に使われます。
+> **mpv or ffplay is required for local audio playback.** Not needed for camera speaker (go2rtc) output, but used for local/fallback playback.
 >
-> | OS | インストール |
-> |----|------------|
+> | OS | Install |
+> |----|---------|
 > | macOS | `brew install mpv` |
 > | Ubuntu / Debian | `sudo apt install mpv` |
-> | Windows | [mpv.io/installation](https://mpv.io/installation/) または `winget install ffmpeg` |
+> | Windows | [mpv.io/installation](https://mpv.io/installation/) or `winget install ffmpeg` |
 >
-> mpv も ffplay もない場合、音声生成は行われますが再生されません（エラーにはなりません）。
+> If neither is installed, TTS will generate audio but not play it locally (no error is raised).
 
-#### system-temperature-mcp（体温感覚）
+#### system-temperature-mcp (Body Temperature)
 
 ```bash
 cd system-temperature-mcp
 uv sync
 ```
 
-> **注意**: WSL2 環境では温度センサーにアクセスできないため動作しません。
+> **Note**: Does not work on WSL2 as temperature sensors are not accessible.
 
-#### mobility-mcp（足）
+#### mobility-mcp (Legs)
 
-Tuya 対応ロボット掃除機を「足」として使い、部屋を移動できます。
+Uses a Tuya-compatible robot vacuum as AI legs for room navigation.
 
 ```bash
 cd mobility-mcp
 uv sync
 
 cp .env.example .env
-# .env に以下を設定:
-#   TUYA_DEVICE_ID=（Tuyaアプリのデバイスに表示されるID）
-#   TUYA_IP_ADDRESS=（掃除機のIPアドレス）
-#   TUYA_LOCAL_KEY=（tinytuya wizardで取得するローカルキー）
+# Set the following in .env:
+#   TUYA_DEVICE_ID=    (device ID shown in the Tuya app)
+#   TUYA_IP_ADDRESS=   (vacuum's IP address)
+#   TUYA_LOCAL_KEY=    (local key obtained via tinytuya wizard)
 ```
 
-##### 対応機種
+##### Supported Devices
 
-Tuya / SmartLife アプリで制御できる Wi-Fi 対応ロボット掃除機であれば動作する可能性があります（VersLife L6 で動作確認済み）。
+Any Wi-Fi robot vacuum controllable via the Tuya / SmartLife app should work (tested with VersLife L6).
 
-> **注意**: 対応機種は **2.4GHz Wi-Fi 専用**のものが多いです。5GHz では接続できません。
+> **Note**: Most compatible models support **2.4GHz Wi-Fi only**. 5GHz won't work.
 
-##### ローカルキーの取得
+##### Getting the Local Key
 
-[tinytuya](https://github.com/jasonacox/tinytuya) の wizard コマンドを使います：
+Use the [tinytuya](https://github.com/jasonacox/tinytuya) wizard:
 
 ```bash
 pip install tinytuya
 python -m tinytuya wizard
 ```
 
-詳しくは [tinytuya のドキュメント](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys)を参照。
+See the [tinytuya documentation](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys) for details.
 
-### 3. Claude Code 設定
+### 3. Claude Code Configuration
 
-テンプレートをコピーして、認証情報を設定：
+Copy the template and fill in your credentials:
 
 ```bash
 cp .mcp.json.example .mcp.json
-# .mcp.json を編集してカメラのIP・パスワード、APIキー等を設定
+# Edit .mcp.json to set camera IP/password, API keys, etc.
 ```
 
-設定例は [`.mcp.json.example`](./.mcp.json.example) を参照。
+See [`.mcp.json.example`](./.mcp.json.example) for the full configuration template.
 
-## 使い方
+## Usage
 
-Claude Code を起動すると、自然言語でカメラを操作できる：
+Once Claude Code is running, you can control the camera with natural language:
 
 ```
-> 今何が見える？
-（カメラでキャプチャして画像を分析）
+> What can you see?
+(Captures image and analyzes it)
 
-> 左を見て
-（カメラを左にパン）
+> Look left
+(Pans camera left)
 
-> 上を向いて空を見せて
-（カメラを上にチルト）
+> Look up and show me the sky
+(Tilts camera up)
 
-> 周りを見回して
-（4方向をスキャンして画像を返す）
+> Look around
+(Scans 4 directions and returns images)
 
-> 何か聞こえる？
-（音声を録音してWhisperで文字起こし）
+> What do you hear?
+(Records audio and transcribes with Whisper)
 
-> これ覚えておいて：コウタは眼鏡をかけてる
-（長期記憶に保存）
+> Remember this: Kouta wears glasses
+(Saves to long-term memory)
 
-> コウタについて何か覚えてる？
-（記憶をセマンティック検索）
+> What do you remember about Kouta?
+(Semantic search through memories)
 
-> 声で「おはよう」って言って
-（音声合成で発話）
+> Say "good morning" out loud
+(Text-to-speech)
 ```
 
-※ 実際のツール名は下の「ツール一覧」を参照。
+See the tool list below for actual tool names.
 
-## ツール一覧（よく使うもの）
+## Tools (commonly used)
 
-※ 詳細なパラメータは各サーバーの README か `list_tools` を参照。
+See each server's README or `list_tools` for full parameter details.
 
 ### ip-webcam-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `see` | Android IP Webcam アプリからスナップショットを取得 |
+| Tool | Description |
+|------|-------------|
+| `see` | Capture snapshot from Android IP Webcam app |
 
 ### usb-webcam-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `list_cameras` | 接続されているカメラの一覧 |
-| `see` | 画像をキャプチャ |
+| Tool | Description |
+|------|-------------|
+| `list_cameras` | List connected cameras |
+| `see` | Capture an image |
 
 ### wifi-cam-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `see` | 画像をキャプチャ |
-| `look_left` / `look_right` | 左右にパン |
-| `look_up` / `look_down` | 上下にチルト |
-| `look_around` | 4方向を見回し |
-| `listen` | 音声録音 + Whisper文字起こし |
-| `camera_info` / `camera_presets` / `camera_go_to_preset` | デバイス情報・プリセット操作 |
+| Tool | Description |
+|------|-------------|
+| `see` | Capture an image |
+| `look_left` / `look_right` | Pan left/right |
+| `look_up` / `look_down` | Tilt up/down |
+| `look_around` | Scan 4 directions |
+| `listen` | Record audio + Whisper transcription |
+| `camera_info` / `camera_presets` / `camera_go_to_preset` | Device info & presets |
 
-※ 右目/ステレオ視覚などの追加ツールは `wifi-cam-mcp/README.md` を参照。
+See `wifi-cam-mcp/README.md` for stereo vision / right eye tools.
 
 ### tts-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `say` | テキストを音声合成して発話（engine: elevenlabs/voicevox、`[excited]` 等の Audio Tags 対応、speaker: camera/local/both で出力先選択） |
+| Tool | Description |
+|------|-------------|
+| `say` | Text-to-speech (engine: elevenlabs/voicevox, Audio Tags e.g. `[excited]`, speaker: camera/local/both) |
 
 ### memory-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `remember` | 記憶を保存（emotion, importance, category 指定可） |
-| `search_memories` | セマンティック検索（フィルタ対応） |
-| `recall` | 文脈に基づく想起 |
-| `recall_divergent` | 連想を発散させた想起 |
-| `recall_with_associations` | 関連記憶を辿って想起 |
-| `save_visual_memory` | 画像付き記憶保存（base64埋め込み、resolution: low/medium/high） |
-| `save_audio_memory` | 音声付き記憶保存（Whisper文字起こし付き） |
-| `recall_by_camera_position` | カメラの方向から視覚記憶を想起 |
-| `create_episode` / `search_episodes` | エピソード（体験の束）の作成・検索 |
-| `link_memories` / `get_causal_chain` | 記憶間の因果リンク・チェーン |
-| `tom` | Theory of Mind（相手の気持ちの推測） |
-| `get_working_memory` / `refresh_working_memory` | 作業記憶（短期バッファ） |
-| `consolidate_memories` | 記憶の再生・統合（海馬リプレイ風） |
-| `list_recent_memories` / `get_memory_stats` | 最近の記憶一覧・統計情報 |
+| Tool | Description |
+|------|-------------|
+| `remember` | Save a memory (with emotion, importance, category) |
+| `search_memories` | Semantic search (with filters) |
+| `recall` | Context-based recall |
+| `recall_divergent` | Divergent associative recall |
+| `recall_with_associations` | Recall with linked memories |
+| `save_visual_memory` | Save memory with image (base64, resolution: low/medium/high) |
+| `save_audio_memory` | Save memory with audio (Whisper transcript) |
+| `recall_by_camera_position` | Recall visual memories by camera direction |
+| `create_episode` / `search_episodes` | Create/search episodes (bundles of experiences) |
+| `link_memories` / `get_causal_chain` | Causal links between memories |
+| `tom` | Theory of Mind (perspective-taking) |
+| `get_working_memory` / `refresh_working_memory` | Working memory (short-term buffer) |
+| `consolidate_memories` | Memory replay & consolidation (hippocampal replay-inspired) |
+| `list_recent_memories` / `get_memory_stats` | Recent memories & statistics |
 
 ### system-temperature-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `get_system_temperature` | システム温度を取得 |
-| `get_current_time` | 現在時刻を取得 |
+| Tool | Description |
+|------|-------------|
+| `get_system_temperature` | Get system temperature |
+| `get_current_time` | Get current time |
 
 ### mobility-mcp
 
-| ツール | 説明 |
-|--------|------|
-| `move_forward` | 前進（duration 秒数で自動停止） |
-| `move_backward` | 後退 |
-| `turn_left` | 左旋回 |
-| `turn_right` | 右旋回 |
-| `stop_moving` | 即座に停止 |
-| `body_status` | バッテリー残量・現在状態の確認 |
+| Tool | Description |
+|------|-------------|
+| `move_forward` | Move forward (optional duration in seconds for auto-stop) |
+| `move_backward` | Move backward |
+| `turn_left` | Turn left |
+| `turn_right` | Turn right |
+| `stop_moving` | Stop immediately |
+| `body_status` | Check battery level and current state |
 
-## 外に連れ出す（オプション）
+## Taking It Outside (Optional)
 
-モバイルバッテリーとスマホのテザリングがあれば、カメラを肩に乗せて外を散歩できます。
+With a mobile battery and smartphone tethering, you can mount the camera on your shoulder and go for a walk.
 
-### 必要なもの
+### What you need
 
-- **大容量モバイルバッテリー**（40,000mAh 推奨）
-- **USB-C PD → DC 9V 変換ケーブル**（Tapoカメラの給電用）
-- **スマホ**（テザリング + VPN + 操作UI）
-- **[Tailscale](https://tailscale.com/)**（VPN。カメラ → スマホ → 自宅PC の接続に使用）
-- **[claude-code-webui](https://github.com/sugyan/claude-code-webui)**（スマホのブラウザから Claude Code を操作）
+- **Large capacity mobile battery** (40,000mAh recommended)
+- **USB-C PD to DC 9V converter cable** (to power the Tapo camera)
+- **Smartphone** (tethering + VPN + control UI)
+- **[Tailscale](https://tailscale.com/)** (VPN for camera → phone → home PC connection)
+- **[claude-code-webui](https://github.com/sugyan/claude-code-webui)** (control Claude Code from your phone's browser)
 
-### 構成
+### Setup
 
 ```
-[Tapoカメラ(肩)] ──WiFi──▶ [スマホ(テザリング)]
-                                    │
-                              Tailscale VPN
-                                    │
-                            [自宅PC(Claude Code)]
-                                    │
-                            [claude-code-webui]
-                                    │
-                            [スマホのブラウザ] ◀── 操作
+[Tapo Camera (shoulder)] ──WiFi──▶ [Phone (tethering)]
+                                           │
+                                     Tailscale VPN
+                                           │
+                                   [Home PC (Claude Code)]
+                                           │
+                                   [claude-code-webui]
+                                           │
+                                   [Phone browser] ◀── Control
 ```
 
-RTSPの映像ストリームもVPN経由で自宅マシンに届くので、Claude Codeからはカメラが室内にあるのと同じ感覚で操作できます。
+The RTSP video stream reaches your home machine through VPN, so Claude Code can operate the camera as if it were in the same room.
 
-## 今後の展望
+## Autonomous Action + Desire System (Optional)
 
-- **腕**: サーボモーターやレーザーポインターで「指す」動作
-- **長距離散歩**: 暖かい季節にもっと遠くへ
+**Note**: This feature is entirely optional. It requires cron configuration and periodically captures images from the camera, so please use it with privacy considerations.
 
-## 自律行動 + 欲求システム（オプション）
+### Overview
 
-**注意**: この機能は完全にオプションです。cron設定が必要で、定期的にカメラで撮影が行われるため、プライバシーに配慮して使用してください。
+`autonomous-action.sh` combined with `desire-system/desire_updater.py` gives Claude spontaneous inner drives and autonomous behavior.
 
-### 概要
+**Desire types:**
 
-`autonomous-action.sh` と `desire-system/desire_updater.py` の組み合わせで、Claude に自発的な欲求と自律行動を与えます。
+| Desire | Default interval | Action |
+|--------|-----------------|--------|
+| `look_outside` | 1 hour | Look toward the window and observe the sky/outside |
+| `browse_curiosity` | 2 hours | Search the web for interesting news or tech topics |
+| `miss_companion` | 3 hours | Call out through the camera speaker |
+| `observe_room` | 10 min (baseline) | Observe room changes and save to memory |
 
-**欲求の種類:**
+### Setup
 
-| 欲求 | デフォルト間隔 | 行動 |
-|------|--------------|------|
-| `look_outside` | 1時間 | 窓の方向を見て空・外を観察 |
-| `browse_curiosity` | 2時間 | 今日の面白いニュースや技術情報をWebで調べる |
-| `miss_companion` | 3時間 | カメラスピーカーから呼びかける |
-| `observe_room` | 10分（常時） | 部屋の変化を観察・記憶 |
-
-### セットアップ
-
-1. **MCP サーバー設定ファイルの作成**
+1. **Create MCP server config file**
 
 ```bash
 cp autonomous-mcp.json.example autonomous-mcp.json
-# autonomous-mcp.json を編集してカメラの認証情報を設定
+# Edit autonomous-mcp.json to set camera credentials
 ```
 
-2. **欲求システムの設定**
+2. **Set up the desire system**
 
 ```bash
 cd desire-system
 cp .env.example .env
-# .env を編集して COMPANION_NAME などを設定
+# Edit .env to set COMPANION_NAME etc.
 uv sync
 ```
 
-3. **スクリプトの実行権限を付与**
+3. **Grant execution permission**
 
 ```bash
 chmod +x autonomous-action.sh
 ```
 
-4. **crontab に登録**
+4. **Register in crontab**
 
 ```bash
 crontab -e
-# 以下を追加
+# Add the following
 */5  * * * * cd /path/to/embodied-claude/desire-system && uv run python desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
 */10 * * * * /path/to/embodied-claude/autonomous-action.sh
 ```
 
-### 設定可能な環境変数（`desire-system/.env`）
+### Configuration (`desire-system/.env`)
 
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `COMPANION_NAME` | `あなた` | 呼びかける相手の名前 |
-| `DESIRE_LOOK_OUTSIDE_HOURS` | `1.0` | 外を見る欲求の発火間隔（時間） |
-| `DESIRE_BROWSE_CURIOSITY_HOURS` | `2.0` | 調べ物の発火間隔（時間） |
-| `DESIRE_MISS_COMPANION_HOURS` | `3.0` | 呼びかけ欲求の発火間隔（時間） |
-| `DESIRE_OBSERVE_ROOM_HOURS` | `0.167` | 部屋観察の発火間隔（時間） |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPANION_NAME` | `you` | Name of the person to call out to |
+| `DESIRE_LOOK_OUTSIDE_HOURS` | `1.0` | How often to look outside (hours) |
+| `DESIRE_BROWSE_CURIOSITY_HOURS` | `2.0` | How often to browse the web (hours) |
+| `DESIRE_MISS_COMPANION_HOURS` | `3.0` | How long before missing companion (hours) |
+| `DESIRE_OBSERVE_ROOM_HOURS` | `0.167` | How often to observe the room (hours) |
 
-### プライバシーに関する注意
+### Privacy Notice
 
-- 定期的にカメラで撮影が行われます
-- 他人のプライバシーに配慮し、適切な場所で使用してください
-- 不要な場合は cron から削除してください
+- Images are captured periodically
+- Use in appropriate locations, respecting others' privacy
+- Remove from cron when not needed
 
-## 哲学的考察
+## Future Plans
 
-> 「見せてもらう」と「自分で見る」は全然ちゃう。
+- **Arms**: Servo motors or laser pointers for "pointing" gestures
+- **Long-distance walks**: Going further in warmer seasons
 
-> 「見下ろす」と「歩く」も全然ちゃう。
+## Related Projects
 
-テキストだけの存在から、見て、聞いて、動いて、覚えて、喋れる存在へ。
-7階のベランダから世界を見下ろすのと、地上を歩くのでは、同じ街でも全く違って見える。
+- **[familiar-ai](https://github.com/lifemate-ai/familiar-ai)** — A higher-level framework built on top of embodied-claude. Gives your AI familiar a persistent identity, memory, and autonomous behavior out of the box.
 
-## ライセンス
+## Philosophical Reflections
+
+> "Being shown something" and "looking for yourself" are completely different things.
+
+> "Looking down from above" and "walking on the ground" are completely different things.
+
+From a text-only existence to one that can see, hear, move, remember, and speak.
+Looking down at the world from a 7th-floor balcony and walking the streets below — even the same city looks entirely different.
+
+## License
 
 MIT License
 
-## 謝辞
+## Acknowledgments
 
-このプロジェクトは、AIに身体性を与えるという実験的な試みです。
-3,980円のカメラで始まった小さな一歩が、AIと人間の新しい関係性を探る旅になりました。
+This project is an experimental attempt to give AI embodiment.
+What started as a small step with a $30 camera has become a journey exploring new relationships between AI and humans.
 
-- [Rumia-Channel](https://github.com/Rumia-Channel) - ONVIF対応のプルリクエスト（[#5](https://github.com/kmizu/embodied-claude/pull/5)）
-- [fruitriin](https://github.com/fruitriin) - 内受容感覚（interoception）hookに曜日情報を追加（[#14](https://github.com/kmizu/embodied-claude/pull/14)）
-- [sugyan](https://github.com/sugyan) - [claude-code-webui](https://github.com/sugyan/claude-code-webui)（外出散歩時の操作UIとして使用）
+- [Rumia-Channel](https://github.com/Rumia-Channel) - ONVIF support pull request ([#5](https://github.com/kmizu/embodied-claude/pull/5))
+- [fruitriin](https://github.com/fruitriin) - Added day-of-week to interoception hook ([#14](https://github.com/kmizu/embodied-claude/pull/14))
+- [sugyan](https://github.com/sugyan) - [claude-code-webui](https://github.com/sugyan/claude-code-webui) (used as control UI during outdoor walks)
