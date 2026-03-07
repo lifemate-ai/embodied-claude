@@ -46,6 +46,9 @@ class ConsolidationEngine:
         if len(recent) < 2:
             return ConsolidationStats(0, 0, 0, len(recent))
 
+        # Decay all coactivation weights before replay to prevent saturation
+        await store.decay_coactivation(factor=0.95)
+
         replay_events = 0
         coactivation_updates = 0
         link_updates = 0

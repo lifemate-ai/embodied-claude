@@ -815,9 +815,10 @@ Date Range:
                         if not results:
                             return [TextContent(type="text", text="No relevant memories found.")]
 
-                        # メイン結果と関連結果を分ける
-                        main_results = [r for r in results if r.distance < 900]
-                        linked_results = [r for r in results if r.distance >= 900]
+                        # メイン結果と関連結果を分ける（sentinel廃止: n_resultsで区切る）
+                        n_main = arguments.get("n_results", 3)
+                        main_results = results[:n_main]
+                        linked_results = results[n_main:]
 
                         output_lines = [f"Recalled {len(main_results)} memories with {len(linked_results)} linked associations:\n"]
 
