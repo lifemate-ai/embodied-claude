@@ -72,12 +72,16 @@ CREATE TABLE IF NOT EXISTS memories (
     prediction_error REAL NOT NULL DEFAULT 0.0,
     activation_count INTEGER NOT NULL DEFAULT 0,
     last_activated TEXT NOT NULL DEFAULT '',
-    reading TEXT
+    reading TEXT,
+    pan_angle REAL,
+    tilt_angle REAL
 );
 CREATE INDEX IF NOT EXISTS idx_memories_emotion    ON memories(emotion);
 CREATE INDEX IF NOT EXISTS idx_memories_category   ON memories(category);
 CREATE INDEX IF NOT EXISTS idx_memories_timestamp  ON memories(timestamp);
 CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance);
+CREATE INDEX IF NOT EXISTS idx_memories_pan_angle  ON memories(pan_angle);
+CREATE INDEX IF NOT EXISTS idx_memories_tilt_angle ON memories(tilt_angle);
 
 CREATE TABLE IF NOT EXISTS embeddings (
     memory_id TEXT PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
@@ -104,6 +108,11 @@ CREATE TABLE IF NOT EXISTS episodes (
     summary TEXT NOT NULL DEFAULT '',
     emotion TEXT NOT NULL DEFAULT 'neutral',
     importance INTEGER NOT NULL DEFAULT 3
+);
+
+CREATE TABLE IF NOT EXISTS episode_embeddings (
+    episode_id TEXT PRIMARY KEY REFERENCES episodes(id) ON DELETE CASCADE,
+    vector BLOB NOT NULL
 );
 """
 
@@ -297,6 +306,24 @@ class MemoryStore:
                         if stmt:
                             conn.execute(stmt)
                     conn.commit()
+                    # Migration: add pan_angle/tilt_angle if missing
+                    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
+                    if "pan_angle" not in existing_cols:
+                        conn.execute("ALTER TABLE memories ADD COLUMN pan_angle REAL")
+                        conn.execute("ALTER TABLE memories ADD COLUMN tilt_angle REAL")
+                        rows = conn.execute(
+                            "SELECT id, camera_position FROM memories WHERE camera_position IS NOT NULL"
+                        ).fetchall()
+                        for row in rows:
+                            try:
+                                data = json.loads(row[1])
+                                conn.execute(
+                                    "UPDATE memories SET pan_angle=?, tilt_angle=? WHERE id=?",
+                                    (data.get("pan_angle"), data.get("tilt_angle"), row[0]),
+                                )
+                            except Exception:
+                                pass
+                        conn.commit()
                     return conn
 
                 self._db = await asyncio.to_thread(_open)
@@ -390,6 +417,9 @@ class MemoryStore:
         embedding = await self._encode_document(normalized_content)
         vector_blob = encode_vector(embedding)
 
+        pan = camera_position.pan_angle if camera_position else None
+        tilt = camera_position.tilt_angle if camera_position else None
+
         def _insert() -> None:
             meta = memory.to_metadata()
             db.execute(
@@ -398,8 +428,9 @@ class MemoryStore:
                     emotion, importance, category, access_count, last_accessed,
                     linked_ids, episode_id, sensory_data, camera_position,
                     tags, links, novelty_score, prediction_error,
-                    activation_count, last_activated, reading
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    activation_count, last_activated, reading,
+                    pan_angle, tilt_angle
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     memory_id, content, normalized_content, timestamp,
                     emotion, importance, category,
@@ -409,6 +440,7 @@ class MemoryStore:
                     meta.get("camera_position") or None,
                     meta.get("tags", ""), meta.get("links", ""),
                     0.0, 0.0, 0, "", reading,
+                    pan, tilt,
                 ),
             )
             db.execute(
@@ -859,6 +891,111 @@ class MemoryStore:
         )
         return True
 
+    # ── delete ──────────────────────────────────
+
+    async def delete(self, memory_id: str) -> bool:
+        """Delete a memory and clean up all references."""
+        db = self._ensure_connected()
+
+        def _delete() -> bool:
+            # Check existence
+            row = db.execute("SELECT id, linked_ids, episode_id FROM memories WHERE id = ?", (memory_id,)).fetchone()
+            if row is None:
+                return False
+
+            # Remove from linked_ids of other memories
+            linked_ids_str = row["linked_ids"] or ""
+            if linked_ids_str:
+                linked = [lid.strip() for lid in linked_ids_str.split(",") if lid.strip()]
+                for lid in linked:
+                    other = db.execute("SELECT id, linked_ids FROM memories WHERE id = ?", (lid,)).fetchone()
+                    if other:
+                        other_links = [x.strip() for x in (other["linked_ids"] or "").split(",") if x.strip()]
+                        other_links = [x for x in other_links if x != memory_id]
+                        db.execute(
+                            "UPDATE memories SET linked_ids = ? WHERE id = ?",
+                            (",".join(other_links), lid),
+                        )
+
+            # Remove from episode memory_ids
+            episode_id = row["episode_id"]
+            if episode_id:
+                ep_row = db.execute("SELECT id, memory_ids FROM episodes WHERE id = ?", (episode_id,)).fetchone()
+                if ep_row:
+                    ep_mids = [m.strip() for m in (ep_row["memory_ids"] or "").split(",") if m.strip()]
+                    ep_mids = [m for m in ep_mids if m != memory_id]
+                    db.execute(
+                        "UPDATE episodes SET memory_ids = ? WHERE id = ?",
+                        (",".join(ep_mids), episode_id),
+                    )
+
+            # Delete memory (embeddings + coactivation cascade)
+            db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+            db.commit()
+            return True
+
+        result = await asyncio.to_thread(_delete)
+        if result:
+            self._bm25_index.mark_dirty()
+            self._working_memory.remove(memory_id)
+        return result
+
+    # ── update ──────────────────────────────────
+
+    async def update(
+        self,
+        memory_id: str,
+        content: str | None = None,
+        emotion: str | None = None,
+        importance: int | None = None,
+        category: str | None = None,
+    ) -> bool:
+        """Update a memory's user-facing fields. Re-embeds if content changes."""
+        db = self._ensure_connected()
+
+        existing = await self.get_by_id(memory_id)
+        if existing is None:
+            return False
+
+        fields: dict[str, Any] = {}
+        if emotion is not None:
+            fields["emotion"] = emotion
+        if importance is not None:
+            fields["importance"] = max(1, min(5, importance))
+        if category is not None:
+            fields["category"] = category
+
+        new_embedding: list[float] | None = None
+
+        if content is not None and content != existing.content:
+            normalized = normalize_japanese(content)
+            reading = get_reading(content)
+            new_embedding = await self._encode_document(normalized)
+            fields["content"] = content
+            fields["normalized_content"] = normalized
+            fields["reading"] = reading
+
+        if not fields:
+            return True
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [memory_id]
+
+        def _update() -> None:
+            db.execute(f"UPDATE memories SET {set_clause} WHERE id = ?", values)
+            if new_embedding is not None:
+                vector_blob = encode_vector(new_embedding)
+                db.execute(
+                    "INSERT OR REPLACE INTO embeddings (memory_id, vector) VALUES (?,?)",
+                    (memory_id, vector_blob),
+                )
+            db.commit()
+
+        await asyncio.to_thread(_update)
+        if content is not None:
+            self._bm25_index.mark_dirty()
+        return True
+
     # ── save_with_auto_link ─────────────────────
 
     async def save_with_auto_link(
@@ -1096,6 +1233,36 @@ class MemoryStore:
 
         return await asyncio.to_thread(_fetch)
 
+    # ── get_memories_by_camera_position ─────────
+
+    async def get_memories_by_camera_position(
+        self,
+        pan_angle: float,
+        tilt_angle: float,
+        tolerance: float = 15.0,
+    ) -> list[Memory]:
+        """Return memories captured near the given camera angle (SQL-indexed)."""
+        db = self._ensure_connected()
+
+        def _fetch() -> list[Memory]:
+            rows = db.execute(
+                """SELECT * FROM memories
+                   WHERE pan_angle BETWEEN ? AND ?
+                     AND tilt_angle BETWEEN ? AND ?
+                   ORDER BY timestamp DESC""",
+                (
+                    pan_angle - tolerance, pan_angle + tolerance,
+                    tilt_angle - tolerance, tilt_angle + tolerance,
+                ),
+            ).fetchall()
+            memories: list[Memory] = []
+            for row in rows:
+                coactivation = self._get_coactivation(db, row["id"])
+                memories.append(_row_to_memory(row, coactivation))
+            return memories
+
+        return await asyncio.to_thread(_fetch)
+
     # ── get_working_memory ──────────────────────
 
     def get_working_memory(self) -> WorkingMemoryBuffer:
@@ -1104,7 +1271,7 @@ class MemoryStore:
     # ── Episode CRUD ────────────────────────────
 
     async def save_episode(self, episode: Episode) -> None:
-        """Persist an Episode to the episodes table."""
+        """Persist an Episode to the episodes table and save its embedding."""
         db = self._ensure_connected()
 
         def _insert() -> None:
@@ -1130,6 +1297,21 @@ class MemoryStore:
 
         await asyncio.to_thread(_insert)
 
+        # Save embedding for semantic search
+        embed_text = f"{episode.title} {episode.summary}".strip()
+        if embed_text:
+            embedding = await self._encode_document(embed_text)
+            vector_blob = encode_vector(embedding)
+
+            def _insert_embedding() -> None:
+                db.execute(
+                    "INSERT OR REPLACE INTO episode_embeddings (episode_id, vector) VALUES (?,?)",
+                    (episode.id, vector_blob),
+                )
+                db.commit()
+
+            await asyncio.to_thread(_insert_embedding)
+
     async def get_episode_by_id(self, episode_id: str) -> Episode | None:
         db = self._ensure_connected()
 
@@ -1142,11 +1324,46 @@ class MemoryStore:
         return await asyncio.to_thread(_fetch)
 
     async def search_episodes(self, query: str, n_results: int = 5) -> list[Episode]:
-        """Search episodes by title/summary (LIKE search, good enough for few episodes)."""
+        """Search episodes by semantic similarity, with LIKE fallback."""
         db = self._ensure_connected()
+
+        # Try semantic search first
+        def _fetch_with_embeddings() -> list[tuple[str, bytes]]:
+            rows = db.execute(
+                "SELECT ee.episode_id, ee.vector FROM episode_embeddings ee"
+            ).fetchall()
+            return [(row["episode_id"], row["vector"]) for row in rows]
+
+        ep_vectors = await asyncio.to_thread(_fetch_with_embeddings)
+
+        if ep_vectors:
+            query_emb = await self._encode_query(normalize_japanese(query))
+            query_vec = np.array(query_emb, dtype=np.float32)
+
+            ep_ids = [ep_id for ep_id, _ in ep_vectors]
+            vecs = np.stack([decode_vector(blob) for _, blob in ep_vectors])
+            scores = cosine_similarity(query_vec, vecs)  # shape (n,), higher = more similar
+            order = np.argsort(scores)[::-1]  # descending
+
+            top_ids = [ep_ids[i] for i in order[:n_results]]
+
+            def _fetch_by_ids() -> list[Episode]:
+                if not top_ids:
+                    return []
+                placeholders = ",".join("?" * len(top_ids))
+                rows = db.execute(
+                    f"SELECT * FROM episodes WHERE id IN ({placeholders})",
+                    top_ids,
+                ).fetchall()
+                id_to_ep = {_row_to_episode(row).id: _row_to_episode(row) for row in rows}
+                return [id_to_ep[eid] for eid in top_ids if eid in id_to_ep]
+
+            return await asyncio.to_thread(_fetch_by_ids)
+
+        # Fallback: LIKE search
         pattern = f"%{query}%"
 
-        def _fetch() -> list[Episode]:
+        def _fetch_like() -> list[Episode]:
             rows = db.execute(
                 """SELECT * FROM episodes
                    WHERE title LIKE ? OR summary LIKE ?
@@ -1155,7 +1372,7 @@ class MemoryStore:
             ).fetchall()
             return [_row_to_episode(row) for row in rows]
 
-        return await asyncio.to_thread(_fetch)
+        return await asyncio.to_thread(_fetch_like)
 
     async def list_all_episodes(self) -> list[Episode]:
         db = self._ensure_connected()

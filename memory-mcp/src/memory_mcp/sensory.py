@@ -125,7 +125,7 @@ class SensoryIntegration:
         tilt_angle: int,
         tolerance: int = 15,
     ) -> list[Memory]:
-        """カメラ位置から記憶を想起.
+        """カメラ位置から記憶を想起（SQLインデックスで高速化）.
 
         「この方向を見た時に何を見たっけ?」という問いに答える。
 
@@ -137,25 +137,11 @@ class SensoryIntegration:
         Returns:
             条件を満たす記憶のリスト（新しい順）
         """
-        # 全記憶を取得
-        all_memories = await self._memory_store.get_all()
-
-        # カメラ位置でフィルタ
-        results = []
-        for memory in all_memories:
-            if memory.camera_position is None:
-                continue
-
-            pan_diff = abs(memory.camera_position.pan_angle - pan_angle)
-            tilt_diff = abs(memory.camera_position.tilt_angle - tilt_angle)
-
-            if pan_diff <= tolerance and tilt_diff <= tolerance:
-                results.append(memory)
-
-        # 時系列逆順（新しい順）
-        results.sort(key=lambda m: m.timestamp, reverse=True)
-
-        return results
+        return await self._memory_store.get_memories_by_camera_position(
+            pan_angle=pan_angle,
+            tilt_angle=tilt_angle,
+            tolerance=tolerance,
+        )
 
     async def get_memories_with_sensory_data(
         self,

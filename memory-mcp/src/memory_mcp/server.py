@@ -589,6 +589,54 @@ class MemoryMCPServer:
                     },
                 ),
                 Tool(
+                    name="delete_memory",
+                    description="Delete a memory permanently. Also removes it from linked_ids of related memories and from episode memory lists.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {
+                                "type": "string",
+                                "description": "ID of the memory to delete",
+                            },
+                        },
+                        "required": ["memory_id"],
+                    },
+                ),
+                Tool(
+                    name="update_memory",
+                    description="Update a memory's content, emotion, importance, or category. If content is changed, the embedding is regenerated.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {
+                                "type": "string",
+                                "description": "ID of the memory to update",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "New content text (optional)",
+                            },
+                            "emotion": {
+                                "type": "string",
+                                "description": "New emotion label (optional)",
+                                "enum": ["happy", "sad", "surprised", "moved", "excited", "nostalgic", "curious", "neutral"],
+                            },
+                            "importance": {
+                                "type": "integer",
+                                "description": "New importance (1-5, optional)",
+                                "minimum": 1,
+                                "maximum": 5,
+                            },
+                            "category": {
+                                "type": "string",
+                                "description": "New category (optional)",
+                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                            },
+                        },
+                        "required": ["memory_id"],
+                    },
+                ),
+                Tool(
                     name="tom",
                     description="Theory of Mind: perspective-taking tool. Call this BEFORE responding to understand what the other person is feeling and wanting. Projects your simulated emotions onto them, then swaps perspectives.",
                     inputSchema={
@@ -1277,6 +1325,30 @@ Date Range:
                         )
 
                         return [TextContent(type="text", text=output)]
+
+                    case "delete_memory":
+                        memory_id = arguments.get("memory_id", "")
+                        if not memory_id:
+                            return [TextContent(type="text", text="Error: memory_id is required")]
+                        deleted = await self._memory_store.delete(memory_id)
+                        if deleted:
+                            return [TextContent(type="text", text=f"Memory {memory_id} deleted.")]
+                        return [TextContent(type="text", text=f"Error: Memory {memory_id} not found.")]
+
+                    case "update_memory":
+                        memory_id = arguments.get("memory_id", "")
+                        if not memory_id:
+                            return [TextContent(type="text", text="Error: memory_id is required")]
+                        updated = await self._memory_store.update(
+                            memory_id=memory_id,
+                            content=arguments.get("content"),
+                            emotion=arguments.get("emotion"),
+                            importance=arguments.get("importance"),
+                            category=arguments.get("category"),
+                        )
+                        if updated:
+                            return [TextContent(type="text", text=f"Memory {memory_id} updated.")]
+                        return [TextContent(type="text", text=f"Error: Memory {memory_id} not found.")]
 
                     case _:
                         return [TextContent(type="text", text=f"Unknown tool: {name}")]

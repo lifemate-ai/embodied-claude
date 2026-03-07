@@ -58,6 +58,13 @@ class WorkingMemoryBuffer:
         async with self._lock:
             return list(reversed(self._buffer))
 
+    def remove(self, memory_id: str) -> None:
+        """指定IDの記憶をバッファから除去（同期版）."""
+        self._buffer = deque(
+            (m for m in self._buffer if m.id != memory_id),
+            maxlen=self._buffer.maxlen,
+        )
+
     async def clear(self) -> None:
         """バッファをクリア."""
         async with self._lock:

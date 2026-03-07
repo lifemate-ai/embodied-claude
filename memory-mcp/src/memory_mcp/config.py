@@ -15,6 +15,9 @@ class MemoryConfig:
 
     db_path: str
     collection_name: str
+    # Embedding model options (changing model requires re-embedding existing memories):
+    #   "intfloat/multilingual-e5-base"  — 768-dim, ~1.1GB, higher quality (default)
+    #   "intfloat/multilingual-e5-small" — 384-dim, ~471MB, lighter (good for low-resource envs)
     embedding_model: str = "intfloat/multilingual-e5-base"
     enable_bm25: bool = True
 
