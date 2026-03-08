@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "hearing": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "./hearing",
+        "hearing-mcp"
+      ],
+      "env": {
+        "MCP_BEHAVIOR_TOML": "/path/to/your/mcpBehavior.toml"
+      }
+    }
+  }
+}

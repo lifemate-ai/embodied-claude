@@ -2,7 +2,7 @@
 # シークレット（API キー、パスワード等）は各サーバーの .env に記載
 
 [wifi-cam]
-mount_mode = "normal"          # "normal" (卓上) or "ceiling" (天井)
+mount_mode = "ceiling"         # "normal" (卓上) or "ceiling" (天井)
 mic_source = "camera"          # "camera" (RTSP) or "local" (PC マイク)
 capture_max_width = 1920
 capture_max_height = 1080
@@ -40,7 +40,7 @@ local_port = 18765
 [hearing]
 whisper_model = "small"
 source = "camera"                  # "local" (PC マイク) or "camera" (RTSP)
-rtsp_url = "rtsp://nassii74@gmail.com:fvUE7oVAGUvv@192.168.1.82:554/stream1"
+rtsp_url = "rtsp://user:password@192.168.1.100:554/stream1"
 segment_seconds = 5
 language = "ja"
 
