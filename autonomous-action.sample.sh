@@ -1,13 +1,9 @@
 #!/bin/bash
-# Claude 自律行動スクリプト（macOS / Linux 対応）
+# Claude 自律行動スクリプト（macOS版）
 # 20分ごとにcronで実行、時間帯に応じて間引く
 #
-# セットアップ:
-# 1. このファイルをコピー: cp autonomous-action.sample.sh autonomous-action.sh
-# 2. autonomous-action.sh を編集（以下の「環境設定」セクション）
-# 3. 実行権限を付与: chmod +x autonomous-action.sh
-# 4. crontab -e で以下を追加:
-#    */20 * * * * /path/to/your/autonomous-action.sh
+# crontab -e で以下を追加:
+# */20 * * * * /path/to/your/project/autonomous-action.sh
 #
 # Usage:
 #   autonomous-action.sh                                    # 通常実行（cron）
@@ -16,78 +12,20 @@
 #   autonomous-action.sh --force-routine                    # ルーチン回を強制
 #   autonomous-action.sh --force-normal                     # 通常回を強制
 #   autonomous-action.sh --dry-run                          # claude -p を実行せずプロンプトを表示
-#   autonomous-action.sh -p "任意のプロンプト"              # プロンプト直接指定（スケジュール制御スキップ）
+#   autonomous-action.sh -p "任意のプロンプト"                  # プロンプト直接指定（スケジュール制御スキップ）
 #   autonomous-action.sh --dry-run --date "2026-02-20 03:00" --force-routine  # 組み合わせ可
 
-# ============================================================================
-# 環境設定（必須：ユーザー環境に合わせて編集）
-# ============================================================================
-# このファイル (autonomous-action.sample.sh) はサンプルです。
-# 以下の手順で設定してください:
-#   1. cp autonomous-action.sample.sh autonomous-action.sh
-#   2. autonomous-action.sh の ★ マーク箇所を編集
-#   3. autonomous-action.sh は .gitignore に追加されています（コミット不要）
-# ============================================================================
+# NOTE: Set HOME and PATH for your environment
+export HOME="${HOME:-$(/usr/bin/dscl . -read /Users/$(whoami) NFSHomeDirectory | awk '{print $2}')}"
+export PATH="/opt/homebrew/bin:${PATH:-/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 
-# ★ ホームディレクトリ（crontab は $HOME すら持たないため明示的に設定）
-# 例: /Users/yourname (macOS) または /home/yourname (Linux)
-# 確認方法: ターミナルで "echo $HOME" を実行
-export HOME="/Users/yourname"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ★ PATH 設定（crontab は $PATH も最小限のため、必要なコマンドのパスを追加）
-# 必要なコマンド: claude, jq, date など
-# 例 (macOS + asdf + homebrew):
-#   export PATH="$HOME/.asdf/shims:/opt/homebrew/bin:$PATH"
-# 例 (Linux + nodenv):
-#   export PATH="$HOME/.nodenv/shims:/usr/local/bin:$PATH"
-# 確認方法: "which claude" "which jq" でパスを確認
-export PATH="$HOME/.asdf/shims:/opt/homebrew/bin:$PATH"
-
-# ★ プロジェクトディレクトリ（SOUL.md, TODO.md, ROUTINES.md などが存在する場所）
-# 例: /Users/yourname/workspace/yourproject
-# ⚠️ 重要: test-autonomous.sh の L129 と設定を一致させる必要があります（必須）
-PROJECT_DIR="$HOME/yourproject"
-
-# ★ .env ファイルのパス（プロジェクトディレクトリ配下）
-# .env には以下の環境変数が含まれる:
-#   - ELEVENLABS_API_KEY: ElevenLabs TTS の API キー
-#   - TAPO_USERNAME, TAPO_PASSWORD: Wi-Fi カメラの認証情報
-#   - その他 MCP サーバーが必要とする環境変数
-ENV_FILE="$PROJECT_DIR/.env"
-set -a
-source "$ENV_FILE"
-set +a
-
-# ★ ユーザー名・部屋名（時間帯ルールで使用）
-# 例: "あなた" "コウタ" など
-USER_NAME="あなた"
-# 例: "あなたの部屋" "コウタの部屋" など
-USER_ROOM="${USER_NAME}の部屋"
-
-# ★ allowedTools で許可するディレクトリパス
-# セキュリティ: 必要最小限のディレクトリのみ指定すること（.env ファイルなど機密情報も読める）
-# メモ：シークレットとenvを別で監理するのはまだ実装されていない
-# 通常は PROJECT_DIR と同じでOK
-ALLOWED_DIR="$PROJECT_DIR"
-
-# ログディレクトリ名（プロジェクトディレクトリ配下に作成される）
-# ⚠️ 重要: test-autonomous.sh の L129 と設定を一致させる必要があります（必須）
-LOG_DIR_NAME=".autonomous-logs"
-
-# ログ保持期間（日数）
-# この日数より古いログファイルを自動削除する
-# 例: 1 = 1日以上前のログを削除, 7 = 1週間以上前のログを削除
-LOG_RETENTION_DAYS=7
-
-# ============================================================================
-# 環境検出・日時処理
-# ============================================================================
-
-# OS検出（macOS or Linux）
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  IS_MACOS=true
-else
-  IS_MACOS=false
+# Load environment variables (API keys, etc.)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  source "$SCRIPT_DIR/.env"
+  set +a
 fi
 
 # --- 引数パース ---
@@ -130,35 +68,37 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- 日時の取得（環境別に一度だけ実行） ---
+# --- 日時の決定 ---
 if [ -n "$OVERRIDE_DATE" ]; then
-  # テスト用の日時オーバーライド
-  if [ "$IS_MACOS" = true ]; then
-    # macOS: date -j -f "format" "date_string" +output
-    CURRENT_DATE=$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-    HOUR=$((10#$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%H 2>/dev/null)))
-    MINUTE=$((10#$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%M 2>/dev/null)))
-    TIMESTAMP=$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%Y%m%d_%H%M%S 2>/dev/null)
-  else
-    # Linux: date -d "date_string" +output
-    CURRENT_DATE=$(date -d "$OVERRIDE_DATE" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-    HOUR=$((10#$(date -d "$OVERRIDE_DATE" +%H 2>/dev/null)))
-    MINUTE=$((10#$(date -d "$OVERRIDE_DATE" +%M 2>/dev/null)))
-    TIMESTAMP=$(date -d "$OVERRIDE_DATE" +%Y%m%d_%H%M%S 2>/dev/null)
-  fi
+  HOUR=$((10#$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%H 2>/dev/null || date -d "$OVERRIDE_DATE" +%H)))
+  MINUTE=$((10#$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%M 2>/dev/null || date -d "$OVERRIDE_DATE" +%M)))
 else
-  # 現在時刻を取得
-  CURRENT_DATE=$(date "+%Y-%m-%d %H:%M:%S")
   HOUR=$((10#$(date +%H)))
   MINUTE=$((10#$(date +%M)))
-  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 fi
-# --- スケジュール制御（claude到達前に早期リターン） ---
-# テストモードではスキップ。dry-run は --date 指定時のみスケジュール制御を通す
-# 密（20分間隔で毎回実行）: 7-8時, 12-13時, 18-24時
-# 昼間それ以外（毎時:00のみ, 30%）: 8-12時, 13-18時
-# 深夜（毎時:00のみ, 10%）: 0-7時
 
+# timeout コマンド検出（GNU coreutils or macOS built-in）
+TIMEOUT_CMD=$(which timeout 2>/dev/null || which gtimeout 2>/dev/null)
+
+LOG_DIR="$SCRIPT_DIR/.autonomous-logs"
+mkdir -p "$LOG_DIR"
+
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="$LOG_DIR/$TIMESTAMP.log"
+echo "LOG: $LOG_FILE"
+
+# 古いログを掃除（1日以上前）
+find "$LOG_DIR" -name "*.log" -mtime +1 -delete 2>/dev/null
+
+echo "=== 自律行動開始: $(date) ===" >> "$LOG_FILE"
+if [ -n "$OVERRIDE_DATE" ]; then
+  echo "[日時オーバーライド] $OVERRIDE_DATE (HOUR=$HOUR, MINUTE=$MINUTE)" >> "$LOG_FILE"
+fi
+if [ -n "$TEST_PROMPT_FILE" ]; then
+  echo "[テストモード] プロンプト: $TEST_PROMPT_FILE" >> "$LOG_FILE"
+fi
+
+# --- スケジュール制御の初期判定 ---
 SKIP_SCHEDULE=false
 if [ -n "$TEST_PROMPT_FILE" ] || [ -n "$TEST_PROMPT_STRING" ]; then
   SKIP_SCHEDULE=true
@@ -166,14 +106,84 @@ elif [ "$DRY_RUN" = true ] && [ -z "$OVERRIDE_DATE" ]; then
   SKIP_SCHEDULE=true
 fi
 
+# --- 休日・休暇判定 ---
+SCHEDULE_CONF="$SCRIPT_DIR/schedule.conf"
+IS_HOLIDAY=false
+IS_VACATION=false
+if [ -f "$SCHEDULE_CONF" ]; then
+  source "$SCHEDULE_CONF"
+
+  # 曜日判定（0=日, 6=土）
+  if [ -n "$OVERRIDE_DATE" ]; then
+    DOW=$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%w 2>/dev/null || date -d "$OVERRIDE_DATE" +%w)
+    TODAY_MMDD=$(date -j -f "%Y-%m-%d %H:%M" "$OVERRIDE_DATE" +%m-%d 2>/dev/null || date -d "$OVERRIDE_DATE" +%m-%d)
+  else
+    DOW=$(date +%w)
+    TODAY_MMDD=$(date +%m-%d)
+  fi
+
+  # 曜日が休日リストに含まれるか
+  if echo ",$HOLIDAY_WEEKDAYS," | grep -q ",$DOW,"; then
+    IS_HOLIDAY=true
+  fi
+
+  # 日付が祝日リストに含まれるか
+  if [ -n "$HOLIDAY_DATES" ] && echo ",$HOLIDAY_DATES," | grep -q ",$TODAY_MMDD,"; then
+    IS_HOLIDAY=true
+  fi
+
+  # 日付が休暇リストに含まれるか（休暇 = 活動頻度を下げる）
+  if [ -n "$VACATION_DATES" ] && echo ",$VACATION_DATES," | grep -q ",$TODAY_MMDD,"; then
+    IS_VACATION=true
+  fi
+fi
+
+# --- 自動起床: 朝7時台に /sleep の頻度低下を通常値に戻す ---
+if [ "$SKIP_SCHEDULE" = false ] && [ "$HOUR" -eq 7 ] && [ -f "$SCHEDULE_CONF" ]; then
+  CURRENT_DAY=$(grep "^DAYTIME_CHANCE=" "$SCHEDULE_CONF" | cut -d= -f2)
+  CURRENT_NIGHT=$(grep "^NIGHT_CHANCE=" "$SCHEDULE_CONF" | cut -d= -f2)
+  if [ "${CURRENT_DAY:-50}" -lt 50 ] || [ "${CURRENT_NIGHT:-10}" -lt 10 ]; then
+    sed -i '' 's/^DAYTIME_CHANCE=.*/DAYTIME_CHANCE=50/' "$SCHEDULE_CONF"
+    sed -i '' 's/^NIGHT_CHANCE=.*/NIGHT_CHANCE=10/' "$SCHEDULE_CONF"
+    echo "[自動起床] DAYTIME_CHANCE: ${CURRENT_DAY}→50, NIGHT_CHANCE: ${CURRENT_NIGHT}→10" >> "$LOG_FILE"
+  fi
+fi
+
+# --- スケジュール制御（claude到達前に早期リターン） ---
+# テストモードではスキップ。dry-run は --date 指定時のみスケジュール制御を通す
+# 通常日:
+#   密（20分間隔で毎回実行）: 7-8時, 12-13時, 18-24時
+#   昼間それ以外（毎時:00のみ, 50%）: 8-12時, 13-18時
+#   深夜（毎時:00のみ, 10%）: 0-7時
+# 休日: 7-24時がすべてアクティブ帯（20分おき毎回実行）
+# 休暇: 全帯域60分間隔（毎時:00のみ）、ルーチン確率UP
+
 if [ "$SKIP_SCHEDULE" = false ]; then
   IS_ACTIVE=false
-  if [ "$HOUR" -ge 7 ] && [ "$HOUR" -lt 8 ]; then
+
+  if [ "$IS_VACATION" = true ]; then
+    # 休暇モード: 全帯域60分間隔（毎時:00のみ）
+    if [ "$MINUTE" -ne 0 ]; then
+      echo "休暇モード :${MINUTE} スキップ (DATE=$TODAY_MMDD)" >> "$LOG_FILE"
+      exit 0
+    fi
     IS_ACTIVE=true
-  elif [ "$HOUR" -ge 12 ] && [ "$HOUR" -lt 13 ]; then
-    IS_ACTIVE=true
-  elif [ "$HOUR" -ge 18 ]; then
-    IS_ACTIVE=true
+    echo "休暇モード (DATE=$TODAY_MMDD)" >> "$LOG_FILE"
+  elif [ "$IS_HOLIDAY" = true ]; then
+    # 休日: 7-24時はすべてアクティブ
+    if [ "$HOUR" -ge 7 ]; then
+      IS_ACTIVE=true
+    fi
+    echo "休日モード (DOW=$DOW, DATE=$TODAY_MMDD)" >> "$LOG_FILE"
+  else
+    # 通常日
+    if [ "$HOUR" -ge 7 ] && [ "$HOUR" -lt 8 ]; then
+      IS_ACTIVE=true
+    elif [ "$HOUR" -ge 12 ] && [ "$HOUR" -lt 13 ]; then
+      IS_ACTIVE=true
+    elif [ "$HOUR" -ge 18 ]; then
+      IS_ACTIVE=true
+    fi
   fi
 
   if [ "$IS_ACTIVE" = false ]; then
@@ -185,33 +195,39 @@ if [ "$SKIP_SCHEDULE" = false ]; then
 
     RAND=$(( $(od -An -tu2 -N2 /dev/urandom | tr -d ' ') % 100 ))
     if [ "$HOUR" -ge 8 ] && [ "$HOUR" -lt 18 ]; then
-      # 昼間: 30% の確率で実行
-      if [ "$RAND" -ge 30 ]; then
-        echo "昼間スキップ (RAND=$RAND >= 30)" >> "$LOG_FILE"
+      # 昼間: DAYTIME_CHANCE% の確率で実行（schedule.conf、デフォルト50）
+      THRESHOLD=${DAYTIME_CHANCE:-50}
+      if [ "$RAND" -ge "$THRESHOLD" ]; then
+        echo "昼間スキップ (RAND=$RAND >= $THRESHOLD)" >> "$LOG_FILE"
         exit 0
       fi
-      echo "昼間実行 (RAND=$RAND < 30)" >> "$LOG_FILE"
+      echo "昼間実行 (RAND=$RAND < $THRESHOLD)" >> "$LOG_FILE"
     else
-      # 深夜: 10% の確率で実行
-      if [ "$RAND" -ge 10 ]; then
-        echo "深夜スキップ (RAND=$RAND >= 10)" >> "$LOG_FILE"
+      # 深夜: NIGHT_CHANCE% の確率で実行（schedule.conf、デフォルト10）
+      THRESHOLD=${NIGHT_CHANCE:-10}
+      if [ "$RAND" -ge "$THRESHOLD" ]; then
+        echo "深夜スキップ (RAND=$RAND >= $THRESHOLD)" >> "$LOG_FILE"
         exit 0
       fi
-      echo "深夜実行 (RAND=$RAND < 10)" >> "$LOG_FILE"
+      echo "深夜実行 (RAND=$RAND < $THRESHOLD)" >> "$LOG_FILE"
     fi
   fi
 fi
 
-# --- 時間帯ルール ---
-# 深夜帯: 静音モード（通知・発話禁止）
-# 日中: 人がいる場合のみ発話可能、不在時は控えめに通知
-if [ "$HOUR" -ge 24 ] || [ "$HOUR" -lt 7 ]; then
-  TIME_RULE="現在は深夜帯。say, notify, slack は絶対に使わないこと。静かに観察のみ。"
+# --- 時間帯ルール（schedule.conf から読み込み） ---
+if [ "$HOUR" -lt 7 ]; then
+  TIME_RULE="${NIGHT_TIME_RULE:-深夜帯。say, notify, slack は使わないこと。静かに観察のみ。}"
 else
-  TIME_RULE="say は${USER_ROOM}の視界で、人がいるときだけ使ってよい。${USER_NAME}が${USER_ROOM}にいる場合はsayを積極的に使う。リビングにいる場合は slackを使う。部屋に人がいない場合、notify, slack は${USER_NAME}に伝えたいことがあるときだけ使う。"
+  TIME_RULE="${DAY_TIME_RULE:-say は部屋に人がいるときだけ使ってよい。人がいない場合、notify, slack は伝えたいことがあるときだけ使う。}"
 fi
 
-# --- ルーチン判定（20%の確率でルーチン回） ---
+# --- ルーチン判定（通常20%、休暇時60%の確率でルーチン回） ---
+ROUTINE_THRESHOLD=${ROUTINE_CHANCE:-20}
+if [ "$IS_VACATION" = true ]; then
+  ROUTINE_THRESHOLD=${VACATION_ROUTINE_CHANCE:-60}
+  echo "休暇モード: ルーチン確率 ${ROUTINE_THRESHOLD}%" >> "$LOG_FILE"
+fi
+
 if [ "$FORCE_ROUTINE" = "routine" ]; then
   ROUTINE_RAND=0
 elif [ "$FORCE_ROUTINE" = "normal" ]; then
@@ -220,103 +236,115 @@ else
   ROUTINE_RAND=$(( $(od -An -tu2 -N2 /dev/urandom | tr -d ' ') % 100 ))
 fi
 
-if [ "$ROUTINE_RAND" -lt 20 ]; then
-  ROUTINE_MODE="今回はルーチン回。ROUTINES.md を読んで、最終実行日から間隔が空いたものを一つ選んで実行せよ。実行したら最終実行日を更新すること。"
-  echo "ルーチン回 (RAND=$ROUTINE_RAND < 20)" >> "$LOG_FILE"
+if [ "$ROUTINE_RAND" -lt "$ROUTINE_THRESHOLD" ]; then
+  ROUTINE_MODE="${ROUTINE_PROMPT:-今回はルーチン回。ROUTINES.md を読んで、最終実行日から間隔が空いたものを一つ選んで実行せよ。実行したら最終実行日を更新すること。}"
+  echo "ルーチン回 (RAND=$ROUTINE_RAND < $ROUTINE_THRESHOLD)" >> "$LOG_FILE"
 else
-  ROUTINE_MODE="通常回。CLAUDE.md の Heartbeat Protocol に従って行動せよ。"
-  echo "通常回 (RAND=$ROUTINE_RAND >= 20)" >> "$LOG_FILE"
+  ROUTINE_MODE="${NORMAL_PROMPT:-通常回。CLAUDE.md の Heartbeat Protocol に従って行動せよ。}"
+  echo "通常回 (RAND=$ROUTINE_RAND >= $ROUTINE_THRESHOLD)" >> "$LOG_FILE"
+fi
+
+# --- 欲望システム（内部衝動） ---
+DESIRE_PROMPT=""
+if [ "$SKIP_SCHEDULE" = false ]; then
+  DESIRE_STDERR=$(mktemp)
+  DESIRE_PROMPT=$(bun run "$SCRIPT_DIR/scripts/desire-tick.ts" tick 2>"$DESIRE_STDERR")
+  if [ -s "$DESIRE_STDERR" ]; then
+    echo "[欲望エラー] $(cat "$DESIRE_STDERR")" >> "$LOG_FILE"
+  fi
+  rm -f "$DESIRE_STDERR"
+  if [ -n "$DESIRE_PROMPT" ]; then
+    echo "[欲望発火] $DESIRE_PROMPT" >> "$LOG_FILE"
+  else
+    echo "[欲望] 閾値未達" >> "$LOG_FILE"
+  fi
+fi
+
+# --- 身体感覚（内的感覚） ---
+INTEROCEPTION_TEXT=""
+if [ "$SKIP_SCHEDULE" = false ]; then
+  INTEROCEPTION_TEXT=$(bun run "$SCRIPT_DIR/scripts/interoception.ts" 2>/dev/null)
+  if [ -n "$INTEROCEPTION_TEXT" ]; then
+    echo "[感覚] $(echo "$INTEROCEPTION_TEXT" | head -n1)" >> "$LOG_FILE"
+  fi
+fi
+
+# --- 朝の再構成（初回セッション判定） ---
+IS_FIRST_SESSION_TODAY=false
+if [ "$SKIP_SCHEDULE" = false ]; then
+  LAST_SESSION_DATE_FILE="$SCRIPT_DIR/last-session-date.txt"
+  LAST_SESSION_DATE=$(cat "$LAST_SESSION_DATE_FILE" 2>/dev/null || echo "")
+  TODAY=$(date +%Y-%m-%d)
+  if [ "$LAST_SESSION_DATE" != "$TODAY" ]; then
+    IS_FIRST_SESSION_TODAY=true
+    if [ "$DRY_RUN" = false ]; then
+      echo "$TODAY" > "$LAST_SESSION_DATE_FILE"
+      echo "[朝の再構成] 初回セッション: $TODAY" >> "$LOG_FILE"
+
+    fi
+  fi
 fi
 
 # --- プロンプト組み立て ---
-# SOUL.md, TODO.md: プロジェクト内のコンテキストファイル（カレントディレクトリに存在する前提）
-# ROUTINE_MODE: 20%の確率でルーチン実行、80%は通常のハートビート
-# ★ プロンプト内容もカスタマイズ可能（補足ルールなど）
-PROMPT="自律行動タイム(Heartbeat)
+DESIRE_SECTION=""
+if [ -n "$DESIRE_PROMPT" ]; then
+  DESIRE_SECTION="
+## 内部衝動
+${DESIRE_PROMPT}
+（これは内なる衝動であり、従うかどうかは自分の判断。メインタスクの妨げにならない範囲で。）
+"
+fi
+
+INTEROCEPTION_SECTION=""
+if [ -n "$INTEROCEPTION_TEXT" ]; then
+  INTEROCEPTION_SECTION="
+$INTEROCEPTION_TEXT"
+fi
+
+MORNING_SECTION=""
+if [ "$IS_FIRST_SESSION_TODAY" = true ]; then
+  MORNING_TEXT="${MORNING_PROMPT:-今日の最初の自律行動だ。朝の再構成として以下を実施せよ：
+1. recall(context=\"直近の重要な決定・未完了タスク\") を呼び出す
+2. 前日の行動を確認し、今日やりたいことを考えよ}"
+  MORNING_SECTION="
+## 今日初めてのHeartbeat
+${MORNING_TEXT}
+"
+fi
+
+# NOTE: @FILE は Claude Code の Context Mention 機能でファイル内容をプロンプトに展開する。
+# SOUL.md — エージェントの人格・価値観を定義するファイル（自分で作成する）
+# TODO.md — やりたいこと・タスクを管理するファイル（自分で作成する）
+# ROUTINES.md — 定期実行するルーチンを定義するファイル（任意）
+# これらが存在しない場合は CLAUDE.md のみで動作する。
+PROMPT="自律行動タイム（Heartbeat）
 
 @SOUL.md
 @TODO.md
+@ROUTINES.md
 
-${ROUTINE_MODE}
+${MORNING_SECTION}${ROUTINE_MODE}
 
+${DESIRE_SECTION}
 ## 補足ルール
 - ${TIME_RULE}
 - 人がいないことはよくある。一日のうち人がいるのは2時間程度やそれ以下の場合も少なくない
+- 部屋を見るときは see で撮って、予測→観察→記憶照合→保存のサイクルで発見を拾え。朝日や天気の変化、部屋の明るさなど、人がいなくても観察すべきものはある
 - 読書を選択した場合は、ゆっくり読んで、感想をしっかり書き残す。感想は長くなっても良い。読書を味わうこと。読書を味わうとは、予想して、伏線に注目して、感じたことを大切にする。
-- MCPが動作していなければ、デバッグのために関係があると思われる要素をallowedToolsの範囲で調査して
-"
+- MCPが動作していなければ、デバッグのために関係があると思われる要素をallowedToolsの範囲で調査せよ
+- 行動の最後に必ず心残りチェックをせよ。確認項目：(1)やったことを記憶や記録（diary/TODO.md/notes/等）に残したか (2)続きをやりたいことはないか。残すべきものがあるなら [CONTINUE: 記憶に残す] 、続きがあるなら [CONTINUE: 具体的な理由] 、すべて完了なら [DONE] を出力末尾に書くこと。書き忘れると次のターンに引き継げない。チェインは最大3回まで。上限に達したら TODO.md の「前回の続き」セクションに書いて次のHeartbeatに引き継げ
+${INTEROCEPTION_SECTION}"
 
-# プロジェクトディレクトリに移動
-cd "$PROJECT_DIR" || {
-  echo "Error: PROJECT_DIR not found: $PROJECT_DIR" >&2
+cd "$SCRIPT_DIR"
+
+# --- allowedTools (.claude/settings.json から動的生成) ---
+SETTINGS_FILE="$SCRIPT_DIR/.claude/settings.json"
+if [ -f "$SETTINGS_FILE" ]; then
+  ALLOWED_TOOLS=$(jq -r '.permissions.allow | join(",")' "$SETTINGS_FILE")
+else
+  echo "ERROR: $SETTINGS_FILE not found" >> "$LOG_FILE"
   exit 1
-}
-
-# ログディレクトリをプロジェクト配下に作成
-LOG_DIR="$PROJECT_DIR/$LOG_DIR_NAME"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/$TIMESTAMP.log"
-
-# 古いログを掃除（LOG_RETENTION_DAYS より古いログを削除）
-find "$LOG_DIR" -name "*.log" -mtime "+$LOG_RETENTION_DAYS" -delete 2>/dev/null
-
-echo "=== 自律行動開始: $CURRENT_DATE ===" >> "$LOG_FILE"
-if [ -n "$OVERRIDE_DATE" ]; then
-  echo "[日時オーバーライド] $OVERRIDE_DATE (HOUR=$HOUR, MINUTE=$MINUTE)" >> "$LOG_FILE"
 fi
-if [ -n "$TEST_PROMPT_FILE" ]; then
-  echo "[テストモード] プロンプト: $TEST_PROMPT_FILE" >> "$LOG_FILE"
-fi
-
-# --- allowedTools ---
-# Claude Code の --allowedTools で許可するツールのリスト
-# セキュリティ: 必要最小限のディレクトリのみ指定すること（.env ファイルなど機密情報も読める）
-ALLOWED_TOOLS=$(cat <<TOOLS
-Read($ALLOWED_DIR/**),
-Write($ALLOWED_DIR/**),
-Edit($ALLOWED_DIR/**),
-Glob($ALLOWED_DIR/**),
-Skill(notify:*),
-Skill(slack:*),
-Skill(read:*),
-Bash(bun run:*),
-mcp__wifi-cam__see,
-mcp__wifi-cam__look_left,
-mcp__wifi-cam__look_right,
-mcp__wifi-cam__look_up,
-mcp__wifi-cam__look_down,
-mcp__wifi-cam__look_around,
-mcp__wifi-cam__camera_info,
-mcp__wifi-cam__camera_presets,
-mcp__wifi-cam__camera_go_to_preset,
-mcp__wifi-cam__listen,
-mcp__tts__say,
-mcp__memory__remember,
-mcp__memory__search_memories,
-mcp__memory__recall,
-mcp__memory__recall_divergent,
-mcp__memory__list_recent_memories,
-mcp__memory__get_memory_stats,
-mcp__memory__recall_with_associations,
-mcp__memory__get_association_diagnostics,
-mcp__memory__consolidate_memories,
-mcp__memory__get_memory_chain,
-mcp__memory__create_episode,
-mcp__memory__search_episodes,
-mcp__memory__get_episode_memories,
-mcp__memory__save_visual_memory,
-mcp__memory__save_audio_memory,
-mcp__memory__recall_by_camera_position,
-mcp__memory__get_working_memory,
-mcp__memory__refresh_working_memory,
-mcp__memory__link_memories,
-mcp__memory__get_causal_chain,
-mcp__memory__tom,
-mcp__system-temperature__get_current_time
-TOOLS
-)
-# 改行を除去して1行にする
-ALLOWED_TOOLS=$(echo "$ALLOWED_TOOLS" | tr -d '\n' | sed 's/, */,/g')
 
 # テストモードならプロンプトを差し替え
 if [ -n "$TEST_PROMPT_STRING" ]; then
@@ -341,47 +369,101 @@ if [ "$DRY_RUN" = true ]; then
   # 標準出力にも出す
   cat "$LOG_FILE"
 else
-  # セッション継続機能: 前回の会話を引き継ぐことで文脈が保持される
-  # SESSION_FILE: session_id を保存するファイル（プロジェクトディレクトリ配下）
-  # 例: ~/yourproject/.heartbeat-session-id
-  # claude --resume で前回セッションを継続、失敗時は新規セッション作成
-  SESSION_FILE="$PWD/.heartbeat-session-id"
+  export HEARTBEAT=1
+  SESSION_FILE="$SCRIPT_DIR/heartbeat-session-id"
 
   run_new_session() {
     echo "[新規セッション作成]" >> "$LOG_FILE"
-    RESULT_JSON=$(echo "$PROMPT" | claude -p \
-      --output-format json \
-      --allowedTools "$ALLOWED_TOOLS" 2>&1)
+    if [ -n "$TIMEOUT_CMD" ]; then
+      RESULT_JSON=$(echo "$PROMPT" | "$TIMEOUT_CMD" 20m claude -p \
+        --output-format json \
+        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+      CLAUDE_EXIT=$?
+    else
+      RESULT_JSON=$(echo "$PROMPT" | claude -p \
+        --output-format json \
+        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+      CLAUDE_EXIT=$?
+    fi
+    if [ "$CLAUDE_EXIT" -eq 124 ]; then
+      echo "[$(date +%Y-%m-%d_%H:%M:%S)] TIMEOUT: Normal mode claude (new session) exceeded 20min" >> "$LOG_FILE"
+    fi
 
-    # jq で session_id を抽出（jq が必要: brew install jq）
-    NEW_SESSION_ID=$(echo "$RESULT_JSON" | jq -r '.session_id // empty' 2>/dev/null)
+    NEW_SESSION_ID=$(echo "$RESULT_JSON" | jq -r '.session_id // empty')
     if [ -n "$NEW_SESSION_ID" ]; then
-      echo "$NEW_SESSION_ID" > "$SESSION_FILE"
+      # -p オプション（一時的なプロンプト）の場合はセッションIDを上書きしない
+      if [ -z "$TEST_PROMPT_STRING" ]; then
+        echo "$NEW_SESSION_ID" > "$SESSION_FILE"
+      else
+        echo "[一時プロンプト] セッションID上書きスキップ" >> "$LOG_FILE"
+      fi
       echo "[session_id] $NEW_SESSION_ID" >> "$LOG_FILE"
     fi
 
-    echo "$RESULT_JSON" | jq -r '.result // .' 2>/dev/null >> "$LOG_FILE"
+    echo "$RESULT_JSON" | jq -r '.result // .' >> "$LOG_FILE"
   }
 
   if [ -f "$SESSION_FILE" ]; then
     SESSION_ID=$(cat "$SESSION_FILE")
     echo "[resume] session_id=$SESSION_ID" >> "$LOG_FILE"
 
-    RESULT=$(echo "$PROMPT" | claude -p \
-      --resume "$SESSION_ID" \
-      --allowedTools "$ALLOWED_TOOLS" 2>&1)
-
-    # セッション継続失敗時（"No conversation found" など）は新規作成
-    if echo "$RESULT" | grep -qi "No conversation found\|error"; then
-      echo "[resume失敗] $RESULT" >> "$LOG_FILE"
-      rm -f "$SESSION_FILE"
-      run_new_session
+    if [ -n "$TIMEOUT_CMD" ]; then
+      RESULT=$(echo "$PROMPT" | "$TIMEOUT_CMD" 20m claude -p \
+        --resume "$SESSION_ID" \
+        --output-format json \
+        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+      CLAUDE_EXIT=$?
     else
-      echo "$RESULT" >> "$LOG_FILE"
+      RESULT=$(echo "$PROMPT" | claude -p \
+        --resume "$SESSION_ID" \
+        --output-format json \
+        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+      CLAUDE_EXIT=$?
+    fi
+    if [ "$CLAUDE_EXIT" -eq 124 ]; then
+      echo "[$(date +%Y-%m-%d_%H:%M:%S)] TIMEOUT: Normal mode claude (resume) exceeded 20min" >> "$LOG_FILE"
+    fi
+
+    if echo "$RESULT" | jq empty 2>/dev/null; then
+      # 有効なJSON
+      IS_ERROR=$(echo "$RESULT" | jq -r '.is_error // false')
+      RESULT_TEXT=$(echo "$RESULT" | jq -r '.result // .')
+
+      if [ "$IS_ERROR" = "true" ] || echo "$RESULT_TEXT" | grep -qi "Nested sessions\|Cannot be launched inside"; then
+        echo "[resume失敗/環境エラー] $RESULT_TEXT" >> "$LOG_FILE"
+        echo "=== 自律行動終了: $(date) ===" >> "$LOG_FILE"
+        exit 1
+      elif echo "$RESULT_TEXT" | grep -qi "No conversation found"; then
+        echo "[resume失敗/セッション消失] $RESULT_TEXT" >> "$LOG_FILE"
+        rm -f "$SESSION_FILE"
+        run_new_session
+      else
+        NEW_SESSION_ID=$(echo "$RESULT" | jq -r '.session_id // empty')
+        if [ -n "$NEW_SESSION_ID" ]; then
+          if [ -z "$TEST_PROMPT_STRING" ]; then
+            echo "$NEW_SESSION_ID" > "$SESSION_FILE"
+          fi
+          echo "[session_id] $NEW_SESSION_ID" >> "$LOG_FILE"
+        fi
+        echo "$RESULT_TEXT" >> "$LOG_FILE"
+      fi
+    else
+      # JSONでない（生のエラー文字列）
+      if echo "$RESULT" | grep -qi "Nested sessions\|Cannot be launched inside"; then
+        echo "[resume失敗/環境エラー] $RESULT" >> "$LOG_FILE"
+        echo "=== 自律行動終了: $(date) ===" >> "$LOG_FILE"
+        exit 1
+      elif echo "$RESULT" | grep -qi "No conversation found"; then
+        echo "[resume失敗/セッション消失] $RESULT" >> "$LOG_FILE"
+        rm -f "$SESSION_FILE"
+        run_new_session
+      else
+        echo "$RESULT" >> "$LOG_FILE"
+      fi
     fi
   else
     run_new_session
   fi
 fi
 
-echo "=== 自律行動終了: $(date "+%Y-%m-%d %H:%M:%S") ===" >> "$LOG_FILE"
+echo "=== 自律行動終了: $(date) ===" >> "$LOG_FILE"

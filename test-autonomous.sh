@@ -121,9 +121,5 @@ fi
 echo ""
 echo "=== 終了 (exit: $EXIT_CODE) ==="
 echo "--- 最新の自律行動ログ ---"
-# autonomous-action.sh が生成したログファイルを表示
-# ログディレクトリ: プロジェクトディレクトリ/.autonomous-logs/
-# 例: ~/yourproject/.autonomous-logs/20260221_153000.log
-# ⚠️ 重要: 以下のパスは autonomous-action.sh の PROJECT_DIR と LOG_DIR_NAME に一致させる必要があります（必須）
-# autonomous-action.sh の設定箇所: L48 (PROJECT_DIR), L74 (LOG_DIR_NAME)
-ls -t /Users/yourname/yourproject/.autonomous-logs/*.log 2>/dev/null | head -1 | xargs cat 2>/dev/null
+# autonomous-action.sh が生成したログファイルを SCRIPT_DIR ベースで表示
+ls -t "$SCRIPT_DIR/.autonomous-logs/"*.log 2>/dev/null | head -1 | xargs cat 2>/dev/null
