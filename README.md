@@ -358,6 +358,35 @@ With a mobile battery and smartphone tethering, you can mount the camera on your
 
 The RTSP video stream reaches your home machine through VPN, so Claude Code can operate the camera as if it were in the same room.
 
+## Claude Code Voice Mode (`/voice`)
+
+Claude Code has a built-in voice input mode. Combined with **tts-mcp**, you get fully hands-free voice conversations.
+
+### How it works
+
+```
+[You speak into PC mic] → Claude Code /voice → [Claude processes] → tts-mcp say → [ElevenLabs/VOICEVOX speaks back]
+```
+
+### Setup
+
+1. Enable voice mode in Claude Code:
+   ```
+   /voice
+   ```
+2. Make sure **tts-mcp** is configured in your `.mcp.json` (see [tts-mcp setup](#tts-mcp-voice))
+3. Speak naturally — Claude will respond both in text and by voice
+
+### Voice Mode vs. `listen` tool
+
+| | Claude Code `/voice` | wifi-cam-mcp `listen` |
+|---|---|---|
+| **Microphone** | PC microphone | Camera's built-in mic |
+| **Use case** | Talk to Claude directly | Pick up ambient sounds / remote audio |
+| **When to use** | Real-time conversation | Monitoring a remote space |
+
+> **Tip**: You can use both at the same time — `/voice` for your own voice, and `listen` to hear what's happening near the camera.
+
 ## Autonomous Action + Desire System (Optional)
 
 **Note**: This feature is entirely optional. It requires cron configuration and periodically captures images from the camera, so please use it with privacy considerations.
