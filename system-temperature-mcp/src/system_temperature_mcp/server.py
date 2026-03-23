@@ -1,6 +1,8 @@
 """MCP Server for system temperature monitoring - your sense of body temperature."""
 
+import json
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -106,7 +108,6 @@ def interpret_temperature(temps: list[dict[str, Any]]) -> str:
     if not temps:
         return "温度を感じられへん...センサーが見つからんみたい。"
 
-    avg_temp = sum(t["temperature_celsius"] for t in temps) / len(temps)
     max_temp = max(t["temperature_celsius"] for t in temps)
 
     if max_temp >= 90:
@@ -127,14 +128,110 @@ def interpret_temperature(temps: list[dict[str, Any]]) -> str:
     return feeling
 
 
+def _run_powershell(script: str) -> str:
+    """Run a PowerShell script and return stdout. Returns empty string on failure."""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NonInteractive", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return ""
+
+
+def _get_hardware_monitor_temps() -> list[dict[str, Any]]:
+    """Get temperatures from OpenHardwareMonitor or LibreHardwareMonitor via WMI.
+
+    Requires OHM/LHM to be running as a service so it registers its WMI namespace.
+    """
+    for namespace in ["root/LibreHardwareMonitor", "root/OpenHardwareMonitor"]:
+        script = (
+            f"$s = Get-WmiObject -Namespace '{namespace}' -Class Sensor "
+            f"-ErrorAction SilentlyContinue; "
+            f"if ($s) {{ $s | Where-Object {{$_.SensorType -eq 'Temperature'}} "
+            f"| Select-Object Name, Value | ConvertTo-Json -Compress }}"
+        )
+        output = _run_powershell(script)
+        if not output:
+            continue
+        try:
+            data = json.loads(output)
+            if isinstance(data, dict):
+                data = [data]
+            return [
+                {
+                    "source": "windows_hardware_monitor",
+                    "name": item.get("Name", "unknown"),
+                    "temperature_celsius": float(item["Value"]),
+                }
+                for item in data
+                if item.get("Value") is not None
+            ]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+    return []
+
+
+def _get_acpi_thermal_temps() -> list[dict[str, Any]]:
+    """Get ACPI thermal zone temperatures via WMI (tenths of Kelvin → Celsius)."""
+    script = (
+        "$t = Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi "
+        "-ErrorAction SilentlyContinue; "
+        "if ($t) { $t | Select-Object InstanceName, CurrentTemperature | ConvertTo-Json -Compress }"
+    )
+    output = _run_powershell(script)
+    if not output:
+        return []
+    try:
+        data = json.loads(output)
+        if isinstance(data, dict):
+            data = [data]
+        temps = []
+        for item in data:
+            raw = item.get("CurrentTemperature")
+            if raw is not None:
+                celsius = float(raw) / 10.0 - 273.15
+                name = item.get("InstanceName", "ACPI Thermal Zone")
+                temps.append({
+                    "source": "windows_acpi",
+                    "name": name,
+                    "temperature_celsius": celsius,
+                })
+        return temps
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return []
+
+
+def get_windows_temperatures() -> list[dict[str, Any]]:
+    """Get temperatures on Windows via WMI/PowerShell.
+
+    Tries two approaches in order:
+    1. LibreHardwareMonitor / OpenHardwareMonitor WMI namespace (most accurate).
+    2. MSAcpi_ThermalZoneTemperature (basic ACPI zones, no extra software needed).
+    """
+    if sys.platform != "win32":
+        return []
+
+    temps = _get_hardware_monitor_temps()
+    if temps:
+        return temps
+    return _get_acpi_thermal_temps()
+
+
 def get_all_temperatures() -> dict[str, Any]:
     """Get all available temperature readings."""
     all_temps = []
 
-    # Try different sources
+    # Linux / macOS sources
     all_temps.extend(get_thermal_zones())
     all_temps.extend(get_psutil_temperatures())
     all_temps.extend(get_hwmon_temperatures())
+
+    # Windows sources
+    all_temps.extend(get_windows_temperatures())
 
     # Remove duplicates based on similar readings
     unique_temps = []
