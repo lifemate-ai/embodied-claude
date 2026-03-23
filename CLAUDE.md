@@ -220,6 +220,31 @@ ffplay rtsp://username:password@192.168.1.xxx:554/stream1
 cd wifi-cam-mcp && uv run wifi-cam-mcp
 ```
 
+## Claude Code 音声モード（/voice）との連携
+
+Claude Code に `/voice` コマンドで音声入力モードを有効にすると、マイクで話しかけるだけでやり取りできる。
+tts-mcp と組み合わせることで**完全な音声対話**が実現する。
+
+### セットアップ
+
+1. Claude Code で `/voice` を入力して音声モードを有効化
+2. tts-mcp が起動していることを確認（`.mcp.json` 参照）
+3. 話しかけると音声認識 → 処理 → ElevenLabs/VOICEVOX で音声返答
+
+### 音声モード利用時の動作ルール
+
+- ユーザーが話しかけてきたら、テキスト返答と同時に `say` ツールで音声でも返答する
+- `speaker` は `local`（PCスピーカー）を基本とし、go2rtc 設定済みの場合は `camera` も利用可
+- 感情タグ（`[excited]`, `[whispers]` など）を積極的に使って表情豊かに話す
+- 音声の長さは 1〜3文程度に抑えてテンポよく返す
+
+### wifi-cam-mcp の `listen` との使い分け
+
+| 機能 | 用途 |
+|------|------|
+| Claude Code `/voice` | **PCのマイク**で話しかける。リアルタイム音声入力 |
+| wifi-cam-mcp `listen` | **カメラ内蔵マイク**で周囲の音を拾う。遠隔地の音声確認など |
+
 ## 外出時の構成
 
 モバイルバッテリー + スマホテザリング + Tailscale VPN で外出散歩が可能。
