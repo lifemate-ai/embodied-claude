@@ -67,6 +67,13 @@ autonomous-action.sh
 # Autonomous action logs and session
 .autonomous-logs/
 .heartbeat-session-id
+heartbeat-session-id
+last-session-date.txt
+
+# User-specific config (use *.sample.conf as template)
+schedule.conf
+desires.conf
+desires.json
 
 # Google API credentials (NEVER commit)
 scripts/credentials.json
