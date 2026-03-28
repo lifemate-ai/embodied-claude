@@ -29,6 +29,7 @@
 | [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
 | [mobility-mcp](./mobility-mcp/) | 足 | ロボット掃除機を足として使う（Tuya制御） | VersLife L6 等 Tuya 対応ロボット掃除機（約12,000円〜） |
+| [toio-mcp](./toio-mcp/) | 手 | toio コアキューブを小さい可視アクチュエータとして使う | toio コアキューブ + 充電器 |
 
 ## アーキテクチャ
 
@@ -43,6 +44,7 @@
 - **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
 - **GPU**（音声認識用）: NVIDIA GPU（Whisper用、GeForceシリーズのVRAM 8GB以上のグラボ推奨）
 - **Tuya対応ロボット掃除機**（足・移動用、任意）: VersLife L6 等（約12,000円〜）
+- **toio コアキューブ**（小さい手・tool use 用、任意）: キューブ + 充電器
 
 ### ソフトウェア
 - Python 3.10+
@@ -239,6 +241,22 @@ python -m tinytuya wizard
 
 詳しくは [tinytuya のドキュメント](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys)を参照。
 
+#### toio-mcp（手）
+
+机上での tool use に向いた、小さい programmable hand として toio コアキューブを使います。
+
+```bash
+cd toio-mcp
+uv sync
+```
+
+任意の環境変数:
+
+- `TOIO_CUBE_NAME=123` で特定キューブの 3 桁 suffix を指定
+- `TOIO_DRY_RUN=1` で実機到着前に dry-run 動作
+
+付属の簡易プレイマットでも、mat ベースの位置決めツールを試し始められます。
+
 ### 3. Claude Code 設定
 
 テンプレートをコピーして、認証情報を設定：
@@ -354,6 +372,20 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 | `turn_right` | 右旋回 |
 | `stop_moving` | 即座に停止 |
 | `body_status` | バッテリー残量・現在状態の確認 |
+
+### toio-mcp
+
+| ツール | 説明 |
+|--------|------|
+| `connect_hand` / `disconnect_hand` | toio の手へ接続・切断 |
+| `hand_status` | バッテリー、姿勢、位置、向き、ボタン状態の取得 |
+| `move_hand_forward` / `move_hand_backward` | 短い相対移動 |
+| `rotate_hand_left` / `rotate_hand_right` | その場回転 |
+| `stop_hand` | モーター停止 |
+| `move_hand_to_position` / `move_hand_to_grid_cell` | マット上の位置決め |
+| `set_hand_orientation` | Position ID マット上で向きを設定 |
+| `set_hand_light` / `clear_hand_light` | RGB ランプ制御 |
+| `play_hand_note` / `stop_hand_sound` | スピーカー制御 |
 
 ## 外に連れ出す（オプション）
 
