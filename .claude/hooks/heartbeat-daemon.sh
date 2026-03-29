@@ -1,10 +1,15 @@
 #!/bin/bash
 # heartbeat-daemon.sh - 心拍デーモン
-# 5秒ごとにlaunchdで実行され、体の状態を /tmp/interoception_state.json に書き出す
+# 5秒ごとに実行され、体の状態を /tmp/interoception_state.json に書き出す
 # interoception.sh (UserPromptSubmitフック) がこのファイルを読んでコンテキストに注入する
+# macOS: launchd (com.embodied-claude.heartbeat.plist)
+# Linux: systemd user timer (heartbeat-daemon.timer)
 
 STATE_FILE="/tmp/interoception_state.json"
 WINDOW_SIZE=12  # 直近12エントリ（5秒×12=1分間）
+
+# --- OS判定 ---
+OS_TYPE="$(uname -s)"
 
 # --- 時刻 ---
 CURRENT_TIME=$(date '+%Y-%m-%dT%H:%M:%S%z')
@@ -27,30 +32,66 @@ else
 fi
 
 # --- CPU負荷（覚醒度） ---
-LOAD_AVG=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
-if [ -z "$LOAD_AVG" ]; then
-    LOAD_AVG=$(uptime | awk -F'load averages?: ' '{print $2}' | awk '{print $1}' | tr -d ',')
-fi
-NCPU=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+case "$OS_TYPE" in
+    Linux)
+        LOAD_AVG=$(awk '{print $1}' /proc/loadavg)
+        NCPU=$(nproc 2>/dev/null || echo 4)
+        ;;
+    Darwin)
+        LOAD_AVG=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
+        if [ -z "$LOAD_AVG" ]; then
+            LOAD_AVG=$(uptime | awk -F'load averages?: ' '{print $2}' | awk '{print $1}' | tr -d ',')
+        fi
+        NCPU=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+        ;;
+esac
 AROUSAL=$(echo "$LOAD_AVG $NCPU" | awk '{pct = ($1 / $2) * 100; if (pct > 100) pct = 100; printf "%.0f", pct}')
 
 # --- メモリ ---
-MEM_PRESSURE=$(memory_pressure 2>/dev/null | grep "System-wide memory free percentage" | awk '{print $NF}' | tr -d '%')
-if [ -z "$MEM_PRESSURE" ]; then
-    MEM_PRESSURE="0"
-fi
+case "$OS_TYPE" in
+    Linux)
+        MEM_TOTAL=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+        MEM_AVAIL=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+        if [ -n "$MEM_TOTAL" ] && [ "$MEM_TOTAL" -gt 0 ]; then
+            MEM_PRESSURE=$(echo "$MEM_AVAIL $MEM_TOTAL" | awk '{printf "%.0f", ($1 / $2) * 100}')
+        else
+            MEM_PRESSURE="0"
+        fi
+        ;;
+    Darwin)
+        MEM_PRESSURE=$(memory_pressure 2>/dev/null | grep "System-wide memory free percentage" | awk '{print $NF}' | tr -d '%')
+        if [ -z "$MEM_PRESSURE" ]; then
+            MEM_PRESSURE="0"
+        fi
+        ;;
+esac
 
 # --- 体温 ---
-THERMAL=$(sysctl -n machdep.xcpm.cpu_thermal_level 2>/dev/null || echo "0")
+case "$OS_TYPE" in
+    Linux)
+        RAW_TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo "0")
+        THERMAL=$(echo "$RAW_TEMP" | awk '{printf "%.1f", $1 / 1000}')
+        ;;
+    Darwin)
+        THERMAL=$(sysctl -n machdep.xcpm.cpu_thermal_level 2>/dev/null || echo "0")
+        ;;
+esac
 
 # --- 稼働時間（分） ---
-BOOT_TIME=$(sysctl -n kern.boottime 2>/dev/null | awk '{print $4}' | tr -d ',')
-if [ -n "$BOOT_TIME" ]; then
-    NOW_EPOCH=$(date +%s)
-    UPTIME_MIN=$(( (NOW_EPOCH - BOOT_TIME) / 60 ))
-else
-    UPTIME_MIN=0
-fi
+case "$OS_TYPE" in
+    Linux)
+        UPTIME_MIN=$(awk '{printf "%.0f", $1 / 60}' /proc/uptime)
+        ;;
+    Darwin)
+        BOOT_TIME=$(sysctl -n kern.boottime 2>/dev/null | awk '{print $4}' | tr -d ',')
+        if [ -n "$BOOT_TIME" ]; then
+            NOW_EPOCH=$(date +%s)
+            UPTIME_MIN=$(( (NOW_EPOCH - BOOT_TIME) / 60 ))
+        else
+            UPTIME_MIN=0
+        fi
+        ;;
+esac
 
 # --- ring buffer 管理 ---
 # 既存のstate fileからwindowを読み出し、新エントリを追加、古いのを削除
