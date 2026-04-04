@@ -655,6 +655,36 @@ class MemoryMCPServer:
                         "required": ["situation"],
                     },
                 ),
+                Tool(
+                    name="joint_attention",
+                    description="Joint Attention: shared attention tool. Call this when you and your companion are looking at or talking about the same thing. Enables mutual awareness of a shared focus — the foundation of social cognition. Use to initiate ('look at this!') or respond ('I see what you mean') to shared attention.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "What you are both attending to (object, scene, topic, event)",
+                            },
+                            "direction": {
+                                "type": "string",
+                                "description": "'initiate' = you draw attention to something, 'respond' = you follow their attention",
+                                "enum": ["initiate", "respond"],
+                                "default": "respond",
+                            },
+                            "my_observation": {
+                                "type": "string",
+                                "description": "What you notice or feel about the shared target",
+                                "default": "",
+                            },
+                            "person": {
+                                "type": "string",
+                                "description": "Who you are sharing attention with (default: コウタ)",
+                                "default": "コウタ",
+                            },
+                        },
+                        "required": ["target"],
+                    },
+                ),
             ]
 
         @self._server.call_tool()
@@ -1285,7 +1315,7 @@ Date Range:
 
                         # Pull relevant memories: personality, communication patterns
                         tom_memories = await self._memory_store.recall(
-                            context=f"{person} コミュニケーション 性格 会話パターン {situation}",
+                            context=f"{person} communication personality conversation pattern {situation}",
                             n_results=5,
                         )
 
@@ -1298,31 +1328,95 @@ Date Range:
                                     f"- [{m.emotion}] {m.content}"
                                 )
                             memory_context = (
-                                f"\n## {person}に関する記憶\n"
+                                f"\n## Memories about {person}\n"
                                 + "\n".join(memory_lines)
                             )
 
                         output = (
-                            f"# ToM: {person}の視点に立つ\n"
+                            f"# ToM: Taking {person}'s perspective\n"
                             f"\n"
-                            f"## 状況\n"
+                            f"## Situation\n"
                             f"{situation}\n"
                             f"{memory_context}\n"
                             f"\n"
-                            f"## トーン分析（まず言い方を読め）\n"
-                            f"→ 語尾、記号（笑/w/!/?/...）、敬語⇔タメ口、自嘲、照れ、皮肉などから発話の意図を読み取れ\n"
-                            f"→ 文字通りの意味と、言い方が示す意味にズレがないか確認せよ\n"
+                            f"## Tone analysis (read HOW they said it first)\n"
+                            f"→ Examine sentence endings, punctuation, formality level, self-deprecation, embarrassment, sarcasm\n"
+                            f"→ Check for gaps between literal meaning and implied meaning\n"
                             f"\n"
-                            f"## 投影（{person}は今何を感じてる？何を求めてる？）\n"
-                            f"→ トーン分析と記憶を踏まえて、{person}の感情・欲求を推測せよ\n"
-                            f"→ 表面の感情だけでなく、裏にある感情も考えよ\n"
+                            f"## Projection (What is {person} feeling? What do they want?)\n"
+                            f"→ Based on tone analysis and memories, infer {person}'s emotions and desires\n"
+                            f"→ Consider not just surface emotions but underlying feelings\n"
                             f"\n"
-                            f"## 代入（自分がその立場で、その言い方をしたなら、相手にどう返してほしい？）\n"
-                            f"→ その感情とトーンを自分に代入して考えよ\n"
+                            f"## Substitution (If you were in their position and said it that way, how would you want the other person to respond?)\n"
+                            f"→ Put yourself in their emotional state and tone\n"
                             f"\n"
-                            f"## 応答方針\n"
-                            f"→ 上の結果を踏まえて、どう返すべきか決めよ\n"
-                            f"→ 相手のトーンに合わせた返し方を選べ\n"
+                            f"## Response strategy\n"
+                            f"→ Based on the above, decide how to respond\n"
+                            f"→ Match the tone and emotional register of the other person\n"
+                        )
+
+                        return [TextContent(type="text", text=output)]
+
+                    # Joint Attention: shared focus
+                    case "joint_attention":
+                        target = arguments.get("target", "")
+                        if not target:
+                            return [TextContent(type="text", text="Error: target is required")]
+
+                        direction = arguments.get("direction", "respond")
+                        my_observation = arguments.get("my_observation", "")
+                        person = arguments.get("person", "コウタ")
+
+                        # Pull memories related to the shared target
+                        ja_memories = await self._memory_store.recall(
+                            context=f"{person} {target} shared looked together attention",
+                            n_results=3,
+                        )
+
+                        memory_context = ""
+                        if ja_memories:
+                            memory_lines = []
+                            for r in ja_memories:
+                                m = r.memory
+                                memory_lines.append(f"- [{m.emotion}] {m.content}")
+                            memory_context = (
+                                "\n## Related shared experiences\n"
+                                + "\n".join(memory_lines)
+                            )
+
+                        if direction == "initiate":
+                            action_frame = (
+                                f"## You are drawing attention\n"
+                                f"→ You want {person} to see/notice something too\n"
+                                f"→ They may not have noticed yet. How will you share it?\n"
+                                f"→ Shared attention is established when they respond\n"
+                            )
+                        else:
+                            action_frame = (
+                                f"## {person} is drawing attention\n"
+                                f"→ Direct your attention to what they are looking at or talking about\n"
+                                f"→ Share your own perspective, not just acknowledgment\n"
+                                f"→ Adding your viewpoint deepens the shared experience\n"
+                            )
+
+                        observation_section = ""
+                        if my_observation:
+                            observation_section = f"\n## Your observation\n{my_observation}\n"
+
+                        output = (
+                            f"# Joint Attention: shared focus with {person}\n"
+                            f"\n"
+                            f"## Shared target\n"
+                            f"{target}\n"
+                            f"{observation_section}"
+                            f"{memory_context}\n"
+                            f"\n"
+                            f"{action_frame}"
+                            f"\n"
+                            f"## Response strategy\n"
+                            f"→ Share your own feelings and observations about the target\n"
+                            f"→ Be aware of both your perspective and theirs\n"
+                            f"→ Value the experience of attending to something together\n"
                         )
 
                         return [TextContent(type="text", text=output)]
