@@ -1,8 +1,9 @@
 """
 Desire System MCP Server - ここねの自発的な欲求レベルを提供する。
 
-desires.json（desire_updater.pyが定期更新）を読み込み、
-現在の欲求状態をMCPツール経由で返す。
+v2: ホメオスタシス/アロスタシス対応
+- 不快度（discomfort）表示
+- セットポイントからの乖離で行動を駆動
 """
 
 from __future__ import annotations
@@ -17,18 +18,10 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from desire_updater import compute_desires, save_desires
+from desire_updater import DESIRE_CONFIGS, compute_desires, save_desires
 
 # 欲求レベル読み込み元
 DESIRES_PATH = Path(os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json")))
-
-# 欲求の日本語ラベル
-DESIRE_LABELS: dict[str, str] = {
-    "look_outside": "外を見たい",
-    "browse_curiosity": "何か調べたい",
-    "miss_companion": "コウタに会いたい",
-    "observe_room": "部屋を観察したい",
-}
 
 server = Server("desire-system")
 
@@ -49,19 +42,32 @@ def format_desires(data: dict[str, Any]) -> str:
     lines = []
     dominant = data.get("dominant", "")
     desires = data.get("desires", {})
+    discomforts = data.get("discomforts", {})
     updated_at = data.get("updated_at", "")
 
-    # dominant欲求
-    dominant_label = DESIRE_LABELS.get(dominant, dominant)
-    lines.append(f"【最も強い欲求】{dominant_label} (level: {desires.get(dominant, 0):.3f})")
+    # dominant欲求（不快度ベース）
+    dominant_label = DESIRE_CONFIGS[dominant].label if dominant in DESIRE_CONFIGS else dominant
+    dominant_discomfort = discomforts.get(dominant, 0)
+    lines.append(
+        f"【最も不快な欲求】{dominant_label} "
+        f"(level: {desires.get(dominant, 0):.3f}, discomfort: {dominant_discomfort:.3f})"
+    )
     lines.append("")
 
-    # 全欲求レベル
-    lines.append("【欲求レベル一覧】")
-    for key, level in sorted(desires.items(), key=lambda x: -x[1]):
-        label = DESIRE_LABELS.get(key, key)
-        bar = "█" * int(level * 10) + "░" * (10 - int(level * 10))
-        lines.append(f"  {label}: [{bar}] {level:.3f}")
+    # 全欲求レベル（不快度でソート）
+    lines.append("【欲求レベル一覧（不快度順）】")
+    sorted_names = sorted(discomforts.keys(), key=lambda k: -discomforts[k])
+    for key in sorted_names:
+        level = desires.get(key, 0)
+        discomfort = discomforts.get(key, 0)
+        cfg = DESIRE_CONFIGS.get(key)
+        label = cfg.label if cfg else key
+        set_point = cfg.set_point if cfg else 0.0
+        bar = "█" * int(discomfort * 10) + "░" * (10 - int(discomfort * 10))
+        lines.append(
+            f"  {label}: [{bar}] level={level:.3f} sp={set_point:.1f}"
+            f" discomfort={discomfort:.3f}"
+        )
 
     if updated_at:
         lines.append(f"\n更新: {updated_at}")
@@ -76,14 +82,17 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_desires",
             description=(
-                "Get Kokone's current desire levels. "
-                "IMPORTANT: Act immediately on any desire with level >= 0.7. "
+                "Get Kokone's current desire levels and discomfort (homeostasis). "
+                "Discomfort = distance from set point. "
+                "IMPORTANT: Act immediately on any desire with discomfort >= 0.5. "
                 "browse_curiosity -> WebSearch something interesting; "
                 "look_outside -> use camera to look outside; "
                 "miss_companion -> talk to コウタ proactively; "
-                "observe_room -> use camera to observe room. "
+                "observe_room -> use camera to observe room; "
+                "identity_coherence -> recall memories to reinforce self-model; "
+                "cognitive_load -> think about or discuss something interesting. "
                 "After acting, call satisfy_desire to recheck levels. "
-                "Keep acting until level drops below 0.5. "
+                "Keep acting until discomfort drops below 0.3. "
                 "Desires drive behavior - do not just report them."
             ),
             inputSchema={
@@ -95,10 +104,11 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="satisfy_desire",
             description=(
-                "Recalculate desire levels after taking an action. "
-                "Call this after every action to check if the desire is satisfied (level < 0.5). "
+                "Recalculate desire levels and discomfort after taking an action. "
+                "Call this after every action to check if homeostasis is restored "
+                "(discomfort < 0.3). "
                 "If still high, keep acting. "
-                "Loop: act -> satisfy_desire -> still high? -> act again."
+                "Loop: act -> satisfy_desire -> still uncomfortable? -> act again."
             ),
             inputSchema={
                 "type": "object",
@@ -110,10 +120,10 @@ async def list_tools() -> list[Tool]:
             name="boost_desire",
             description=(
                 "Boost a desire level due to novelty/surprise (dopamine/prediction error). "
-                "Call when you feel surprised or encounter unexpected info "
-                "(large prediction error). "
+                "Call when you feel surprised or encounter unexpected info. "
                 "e.g. コウタ says something unexpected -> boost browse_curiosity; "
-                "camera shows something unusual -> boost observe_room. "
+                "camera shows something unusual -> boost observe_room; "
+                "identity feels unstable -> boost identity_coherence. "
                 "Simulates dopamine response to novelty."
             ),
             inputSchema={
@@ -123,7 +133,7 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": (
                             "Name of the desire to boost: "
-                            "browse_curiosity, look_outside, miss_companion, observe_room"
+                            + ", ".join(DESIRE_CONFIGS.keys())
                         ),
                     },
                     "amount": {
@@ -184,23 +194,39 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )]
 
         desires = data.get("desires", {})
-        if desire_name not in desires:
-            valid = list(desires.keys())
+        discomforts = data.get("discomforts", {})
+        if desire_name not in desires and desire_name not in DESIRE_CONFIGS:
+            valid = list(DESIRE_CONFIGS.keys())
             return [TextContent(type="text", text=f"欲求名が不正: {desire_name}. 有効: {valid}")]
 
-        desires[desire_name] = min(1.0, desires[desire_name] + amount)
-        dominant = max(desires, key=lambda k: desires[k])
+        # レベルを上げる
+        desires[desire_name] = min(1.0, desires.get(desire_name, 0) + amount)
+
+        # 不快度を再計算
+        from datetime import datetime, timezone
+
+        from desire_updater import calculate_discomfort, get_allostatic_set_point
+        now = datetime.now(timezone.utc)
+        cfg = DESIRE_CONFIGS[desire_name]
+        adjusted_sp = get_allostatic_set_point(desire_name, now)
+        discomforts[desire_name] = round(calculate_discomfort(desires[desire_name], adjusted_sp), 3)
+
+        dominant = max(discomforts, key=lambda k: discomforts[k])
         data["desires"] = desires
+        data["discomforts"] = discomforts
         data["dominant"] = dominant
 
         DESIRES_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(DESIRES_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-        label = DESIRE_LABELS.get(desire_name, desire_name)
+        label = cfg.label
         return [TextContent(
             type="text",
-            text=f"[ドーパミン] {label} +{amount:.1f} → {desires[desire_name]:.3f}",
+            text=(
+                f"[ドーパミン] {label} +{amount:.1f} → "
+                f"level={desires[desire_name]:.3f} discomfort={discomforts[desire_name]:.3f}"
+            ),
         )]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
