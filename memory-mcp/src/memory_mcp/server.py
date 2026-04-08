@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -13,6 +14,7 @@ from mcp.types import TextContent, Tool
 from .config import MemoryConfig, ServerConfig
 from .episode import EpisodeManager
 from .memory import MemoryStore
+from .metacognition import MetacognitionTracker
 from .sensory import SensoryIntegration
 from .types import CameraPosition
 
@@ -28,6 +30,7 @@ class MemoryMCPServer:
         self._memory_store: MemoryStore | None = None
         self._episode_manager: EpisodeManager | None = None  # Phase 4.2
         self._sensory_integration: SensoryIntegration | None = None  # Phase 4.3
+        self._metacognition: MetacognitionTracker | None = None  # Phase 9
         self._server_config = ServerConfig.from_env()
         self._setup_handlers()
 
@@ -683,6 +686,59 @@ class MemoryMCPServer:
                             },
                         },
                         "required": ["target"],
+                    },
+                ),
+                # Phase 9: Metacognition
+                Tool(
+                    name="hypothesize",
+                    description="Register a hypothesis before taking action. Use this to make your reasoning explicit: 'I think X is the cause, so I will try Y.' This enables self-monitoring and helps detect when you're stuck in a failing approach.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "hypothesis": {
+                                "type": "string",
+                                "description": "What you believe to be true (e.g., 'The tilt bug is caused by inverted signs in camera.py')",
+                            },
+                            "context": {
+                                "type": "string",
+                                "description": "The problem you are trying to solve (e.g., 'Camera tilt direction is inverted')",
+                            },
+                            "approach": {
+                                "type": "string",
+                                "description": "What you plan to do based on this hypothesis (e.g., 'Swap the tilt direction signs in camera.py')",
+                            },
+                        },
+                        "required": ["hypothesis", "context", "approach"],
+                    },
+                ),
+                Tool(
+                    name="verify_hypothesis",
+                    description="Record the result of testing a hypothesis. Call this after observing the outcome of your approach. If rejected twice in the same context, you MUST change your approach or ask the human.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "hypothesis_id": {
+                                "type": "string",
+                                "description": "ID of the hypothesis to verify (returned by hypothesize)",
+                            },
+                            "outcome": {
+                                "type": "string",
+                                "description": "What actually happened (e.g., 'Swapped signs but camera still moves wrong direction')",
+                            },
+                            "succeeded": {
+                                "type": "boolean",
+                                "description": "Whether the hypothesis was confirmed (true) or rejected (false)",
+                            },
+                        },
+                        "required": ["hypothesis_id", "outcome", "succeeded"],
+                    },
+                ),
+                Tool(
+                    name="get_metacognition",
+                    description="Get metacognition status: active hypotheses, recent rejections, and warnings about stuck patterns. Use this to reflect on your reasoning process.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
                     },
                 ),
             ]
@@ -1445,6 +1501,95 @@ Date Range:
                             return [TextContent(type="text", text=f"Memory {memory_id} updated.")]
                         return [TextContent(type="text", text=f"Error: Memory {memory_id} not found.")]
 
+                    # Phase 9: Metacognition
+                    case "hypothesize":
+                        hypothesis = arguments.get("hypothesis", "")
+                        context = arguments.get("context", "")
+                        approach = arguments.get("approach", "")
+                        if not hypothesis or not context or not approach:
+                            return [TextContent(type="text", text="Error: hypothesis, context, and approach are required")]
+
+                        h = self._metacognition.hypothesize(hypothesis, context, approach)
+                        warning = ""
+                        if h.rejection_count >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
+                            warning = (
+                                f"\n⚠️ WARNING: {h.rejection_count} hypotheses already rejected in this context. "
+                                f"Consider changing your approach entirely or asking the human."
+                            )
+                        return [TextContent(type="text", text=(
+                            f"Hypothesis registered!\n"
+                            f"ID: {h.id}\n"
+                            f"Hypothesis: {h.hypothesis}\n"
+                            f"Approach: {h.approach}\n"
+                            f"Context: {h.context}"
+                            f"{warning}"
+                        ))]
+
+                    case "verify_hypothesis":
+                        hypothesis_id = arguments.get("hypothesis_id", "")
+                        outcome = arguments.get("outcome", "")
+                        succeeded = arguments.get("succeeded", False)
+                        if not hypothesis_id or not outcome:
+                            return [TextContent(type="text", text="Error: hypothesis_id and outcome are required")]
+
+                        h = self._metacognition.verify(hypothesis_id, outcome, succeeded)
+                        if h is None:
+                            return [TextContent(type="text", text=f"Error: Hypothesis {hypothesis_id} not found")]
+
+                        status_emoji = "✅" if succeeded else "❌"
+                        result_text = (
+                            f"{status_emoji} Hypothesis {h.status.value}\n"
+                            f"Hypothesis: {h.hypothesis}\n"
+                            f"Outcome: {outcome}"
+                        )
+
+                        if not succeeded:
+                            context_history = self._metacognition.get_context_history(h.context)
+                            rejections = sum(1 for x in context_history if x.status.value == "rejected")
+                            if rejections >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
+                                result_text += (
+                                    f"\n\n⚠️ APPROACH CHANGE REQUIRED: {rejections} hypotheses rejected "
+                                    f"in context '{h.context}'. Stop and reconsider your fundamental assumptions, "
+                                    f"or ask the human for guidance."
+                                )
+
+                        return [TextContent(type="text", text=result_text)]
+
+                    case "get_metacognition":
+                        status = self._metacognition.get_status()
+
+                        lines = ["## Metacognition Status\n"]
+
+                        if status["warnings"]:
+                            lines.append("### ⚠️ Warnings")
+                            for w in status["warnings"]:
+                                lines.append(f"- {w}")
+                            lines.append("")
+
+                        active = status["active_hypotheses"]
+                        if active:
+                            lines.append(f"### Active Hypotheses ({len(active)})")
+                            for h in active:
+                                lines.append(f"- **{h['id']}**: {h['hypothesis']}")
+                                lines.append(f"  Approach: {h['approach']}")
+                                lines.append(f"  Context: {h['context']}")
+                            lines.append("")
+
+                        recent = status["recent_rejections"]
+                        if recent:
+                            lines.append("### Recent Rejections")
+                            for h in recent:
+                                lines.append(f"- ❌ {h['hypothesis']} → {h['outcome']}")
+                            lines.append("")
+
+                        stats = status["stats"]
+                        lines.append("### Stats")
+                        lines.append(f"- Total hypotheses: {stats['total']}")
+                        lines.append(f"- Confirmed: {stats['confirmed']}, Rejected: {stats['rejected']}")
+                        lines.append(f"- Confirmation rate: {stats['confirmation_rate']}")
+
+                        return [TextContent(type="text", text="\n".join(lines))]
+
                     case _:
                         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1466,6 +1611,11 @@ Date Range:
         # Phase 4.3: Initialize sensory integration
         self._sensory_integration = SensoryIntegration(self._memory_store)
         logger.info("Sensory integration initialized")
+
+        # Phase 9: Initialize metacognition tracker
+        metacog_path = Path(config.db_path).parent / "metacognition.json"
+        self._metacognition = MetacognitionTracker(metacog_path)
+        logger.info("Metacognition tracker initialized")
 
     async def disconnect_memory(self) -> None:
         """Disconnect from memory store."""
