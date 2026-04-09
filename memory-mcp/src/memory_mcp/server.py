@@ -68,7 +68,7 @@ class MemoryMCPServer:
                                 "type": "string",
                                 "description": "Category of memory",
                                 "default": "daily",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": ["core", "daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
                             },
                             "auto_link": {
                                 "type": "boolean",
@@ -111,7 +111,7 @@ class MemoryMCPServer:
                             "category_filter": {
                                 "type": "string",
                                 "description": "Filter by category (optional)",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": ["core", "daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
                             },
                             "date_from": {
                                 "type": "string",
@@ -162,7 +162,7 @@ class MemoryMCPServer:
                             "category_filter": {
                                 "type": "string",
                                 "description": "Filter by category (optional)",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": ["core", "daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
                             },
                         },
                         "required": [],
@@ -633,7 +633,7 @@ class MemoryMCPServer:
                             "category": {
                                 "type": "string",
                                 "description": "New category (optional)",
-                                "enum": ["daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
+                                "enum": ["core", "daily", "philosophical", "technical", "memory", "observation", "feeling", "conversation"],
                             },
                         },
                         "required": ["memory_id"],

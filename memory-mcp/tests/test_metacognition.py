@@ -1,6 +1,5 @@
 """Tests for metacognition module."""
 
-import json
 from pathlib import Path
 
 import pytest
@@ -37,7 +36,7 @@ class TestHypothesize:
     def test_supersedes_previous_active_in_same_context(
         self, tracker: MetacognitionTracker
     ) -> None:
-        h1 = tracker.hypothesize("first", "ctx", "a1")
+        tracker.hypothesize("first", "ctx", "a1")
         h2 = tracker.hypothesize("second", "ctx", "a2")
 
         status = tracker.get_status()

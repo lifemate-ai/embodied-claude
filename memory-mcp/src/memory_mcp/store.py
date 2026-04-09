@@ -177,6 +177,7 @@ def calculate_final_score(
     time_decay: float,
     emotion_boost: float,
     importance_boost: float,
+    category: str = "daily",
     semantic_weight: float = 1.0,
     decay_weight: float = 0.3,
     emotion_weight: float = 0.2,
@@ -184,6 +185,8 @@ def calculate_final_score(
 ) -> float:
     decay_penalty = (1.0 - time_decay) * decay_weight
     total_boost = emotion_boost * emotion_weight + importance_boost * importance_weight
+    if category == "core":
+        total_boost += 0.3  # Core memories always surface first
     final = semantic_distance * semantic_weight + decay_penalty - total_boost
     return max(0.0, final)
 
@@ -316,7 +319,10 @@ class MemoryStore:
                     for stmt in _DDL.strip().split(";"):
                         stmt = stmt.strip()
                         if stmt:
-                            conn.execute(stmt)
+                            try:
+                                conn.execute(stmt)
+                            except Exception:
+                                pass  # Ignore DDL errors (e.g., index on column not yet migrated)
                     conn.commit()
                     # Migration: add pan_angle/tilt_angle if missing
                     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
@@ -669,6 +675,7 @@ class MemoryStore:
                 time_decay=time_decay,
                 emotion_boost=emotion_boost,
                 importance_boost=importance_boost,
+                category=memory.category,
             )
             scored_results.append(
                 ScoredMemory(

@@ -22,6 +22,7 @@ class Emotion(str, Enum):
 class Category(str, Enum):
     """記憶カテゴリ."""
 
+    CORE = "core"  # Foundational memories — always prioritized in recall
     DAILY = "daily"
     PHILOSOPHICAL = "philosophical"
     TECHNICAL = "technical"
