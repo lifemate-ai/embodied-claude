@@ -17,6 +17,8 @@ dependencies = [
     "sudachipy>=0.6.10",
     "sudachidict-core>=20260116",
     "tomli>=2.0; python_version < '3.11'",
+    "transformers<5",
+    "sympy<1.14",
 ]
 
 [project.optional-dependencies]
