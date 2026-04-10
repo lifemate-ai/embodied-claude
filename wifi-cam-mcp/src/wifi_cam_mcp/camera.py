@@ -264,21 +264,31 @@ class TapoCamera:
 
     async def _capture_image_impl(self, save_to_file: bool) -> CaptureResult:
         """Internal capture implementation."""
-        # Try ONVIF snapshot first
-        onvif_error = None
         image_data = None
-        try:
-            image_data = await self._try_onvif_snapshot()
-        except Exception as e:
-            onvif_error = str(e)
 
-        # Fall back to RTSP if ONVIF snapshot fails
+        # If a custom stream URL is set, prefer RTSP (higher resolution).
+        # ONVIF snapshot often returns lower resolution (e.g. 640x480).
+        if self._config.stream_url:
+            try:
+                image_data = await self._capture_via_rtsp()
+            except Exception as e:
+                logger.info("RTSP capture failed: %s, trying ONVIF snapshot", e)
+
+        # Try ONVIF snapshot (default path, or fallback from RTSP)
         if image_data is None:
-            logger.info(
-                "ONVIF snapshot unavailable (reason: %s), falling back to RTSP capture",
-                onvif_error or "empty response",
-            )
-            image_data = await self._capture_via_rtsp()
+            onvif_error = None
+            try:
+                image_data = await self._try_onvif_snapshot()
+            except Exception as e:
+                onvif_error = str(e)
+
+            # Fall back to RTSP if ONVIF snapshot also fails
+            if image_data is None:
+                logger.info(
+                    "ONVIF snapshot unavailable (reason: %s), falling back to RTSP capture",
+                    onvif_error or "empty response",
+                )
+                image_data = await self._capture_via_rtsp()
 
         # Process image
         image = Image.open(io.BytesIO(image_data))
@@ -444,17 +454,18 @@ class TapoCamera:
             pan_delta = -pan_delta
 
         try:
-            # Build the RelativeMove request as a dict.
-            # create_type("RelativeMove") leaves nested structures as None,
-            # so we construct the full structure ourselves.
-            await self._ptz_service.RelativeMove(
-                {
-                    "ProfileToken": self._profile_token,
-                    "Translation": {
-                        "PanTilt": {"x": pan_delta, "y": tilt_delta},
-                    },
-                }
-            )
+            ptz_mode = get_behavior("wifi-cam", "ptz_mode", self._config.ptz_mode)
+
+            if ptz_mode == "relative":
+                await self._ptz_relative_move(pan_delta, tilt_delta)
+            elif ptz_mode == "continuous":
+                await self._ptz_continuous_move(pan_delta, tilt_delta, degrees)
+            else:
+                # Auto: try RelativeMove, fall back to ContinuousMove
+                try:
+                    await self._ptz_relative_move(pan_delta, tilt_delta)
+                except Exception:
+                    await self._ptz_continuous_move(pan_delta, tilt_delta, degrees)
 
             # Update software tracking as well
             match direction:
@@ -467,7 +478,7 @@ class TapoCamera:
                 case Direction.DOWN:
                     self._sw_position.tilt = max(-90.0, self._sw_position.tilt - degrees)
 
-            # Give the motor time to move
+            # Give the motor time to settle
             await asyncio.sleep(0.5)
 
             return MoveResult(
@@ -483,6 +494,43 @@ class TapoCamera:
                 success=False,
                 message=f"Failed to move: {e!s}",
             )
+
+    async def _ptz_relative_move(self, pan_delta: float, tilt_delta: float) -> None:
+        """Move camera using ONVIF RelativeMove (Tapo, etc.)."""
+        await self._ptz_service.RelativeMove(
+            {
+                "ProfileToken": self._profile_token,
+                "Translation": {
+                    "PanTilt": {"x": pan_delta, "y": tilt_delta},
+                },
+            }
+        )
+
+    async def _ptz_continuous_move(
+        self, pan_delta: float, tilt_delta: float, degrees: int
+    ) -> None:
+        """Move camera using ONVIF ContinuousMove + Stop (Imou, etc.)."""
+        # Normalize velocity direction to -1..1 range
+        mag = max(abs(pan_delta), abs(tilt_delta), 0.001)
+        # Invert pan direction: ContinuousMove convention is opposite to
+        # RelativeMove on some cameras (e.g. Imou vs Tapo)
+        vx = -pan_delta / mag
+        vy = tilt_delta / mag
+        # Duration proportional to degrees (calibrated: ~1s for 30 degrees)
+        move_duration = max(0.3, degrees / 30.0)
+
+        await self._ptz_service.ContinuousMove(
+            {
+                "ProfileToken": self._profile_token,
+                "Velocity": {
+                    "PanTilt": {"x": vx * 0.5, "y": vy * 0.5},
+                },
+            }
+        )
+        await asyncio.sleep(move_duration)
+        await self._ptz_service.Stop(
+            {"ProfileToken": self._profile_token, "PanTilt": True, "Zoom": True}
+        )
 
     def get_position(self) -> CameraPosition:
         """Get current camera position (software-tracked).
