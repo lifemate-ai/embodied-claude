@@ -1536,9 +1536,10 @@ Date Range:
 
                         if self._metacognition is None:
                             return [TextContent(type="text", text="Error: metacognition not initialized")]
-                        h = self._metacognition.verify(hypothesis_id, outcome, succeeded)
-                        if h is None:
+                        result = self._metacognition.verify(hypothesis_id, outcome, succeeded)
+                        if result is None:
                             return [TextContent(type="text", text=f"Error: Hypothesis {hypothesis_id} not found")]
+                        h = result
 
                         status_emoji = "✅" if succeeded else "❌"
                         result_text = (
@@ -1548,7 +1549,7 @@ Date Range:
                         )
 
                         if not succeeded:
-                            context_history = self._metacognition.get_context_history(h.context)  # type: ignore[union-attr]
+                            context_history = self._metacognition.get_context_history(h.context)
                             rejections = sum(1 for x in context_history if x.status.value == "rejected")
                             if rejections >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
                                 result_text += (
