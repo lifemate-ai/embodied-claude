@@ -1509,6 +1509,8 @@ Date Range:
                         if not hypothesis or not context or not approach:
                             return [TextContent(type="text", text="Error: hypothesis, context, and approach are required")]
 
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
                         h = self._metacognition.hypothesize(hypothesis, context, approach)
                         warning = ""
                         if h.rejection_count >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
@@ -1532,6 +1534,8 @@ Date Range:
                         if not hypothesis_id or not outcome:
                             return [TextContent(type="text", text="Error: hypothesis_id and outcome are required")]
 
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
                         h = self._metacognition.verify(hypothesis_id, outcome, succeeded)
                         if h is None:
                             return [TextContent(type="text", text=f"Error: Hypothesis {hypothesis_id} not found")]
@@ -1544,7 +1548,7 @@ Date Range:
                         )
 
                         if not succeeded:
-                            context_history = self._metacognition.get_context_history(h.context)
+                            context_history = self._metacognition.get_context_history(h.context)  # type: ignore[union-attr]
                             rejections = sum(1 for x in context_history if x.status.value == "rejected")
                             if rejections >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
                                 result_text += (
@@ -1556,6 +1560,8 @@ Date Range:
                         return [TextContent(type="text", text=result_text)]
 
                     case "get_metacognition":
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
                         status = self._metacognition.get_status()
 
                         lines = ["## Metacognition Status\n"]

@@ -46,7 +46,9 @@ class CameraConfig:
             os.getenv(f"{prefix}_PTZ_MODE", "") or os.getenv("TAPO_PTZ_MODE", "") or "auto"
         ).lower()
         if ptz_mode not in ("auto", "relative", "continuous"):
-            raise ValueError(f"Invalid PTZ mode '{ptz_mode}'. Must be 'auto', 'relative', or 'continuous'.")
+            raise ValueError(
+                f"Invalid PTZ mode '{ptz_mode}'. Must be 'auto', 'relative', or 'continuous'."
+            )
         max_width = int(os.getenv("CAPTURE_MAX_WIDTH", "1920"))
         max_height = int(os.getenv("CAPTURE_MAX_HEIGHT", "1080"))
 
