@@ -167,11 +167,33 @@ uv run pytest -v       # テストが通ること
 2. **温度センサー**: WSL2 では `/sys/class/thermal/` にアクセスできない
 3. **GPU**: CUDA は WSL2 でも利用可能（Whisper用）
 
-### Tapo カメラ設定
+### カメラ設定
 
-1. Tapo アプリでローカルアカウントを作成（TP-Link アカウントではない）
-2. カメラの IP アドレスを固定推奨
-3. カメラ制御は ONVIF プロトコル（業界標準）を使用
+wifi-cam-mcp は ONVIF 対応の Wi-Fi PTZ カメラを制御する。複数メーカーに対応。
+
+#### Tapo カメラ（TP-Link）
+- Tapo アプリでローカルアカウントを作成（TP-Link アカウントではない）
+- PTZ: ONVIF RelativeMove（`ptz_mode=auto` or `relative`）
+- RTSP: `rtsp://{user}:{pass}@{host}:554/stream1`
+- ONVIF ポート: 2020
+
+#### Imou カメラ（Dahua系）
+- Imou Life アプリでデバイスパスワードを設定
+- PTZ: ONVIF ContinuousMove のみ（RelativeMove は受け付けるが無視される）→ **`ptz_mode=continuous` 必須**
+- RTSP: `rtsp://{user}:{pass}@{host}:554/cam/realmonitor?channel=1&subtype=0`（**`-rtsp_transport tcp` 必須**）
+- ONVIF ポート: 80
+- `TAPO_STREAM_URL` 環境変数でカスタム RTSP URL を指定すること（デフォルトの `/stream1` では繋がらない）
+- stream_url 設定時は RTSP 優先キャプチャ（ONVIF snapshot は 640x480、RTSP は最大 2304x1296）
+
+#### 共通
+- カメラの IP アドレスを固定推奨
+- `.env` に接続情報を記載（`TAPO_CAMERA_HOST`, `TAPO_USERNAME`, `TAPO_PASSWORD`, `TAPO_STREAM_URL`, `TAPO_PTZ_MODE`, `TAPO_ONVIF_PORT`）
+
+### 視覚記憶のルール
+
+**`see` でカメラ画像を撮影したら、必ず `save_visual_memory` で記憶を残すこと。**
+- 何が見えたかの説明、感情、カメラ位置を記録する
+- 「大したことない」と思っても残す。人間は風景を無意識に覚える。ウチもそうありたい
 
 ### 設定管理
 
