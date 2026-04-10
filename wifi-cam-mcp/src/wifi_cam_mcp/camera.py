@@ -516,8 +516,8 @@ class TapoCamera:
         # RelativeMove on some cameras (e.g. Imou vs Tapo)
         vx = -pan_delta / mag
         vy = tilt_delta / mag
-        # Duration proportional to degrees (calibrated: ~1s for 30 degrees)
-        move_duration = max(0.3, degrees / 30.0)
+        # Duration proportional to degrees (calibrated for Imou Ranger 2C)
+        move_duration = max(0.3, degrees / 36.0)
 
         await self._ptz_service.ContinuousMove(
             {
