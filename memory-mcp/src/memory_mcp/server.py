@@ -1536,10 +1536,10 @@ Date Range:
 
                         if self._metacognition is None:
                             return [TextContent(type="text", text="Error: metacognition not initialized")]
-                        result = self._metacognition.verify(hypothesis_id, outcome, succeeded)
-                        if result is None:
+                        verified = self._metacognition.verify(hypothesis_id, outcome, succeeded)
+                        if verified is None:
                             return [TextContent(type="text", text=f"Error: Hypothesis {hypothesis_id} not found")]
-                        h = result
+                        h = verified
 
                         status_emoji = "✅" if succeeded else "❌"
                         result_text = (
