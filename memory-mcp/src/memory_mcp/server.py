@@ -1509,6 +1509,8 @@ Date Range:
                         if not hypothesis or not context or not approach:
                             return [TextContent(type="text", text="Error: hypothesis, context, and approach are required")]
 
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
                         h = self._metacognition.hypothesize(hypothesis, context, approach)
                         warning = ""
                         if h.rejection_count >= MetacognitionTracker.APPROACH_CHANGE_THRESHOLD:
@@ -1532,9 +1534,12 @@ Date Range:
                         if not hypothesis_id or not outcome:
                             return [TextContent(type="text", text="Error: hypothesis_id and outcome are required")]
 
-                        h = self._metacognition.verify(hypothesis_id, outcome, succeeded)
-                        if h is None:
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
+                        verified = self._metacognition.verify(hypothesis_id, outcome, succeeded)
+                        if verified is None:
                             return [TextContent(type="text", text=f"Error: Hypothesis {hypothesis_id} not found")]
+                        h = verified
 
                         status_emoji = "✅" if succeeded else "❌"
                         result_text = (
@@ -1556,6 +1561,8 @@ Date Range:
                         return [TextContent(type="text", text=result_text)]
 
                     case "get_metacognition":
+                        if self._metacognition is None:
+                            return [TextContent(type="text", text="Error: metacognition not initialized")]
                         status = self._metacognition.get_status()
 
                         lines = ["## Metacognition Status\n"]
