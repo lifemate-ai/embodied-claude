@@ -440,9 +440,9 @@ class MemoryMCPServer:
                             },
                             "resolution": {
                                 "type": "string",
-                                "description": "Image resolution for memory storage: 'low' (160x120), 'medium' (320x240, default), 'high' (640x480)",
+                                "description": "Image resolution for memory storage: 'low' (160x120), 'medium' (320x240, default), 'high' (640x480), 'full_hd' (1920x1080)",
                                 "default": "medium",
-                                "enum": ["low", "medium", "high"],
+                                "enum": ["low", "medium", "high", "full_hd"],
                             },
                         },
                         "required": ["content", "image_path", "camera_position"],

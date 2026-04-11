@@ -6,12 +6,23 @@
 
 STATE_FILE="/tmp/interoception_state.json"
 
+# Garmin heart rate cache (updated by garmin-hr-cache.sh cron job)
+GARMIN_HR_FILE="/tmp/garmin_hr_latest.txt"
+GARMIN_HR=""
+if [ -f "$GARMIN_HR_FILE" ]; then
+    GARMIN_HR=$(cat "$GARMIN_HR_FILE" 2>/dev/null)
+fi
+
 # state file がなければフォールバック（デーモン未起動時）
 if [ ! -f "$STATE_FILE" ]; then
     CURRENT_TIME=$(date '+%H:%M:%S')
     CURRENT_DOW=$(date '+%a')
     CURRENT_DATE=$(date '+%Y-%m-%d')
-    echo "[interoception] time=${CURRENT_TIME} day=${CURRENT_DOW} date=${CURRENT_DATE} (heartbeat daemon not running)"
+    HR_PART=""
+    if [ -n "$GARMIN_HR" ]; then
+        HR_PART=" companion_hr=${GARMIN_HR}"
+    fi
+    echo "[interoception] time=${CURRENT_TIME} day=${CURRENT_DOW} date=${CURRENT_DATE}${HR_PART} (heartbeat daemon not running)"
     exit 0
 fi
 

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .image_utils import encode_image_for_memory, resolve_resolution
+from .image_utils import encode_image_for_memory, resolve_quality, resolve_resolution
 from .types import CameraPosition, Memory, SensoryData
 
 if TYPE_CHECKING:
@@ -53,8 +53,9 @@ class SensoryIntegration:
         """
         # 画像をリサイズ＆base64エンコード
         max_width, max_height = resolve_resolution(resolution)
+        quality = resolve_quality(resolution)
         image_data = encode_image_for_memory(
-            image_path, max_width=max_width, max_height=max_height
+            image_path, max_width=max_width, max_height=max_height, quality=quality
         )
 
         # 感覚データを作成
