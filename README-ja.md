@@ -46,16 +46,25 @@
 - **Tuya対応ロボット掃除機**（足・移動用、任意）: VersLife L6 等（約12,000円〜）
 
 ### ソフトウェア
+
+**必須（全構成共通）:**
 - Python 3.10+
 - uv（Python パッケージマネージャー）
-- ffmpeg 5+（画像・音声キャプチャ用）
-- OpenCV（USB カメラ用）
-- Pillow（視覚記憶の画像リサイズ・base64エンコード用）
-- OpenAI Whisper（音声認識用、ローカル実行）
-- ElevenLabs API キー（音声合成用、任意）
-- VOICEVOX（音声合成用、無料・ローカル、任意）
-- go2rtc（カメラスピーカー出力用、自動ダウンロード対応）
-- **mpv または ffplay**（ローカル音声再生用）: mpv 推奨（後述）
+
+**MCP サーバーごと（使うものだけインストール）:**
+
+| ソフトウェア | 必要とする MCP | 備考 |
+|------------|--------------|------|
+| ffmpeg 5+ | wifi-cam-mcp, tts-mcp | 画像・音声キャプチャ |
+| mpv または ffplay | tts-mcp | ローカル音声再生 |
+| OpenCV | usb-webcam-mcp | USB カメラ使用時のみ |
+| Pillow | memory-mcp | 視覚記憶の画像処理 |
+| OpenAI Whisper | wifi-cam-mcp | 音声認識（NVIDIA GPU 推奨） |
+| ElevenLabs API キー | tts-mcp | クラウド TTS（任意） |
+| VOICEVOX | tts-mcp | ローカル TTS、無料（任意） |
+| go2rtc | tts-mcp | カメラスピーカー出力（自動ダウンロード） |
+| xAI API キー | x-mcp | Grok 経由の X 検索 |
+| X Developer アカウント | x-mcp | ツイート投稿 |
 
 ## セットアップ
 

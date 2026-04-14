@@ -46,16 +46,25 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 - **Tuya-compatible Robot Vacuum** (legs/locomotion, optional): VersLife L6 etc. (~$80)
 
 ### Software
+
+**Required (all setups):**
 - Python 3.10+
 - uv (Python package manager)
-- ffmpeg 5+ (image/audio capture)
-- OpenCV (USB camera)
-- Pillow (visual memory image resize/base64 encoding)
-- OpenAI Whisper (local speech recognition)
-- ElevenLabs API key (text-to-speech, optional)
-- VOICEVOX (text-to-speech, free & local, optional)
-- go2rtc (camera speaker output, auto-downloaded)
-- **mpv or ffplay** (local audio playback): mpv recommended (see below)
+
+**Per MCP server (install only what you use):**
+
+| Software | Required by | Notes |
+|----------|------------|-------|
+| ffmpeg 5+ | wifi-cam-mcp, tts-mcp | Image/audio capture |
+| mpv or ffplay | tts-mcp | Local audio playback |
+| OpenCV | usb-webcam-mcp | USB camera only |
+| Pillow | memory-mcp | Visual memory image processing |
+| OpenAI Whisper | wifi-cam-mcp | Speech recognition (NVIDIA GPU recommended) |
+| ElevenLabs API key | tts-mcp | Cloud TTS (optional) |
+| VOICEVOX | tts-mcp | Local TTS, free (optional) |
+| go2rtc | tts-mcp | Camera speaker output (auto-downloaded) |
+| xAI API key | x-mcp | X search via Grok |
+| X Developer account | x-mcp | Tweet posting |
 
 ## Setup
 
