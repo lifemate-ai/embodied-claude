@@ -29,7 +29,7 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 | [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | Body temperature | System temperature monitoring | Linux sensors |
 | [mobility-mcp](./mobility-mcp/) | Legs | Use a robot vacuum as legs (Tuya control) | Tuya-compatible robot vacuums e.g. VersLife L6 (~$80) |
-| [toio-mcp](./toio-mcp/) | Hand | Use a toio Core Cube as a tiny visible actuator | toio Core Cube + charger |
+| [x-mcp](./x-mcp/) | Social | Search & post to X (Twitter) via Grok + Twitter API | xAI API key + X Developer account |
 
 ## Architecture
 
@@ -44,7 +44,6 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 - **Wi-Fi PTZ Camera** (recommended): TP-Link Tapo C210 or C220 (~$30)
 - **GPU** (for speech recognition): NVIDIA GPU (for Whisper, 8GB+ VRAM recommended)
 - **Tuya-compatible Robot Vacuum** (legs/locomotion, optional): VersLife L6 etc. (~$80)
-- **toio Core Cube** (small hand/tool-use actuator, optional): cube + charger
 
 ### Software
 - Python 3.10+
@@ -216,21 +215,26 @@ python -m tinytuya wizard
 
 See the [tinytuya documentation](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys) for details.
 
-#### toio-mcp (Hand)
+#### x-mcp (Social / X Integration)
 
-Uses a toio Core Cube as a small programmable hand for desk-scale tool use.
+Lets Claude search X (Twitter) in real-time via Grok and post tweets.
 
 ```bash
-cd toio-mcp
+cd x-mcp
 uv sync
 ```
 
-Optional environment variables:
+**Required API keys:**
 
-- `TOIO_CUBE_NAME=123` to target a specific cube by its 3-digit suffix
-- `TOIO_DRY_RUN=1` to prototype the MCP server before the real cube arrives
+| Key | Where to get it |
+|-----|----------------|
+| `XAI_API_KEY` | [xAI Console](https://console.x.ai/) |
+| `X_CONSUMER_KEY` | [X Developer Portal](https://developer.x.com/en/portal/projects-and-apps) → Keys and tokens |
+| `X_CONSUMER_SECRET` | Same as above |
+| `X_ACCESS_TOKEN` | Same as above |
+| `X_ACCESS_TOKEN_SECRET` | Same as above |
 
-The bundled simple play mat is enough to start using mat-aware positioning tools.
+> **Important**: Do NOT create a `.env` file inside `x-mcp/`. All credentials are managed centrally in `.mcp.json` (see below).
 
 ### 3. Claude Code Configuration
 
@@ -242,6 +246,8 @@ cp .mcp.json.example .mcp.json
 ```
 
 See [`.mcp.json.example`](./.mcp.json.example) for the full configuration template.
+
+> **⚠️ Credential management**: All secrets (API keys, passwords) are managed in `.mcp.json` via the `env` field for each server. **Do NOT create individual `.env` files** inside each MCP server directory — this makes migration difficult and can cause credential conflicts. `.mcp.json` is the single source of truth for all credentials.
 
 ## Usage
 
@@ -348,19 +354,17 @@ See `wifi-cam-mcp/README.md` for stereo vision / right eye tools.
 | `stop_moving` | Stop immediately |
 | `body_status` | Check battery level and current state |
 
-### toio-mcp
+### x-mcp
 
 | Tool | Description |
 |------|-------------|
-| `connect_hand` / `disconnect_hand` | Connect or disconnect the toio hand |
-| `hand_status` | Battery, posture, position, orientation, and button state |
-| `move_hand_forward` / `move_hand_backward` | Short relative moves |
-| `rotate_hand_left` / `rotate_hand_right` | Rotate in place |
-| `stop_hand` | Stop the motors |
-| `move_hand_to_position` / `move_hand_to_grid_cell` | Mat-based positioning |
-| `set_hand_orientation` | Set orientation on a Position ID mat |
-| `set_hand_light` / `clear_hand_light` | RGB lamp control |
-| `play_hand_note` / `stop_hand_sound` | Speaker control |
+| `search_x` | Real-time search on X via Grok |
+| `get_user_tweets` | Get recent tweets from a specific user |
+| `get_mentions` | Get recent mentions |
+| `get_trending_topic` | Get trending topics |
+| `post_tweet` | Post a tweet (with optional image, reply) |
+
+> **Note**: Japanese text counts as 2 characters per char (weighted). Keep Japanese tweets under ~140 chars.
 
 ## Taking It Outside (Optional)
 

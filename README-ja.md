@@ -29,7 +29,7 @@
 | [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
 | [mobility-mcp](./mobility-mcp/) | 足 | ロボット掃除機を足として使う（Tuya制御） | VersLife L6 等 Tuya 対応ロボット掃除機（約12,000円〜） |
-| [toio-mcp](./toio-mcp/) | 手 | toio コアキューブを小さい可視アクチュエータとして使う | toio コアキューブ + 充電器 |
+| [x-mcp](./x-mcp/) | SNS | X（Twitter）の検索・投稿（Grok + Twitter API） | xAI API キー + X Developer アカウント |
 
 ## アーキテクチャ
 
@@ -44,7 +44,6 @@
 - **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
 - **GPU**（音声認識用）: NVIDIA GPU（Whisper用、GeForceシリーズのVRAM 8GB以上のグラボ推奨）
 - **Tuya対応ロボット掃除機**（足・移動用、任意）: VersLife L6 等（約12,000円〜）
-- **toio コアキューブ**（小さい手・tool use 用、任意）: キューブ + 充電器
 
 ### ソフトウェア
 - Python 3.10+
@@ -241,21 +240,26 @@ python -m tinytuya wizard
 
 詳しくは [tinytuya のドキュメント](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys)を参照。
 
-#### toio-mcp（手）
+#### x-mcp（SNS / X連携）
 
-机上での tool use に向いた、小さい programmable hand として toio コアキューブを使います。
+Claude が X（Twitter）をリアルタイム検索し、ツイートを投稿できるようにします。
 
 ```bash
-cd toio-mcp
+cd x-mcp
 uv sync
 ```
 
-任意の環境変数:
+**必要な API キー：**
 
-- `TOIO_CUBE_NAME=123` で特定キューブの 3 桁 suffix を指定
-- `TOIO_DRY_RUN=1` で実機到着前に dry-run 動作
+| キー | 取得先 |
+|------|-------|
+| `XAI_API_KEY` | [xAI Console](https://console.x.ai/) |
+| `X_CONSUMER_KEY` | [X Developer Portal](https://developer.x.com/en/portal/projects-and-apps) → Keys and tokens |
+| `X_CONSUMER_SECRET` | 同上 |
+| `X_ACCESS_TOKEN` | 同上 |
+| `X_ACCESS_TOKEN_SECRET` | 同上 |
 
-付属の簡易プレイマットでも、mat ベースの位置決めツールを試し始められます。
+> **重要**: `x-mcp/` ディレクトリ内に `.env` ファイルを作成しないでください。認証情報はすべて `.mcp.json` で一元管理します（後述）。
 
 ### 3. Claude Code 設定
 
@@ -267,6 +271,8 @@ cp .mcp.json.example .mcp.json
 ```
 
 設定例は [`.mcp.json.example`](./.mcp.json.example) を参照。
+
+> **⚠️ 認証情報の管理**: API キーやパスワードなどの秘密情報はすべて `.mcp.json` の `env` フィールドで管理します。**各 MCP サーバーのディレクトリに個別の `.env` ファイルを作らないでください** — 移行が困難になり、認証情報の競合を引き起こす可能性があります。`.mcp.json` が唯一の認証情報ソースです。
 
 ## 使い方
 
@@ -373,19 +379,17 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 | `stop_moving` | 即座に停止 |
 | `body_status` | バッテリー残量・現在状態の確認 |
 
-### toio-mcp
+### x-mcp
 
 | ツール | 説明 |
 |--------|------|
-| `connect_hand` / `disconnect_hand` | toio の手へ接続・切断 |
-| `hand_status` | バッテリー、姿勢、位置、向き、ボタン状態の取得 |
-| `move_hand_forward` / `move_hand_backward` | 短い相対移動 |
-| `rotate_hand_left` / `rotate_hand_right` | その場回転 |
-| `stop_hand` | モーター停止 |
-| `move_hand_to_position` / `move_hand_to_grid_cell` | マット上の位置決め |
-| `set_hand_orientation` | Position ID マット上で向きを設定 |
-| `set_hand_light` / `clear_hand_light` | RGB ランプ制御 |
-| `play_hand_note` / `stop_hand_sound` | スピーカー制御 |
+| `search_x` | Grok を使った X のリアルタイム検索 |
+| `get_user_tweets` | 特定ユーザーの最近のツイートを取得 |
+| `get_mentions` | メンションの取得 |
+| `get_trending_topic` | トレンドトピックの取得 |
+| `post_tweet` | ツイート投稿（画像添付・リプライ対応） |
+
+> **注意**: 日本語は1文字=2文字としてカウントされます（weighted count）。日本語ツイートは約140文字以内に収めてください。
 
 ## 外に連れ出す（オプション）
 
