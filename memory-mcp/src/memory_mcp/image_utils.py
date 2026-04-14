@@ -13,6 +13,7 @@ RESOLUTION_PRESETS: dict[str, tuple[int, int]] = {
     "low": (160, 120),
     "medium": (320, 240),
     "high": (640, 480),
+    "full_hd": (1920, 1080),
 }
 
 
@@ -56,11 +57,19 @@ def encode_image_for_memory(
         return None
 
 
+QUALITY_PRESETS: dict[str, int] = {
+    "low": 40,
+    "medium": 60,
+    "high": 75,
+    "full_hd": 85,
+}
+
+
 def resolve_resolution(resolution: str | None) -> tuple[int, int]:
     """解像度プリセット名をサイズに変換する.
 
     Args:
-        resolution: "low", "medium", "high" または None
+        resolution: "low", "medium", "high", "full_hd" または None
 
     Returns:
         (max_width, max_height) タプル
@@ -68,3 +77,10 @@ def resolve_resolution(resolution: str | None) -> tuple[int, int]:
     if resolution is None:
         return RESOLUTION_PRESETS["medium"]
     return RESOLUTION_PRESETS.get(resolution, RESOLUTION_PRESETS["medium"])
+
+
+def resolve_quality(resolution: str | None) -> int:
+    """解像度プリセットに応じたJPEG品質を返す."""
+    if resolution is None:
+        return QUALITY_PRESETS["medium"]
+    return QUALITY_PRESETS.get(resolution, QUALITY_PRESETS["medium"])
