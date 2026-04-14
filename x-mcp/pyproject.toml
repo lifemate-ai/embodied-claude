@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "x-mcp"
+version = "0.1.0"
+description = "MCP server for searching and posting to X (Twitter) via xAI Grok live search"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.26.0",
+    "openai>=2.24.0",
+    "python-dotenv>=1.2.1",
+    "tweepy>=4.14.0",
+]
+
+[project.scripts]
+x-mcp = "x_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/x_mcp"]
