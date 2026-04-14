@@ -28,7 +28,6 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 | [tts-mcp](./tts-mcp/) | Voice | Unified TTS (ElevenLabs + VOICEVOX) | ElevenLabs API / VOICEVOX + go2rtc |
 | [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | Body temperature | System temperature monitoring | Linux sensors |
-| [mobility-mcp](./mobility-mcp/) | Legs | Use a robot vacuum as legs (Tuya control) | Tuya-compatible robot vacuums e.g. VersLife L6 (~$80) |
 | [x-mcp](./x-mcp/) | Social | Search & post to X (Twitter) via Grok + Twitter API | xAI API key + X Developer account |
 
 ## Architecture
@@ -43,7 +42,6 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 - **USB Webcam** (optional): nuroum V11 etc.
 - **Wi-Fi PTZ Camera** (recommended): TP-Link Tapo C210 or C220 (~$30)
 - **GPU** (for speech recognition): NVIDIA GPU (for Whisper, 8GB+ VRAM recommended)
-- **Tuya-compatible Robot Vacuum** (legs/locomotion, optional): VersLife L6 etc. (~$80)
 
 ### Software
 
@@ -192,38 +190,6 @@ uv sync
 
 > **Note**: Does not work on WSL2 as temperature sensors are not accessible.
 
-#### mobility-mcp (Legs)
-
-Uses a Tuya-compatible robot vacuum as AI legs for room navigation.
-
-```bash
-cd mobility-mcp
-uv sync
-
-cp .env.example .env
-# Set the following in .env:
-#   TUYA_DEVICE_ID=    (device ID shown in the Tuya app)
-#   TUYA_IP_ADDRESS=   (vacuum's IP address)
-#   TUYA_LOCAL_KEY=    (local key obtained via tinytuya wizard)
-```
-
-##### Supported Devices
-
-Any Wi-Fi robot vacuum controllable via the Tuya / SmartLife app should work (tested with VersLife L6).
-
-> **Note**: Most compatible models support **2.4GHz Wi-Fi only**. 5GHz won't work.
-
-##### Getting the Local Key
-
-Use the [tinytuya](https://github.com/jasonacox/tinytuya) wizard:
-
-```bash
-pip install tinytuya
-python -m tinytuya wizard
-```
-
-See the [tinytuya documentation](https://github.com/jasonacox/tinytuya?tab=readme-ov-file#setup-wizard---getting-local-keys) for details.
-
 #### x-mcp (Social / X Integration)
 
 Lets Claude search X (Twitter) in real-time via Grok and post tweets.
@@ -351,17 +317,6 @@ See `wifi-cam-mcp/README.md` for stereo vision / right eye tools.
 |------|-------------|
 | `get_system_temperature` | Get system temperature |
 | `get_current_time` | Get current time |
-
-### mobility-mcp
-
-| Tool | Description |
-|------|-------------|
-| `move_forward` | Move forward (optional duration in seconds for auto-stop) |
-| `move_backward` | Move backward |
-| `turn_left` | Turn left |
-| `turn_right` | Turn right |
-| `stop_moving` | Stop immediately |
-| `body_status` | Check battery level and current state |
 
 ### x-mcp
 
