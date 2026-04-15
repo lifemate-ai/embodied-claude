@@ -1,13 +1,5 @@
 {
   "mcpServers": {
-    "ip-webcam": {
-      "command": "uv",
-      "args": ["run", "--directory", "ip-webcam-mcp", "ip-webcam-mcp"],
-      "env": {
-        "IP_WEBCAM_HOST": "192.168.1.xxx",
-        "IP_WEBCAM_PORT": "8080"
-      }
-    },
     "usb-webcam": {
       "command": "uv",
       "args": ["run", "--directory", "usb-webcam-mcp", "usb-webcam-mcp"]
@@ -18,18 +10,21 @@
       "env": {
         "TAPO_CAMERA_HOST": "192.168.1.xxx",
         "TAPO_USERNAME": "your-username",
-        "TAPO_PASSWORD": "your-password"
+        "TAPO_PASSWORD": "your-password",
+        "TAPO_STREAM_URL": "rtsp://user:pass@192.168.1.xxx:554/cam/realmonitor?channel=1&subtype=0",
+        "TAPO_ONVIF_PORT": "80",
+        "TAPO_PTZ_MODE": "continuous"
       }
+    },
+    "desire-system": {
+      "command": "uv",
+      "args": ["run", "--directory", "desire-system", "desire-system"]
     },
     "memory": {
       "command": "uv",
-      "args": ["run", "--directory", "memory-mcp", "memory-mcp"]
-    },
-    "sociality": {
-      "command": "uv",
-      "args": ["run", "--directory", "sociality-mcp", "sociality-mcp"],
+      "args": ["run", "--directory", "memory-mcp", "memory-mcp"],
       "env": {
-        "SOCIAL_POLICY_PATH": "/path/to/embodied-claude/socialPolicy.toml"
+        "HF_HOME": "/path/to/.cache/huggingface"
       }
     },
     "system-temperature": {
@@ -41,18 +36,35 @@
       "args": ["run", "--directory", "tts-mcp", "tts-mcp"],
       "env": {
         "ELEVENLABS_API_KEY": "your-api-key",
-        "VOICEVOX_URL": "http://localhost:50021",
-        "VOICEVOX_SPEAKER": "3",
-        "TTS_PLAYBACK": "auto",
-        "GO2RTC_URL": "http://localhost:1984",
-        "GO2RTC_STREAM": "tapo_cam"
+        "ELEVENLABS_VOICE_ID": "your-voice-id",
+        "ELEVENLABS_MODEL_ID": "eleven_v3",
+        "ELEVENLABS_OUTPUT_FORMAT": "mp3_44100_128",
+        "ELEVENLABS_PLAY_AUDIO": "true",
+        "ELEVENLABS_SAVE_DIR": "/tmp/elevenlabs-t2s",
+        "TTS_PLAYBACK": "auto"
       }
     },
-    "toio": {
+    "x-mcp": {
       "command": "uv",
-      "args": ["run", "--directory", "toio-mcp", "toio-mcp"],
+      "args": ["run", "--directory", "x-mcp", "x-mcp"],
       "env": {
-        "TOIO_CUBE_NAME": "123"
+        "XAI_API_KEY": "your-xai-api-key",
+        "X_CONSUMER_KEY": "your-x-consumer-key",
+        "X_CONSUMER_SECRET": "your-x-consumer-secret",
+        "X_ACCESS_TOKEN": "your-x-access-token",
+        "X_ACCESS_TOKEN_SECRET": "your-x-access-token-secret"
+      }
+    },
+    "sociality": {
+      "command": "uv",
+      "args": ["run", "--directory", "sociality-mcp", "sociality-mcp"]
+    },
+    "garmin-health": {
+      "command": "node",
+      "args": ["/path/to/garmin-health-mcp/index.js"],
+      "env": {
+        "GARMIN_EMAIL": "your-garmin-email",
+        "GARMIN_PASSWORD": "your-garmin-password"
       }
     }
   }
