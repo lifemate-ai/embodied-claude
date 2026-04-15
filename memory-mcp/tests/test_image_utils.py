@@ -120,4 +120,5 @@ class TestResolveResolution:
         assert resolve_resolution("ultra") == (320, 240)
 
     def test_presets_dict(self):
-        assert len(RESOLUTION_PRESETS) == 3
+        assert len(RESOLUTION_PRESETS) == 4
+        assert "full_hd" in RESOLUTION_PRESETS
