@@ -45,7 +45,7 @@ wheels = [
 [[package]]
 name = "boundary-mcp"
 version = "0.1.0"
-source = { directory = "../boundary-mcp" }
+source = { directory = "packages/boundary-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -59,7 +59,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "social-core", directory = "../social-core" },
+    { name = "social-core", directory = "packages/social-core" },
 ]
 provides-extras = ["dev"]
 
@@ -270,7 +270,7 @@ wheels = [
 [[package]]
 name = "joint-attention-mcp"
 version = "0.1.0"
-source = { directory = "../joint-attention-mcp" }
+source = { directory = "packages/joint-attention-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -284,7 +284,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "social-core", directory = "../social-core" },
+    { name = "social-core", directory = "packages/social-core" },
 ]
 provides-extras = ["dev"]
 
@@ -601,7 +601,7 @@ wheels = [
 [[package]]
 name = "relationship-mcp"
 version = "0.1.0"
-source = { directory = "../relationship-mcp" }
+source = { directory = "packages/relationship-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -615,7 +615,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "social-core", directory = "../social-core" },
+    { name = "social-core", directory = "packages/social-core" },
 ]
 provides-extras = ["dev"]
 
@@ -741,7 +741,7 @@ wheels = [
 [[package]]
 name = "self-narrative-mcp"
 version = "0.1.0"
-source = { directory = "../self-narrative-mcp" }
+source = { directory = "packages/self-narrative-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -755,7 +755,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "social-core", directory = "../social-core" },
+    { name = "social-core", directory = "packages/social-core" },
 ]
 provides-extras = ["dev"]
 
@@ -771,7 +771,7 @@ wheels = [
 [[package]]
 name = "social-core"
 version = "0.1.0"
-source = { directory = "../social-core" }
+source = { directory = "packages/social-core" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -788,7 +788,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "social-state-mcp"
 version = "0.1.0"
-source = { directory = "../social-state-mcp" }
+source = { directory = "packages/social-state-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -802,7 +802,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "social-core", directory = "../social-core" },
+    { name = "social-core", directory = "packages/social-core" },
 ]
 provides-extras = ["dev"]
 
@@ -830,17 +830,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "boundary-mcp", directory = "../boundary-mcp" },
-    { name = "joint-attention-mcp", directory = "../joint-attention-mcp" },
+    { name = "boundary-mcp", directory = "packages/boundary-mcp" },
+    { name = "joint-attention-mcp", directory = "packages/joint-attention-mcp" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
-    { name = "relationship-mcp", directory = "../relationship-mcp" },
+    { name = "relationship-mcp", directory = "packages/relationship-mcp" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "self-narrative-mcp", directory = "../self-narrative-mcp" },
-    { name = "social-core", directory = "../social-core" },
-    { name = "social-state-mcp", directory = "../social-state-mcp" },
+    { name = "self-narrative-mcp", directory = "packages/self-narrative-mcp" },
+    { name = "social-core", directory = "packages/social-core" },
+    { name = "social-state-mcp", directory = "packages/social-state-mcp" },
 ]
 provides-extras = ["dev"]
 
