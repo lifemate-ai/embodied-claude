@@ -5,7 +5,7 @@
       "args": [
         "run",
         "--directory",
-        "./hearing",
+        "/path/to/embodied-claude-additional-mcps/hearing",
         "hearing-mcp"
       ],
       "env": {
