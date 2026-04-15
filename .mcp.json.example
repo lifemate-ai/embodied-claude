@@ -25,6 +25,13 @@
       "command": "uv",
       "args": ["run", "--directory", "memory-mcp", "memory-mcp"]
     },
+    "sociality": {
+      "command": "uv",
+      "args": ["run", "--directory", "sociality-mcp", "sociality-mcp"],
+      "env": {
+        "SOCIAL_POLICY_PATH": "/path/to/embodied-claude/socialPolicy.toml"
+      }
+    },
     "system-temperature": {
       "command": "uv",
       "args": ["run", "--directory", "system-temperature-mcp", "system-temperature-mcp"]

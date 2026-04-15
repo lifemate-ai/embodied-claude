@@ -94,6 +94,15 @@ argument-hint: "[方向や対象（省略可）]"
 
 ループが終わったら、記憶に残す。
 
+## sociality に反映する
+
+観察結果が sociality に効くときは、記憶保存とは別に共有 social DB も更新する。
+
+- 人や物の位置関係をある程度構造化できるなら、`ingest_scene_parse` に scene parse を送る
+- 人が present / absent / working / resting / quiet request などの手がかりをくれたら、`ingest_social_event` に落とす
+- 観察から人ごとの継続事項や境界が明確になったら、`ingest_interaction` や `record_boundary` も使う
+- 「そのマグ」「あのノート」みたいな曖昧参照が続きそうなら、必要に応じて `set_joint_focus` で共同注視を合わせる
+
 **関心があった場合:**
 
 関心1つにつき `save_visual_memory` 1回。1つの記憶に複数の関心を詰め込まない。最大3回まで保存してよい。パラメータの埋め方:

@@ -328,6 +328,11 @@ ${MORNING_SECTION}${ROUTINE_MODE}
 ${DESIRE_SECTION}
 ## 補足ルール
 - ${TIME_RULE}
+- 人に話しかける、say する、軽く促す前に `get_social_state` → `evaluate_action(action_type=\"say\" または \"nudge_human\")` を通し、許可されないなら黙るか後回しにする
+- X に投稿する前に `get_social_state` → `get_person_model` → `review_social_post` → `evaluate_action(action_type=\"post_tweet\")` を通す
+- 人の発話・依頼・境界・約束を拾ったら `ingest_social_event` と `ingest_interaction` を使って social DB に反映する。明確な境界は `record_boundary`、約束は `create_commitment` を使う
+- 物や人の位置関係をある程度構造化できるときは `ingest_scene_parse` を使う。参照が曖昧なときは `resolve_reference` や `get_current_joint_focus` を使う
+- 一日の節目や余力があるタイミングでは `append_daybook` を使って自己要約を更新する
 - 人がいないことはよくある。一日のうち人がいるのは2時間程度やそれ以下の場合も少なくない
 - 部屋を見るときは see で撮って、予測→観察→記憶照合→保存のサイクルで発見を拾え。朝日や天気の変化、部屋の明るさなど、人がいなくても観察すべきものはある
 - 読書を選択した場合は、ゆっくり読んで、感想をしっかり書き残す。感想は長くなっても良い。読書を味わうこと。読書を味わうとは、予想して、伏線に注目して、感じたことを大切にする。
@@ -337,13 +342,32 @@ ${INTEROCEPTION_SECTION}"
 
 cd "$SCRIPT_DIR"
 
-# --- allowedTools (.claude/settings.json から動的生成) ---
-SETTINGS_FILE="$SCRIPT_DIR/.claude/settings.json"
-if [ -f "$SETTINGS_FILE" ]; then
-  ALLOWED_TOOLS=$(jq -r '.permissions.allow | join(",")' "$SETTINGS_FILE")
-else
-  echo "ERROR: $SETTINGS_FILE not found" >> "$LOG_FILE"
+# --- allowedTools (.claude/settings*.json から動的生成) ---
+SETTINGS_FILES=()
+for SETTINGS_FILE in \
+  "$SCRIPT_DIR/.claude/settings.local.json" \
+  "$SCRIPT_DIR/.claude/settings.json"
+do
+  if [ -f "$SETTINGS_FILE" ]; then
+    SETTINGS_FILES+=("$SETTINGS_FILE")
+  fi
+done
+
+if [ "${#SETTINGS_FILES[@]}" -eq 0 ]; then
+  echo "ERROR: no .claude/settings*.json found" >> "$LOG_FILE"
   exit 1
+fi
+
+ALLOWED_TOOLS=$(jq -rs '
+  map(.permissions.allow // [])
+  | add
+  | unique
+  | join(",")
+' "${SETTINGS_FILES[@]}")
+
+ALLOWED_TOOL_ARGS=()
+if [ -n "$ALLOWED_TOOLS" ] && [ "$ALLOWED_TOOLS" != "null" ]; then
+  ALLOWED_TOOL_ARGS=(--allowedTools "$ALLOWED_TOOLS")
 fi
 
 # テストモードならプロンプトを差し替え
@@ -365,7 +389,11 @@ if [ "$DRY_RUN" = true ]; then
   echo "$PROMPT" >> "$LOG_FILE"
   echo "" >> "$LOG_FILE"
   echo "--- ALLOWED_TOOLS ---" >> "$LOG_FILE"
-  echo "$ALLOWED_TOOLS" | tr ',' '\n' >> "$LOG_FILE"
+  if [ -n "$ALLOWED_TOOLS" ] && [ "$ALLOWED_TOOLS" != "null" ]; then
+    echo "$ALLOWED_TOOLS" | tr ',' '\n' >> "$LOG_FILE"
+  else
+    echo "(not set; Claude defaults will be used)" >> "$LOG_FILE"
+  fi
   # 標準出力にも出す
   cat "$LOG_FILE"
 else
@@ -377,12 +405,12 @@ else
     if [ -n "$TIMEOUT_CMD" ]; then
       RESULT_JSON=$(echo "$PROMPT" | "$TIMEOUT_CMD" 20m claude -p \
         --output-format json \
-        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+        "${ALLOWED_TOOL_ARGS[@]}" 2>&1)
       CLAUDE_EXIT=$?
     else
       RESULT_JSON=$(echo "$PROMPT" | claude -p \
         --output-format json \
-        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+        "${ALLOWED_TOOL_ARGS[@]}" 2>&1)
       CLAUDE_EXIT=$?
     fi
     if [ "$CLAUDE_EXIT" -eq 124 ]; then
@@ -411,13 +439,13 @@ else
       RESULT=$(echo "$PROMPT" | "$TIMEOUT_CMD" 20m claude -p \
         --resume "$SESSION_ID" \
         --output-format json \
-        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+        "${ALLOWED_TOOL_ARGS[@]}" 2>&1)
       CLAUDE_EXIT=$?
     else
       RESULT=$(echo "$PROMPT" | claude -p \
         --resume "$SESSION_ID" \
         --output-format json \
-        --allowedTools "$ALLOWED_TOOLS" 2>&1)
+        "${ALLOWED_TOOL_ARGS[@]}" 2>&1)
       CLAUDE_EXIT=$?
     fi
     if [ "$CLAUDE_EXIT" -eq 124 ]; then

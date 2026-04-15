@@ -1,6 +1,7 @@
 # Embodied Claude - プロジェクト指示
 
-このプロジェクトは、Claude に身体（目・首・耳・声・脳）を与える MCP サーバー群です。
+このプロジェクトは、Claude に身体（目・首・耳・声・脳）を与え、その上に sociality
+（社会的中間層）を積む MCP サーバー群です。
 
 ## ディレクトリ構造
 
@@ -38,6 +39,21 @@ embodied-claude/
 │   └── src/system_temperature_mcp/
 │       └── server.py      # 温度センサー読み取り
 │
+├── social-core/           # sociality 共通DB・モデル（Python）
+│   └── src/social_core/
+│       ├── db.py          # SQLite + migration
+│       ├── events.py      # append-only event store
+│       └── models.py      # 共通 schema
+│
+├── sociality-mcp/         # sociality 統合 façade（公開 MCP）
+├── social-state-mcp/      # 現在の社会的状態推定（Python）
+├── relationship-mcp/      # 関係性の圧縮表現と約束管理（Python）
+├── joint-attention-mcp/   # 共同注意と参照解決（Python）
+├── boundary-mcp/          # 同意・静寂・プライバシーの行動ゲート（Python）
+├── self-narrative-mcp/    # daybook と narrative arc（Python）
+│
+├── socialPolicy.toml      # boundary-mcp の既定ポリシー
+│
 └── .claude/               # Claude Code ローカル設定
     └── settings.local.json
 ```
@@ -47,7 +63,7 @@ embodied-claude/
 ### Python プロジェクト共通
 
 - **パッケージマネージャー**: uv
-- **Python バージョン**: 3.10+
+- **Python バージョン**: 既存サーバーは 3.10+、sociality MCP 群は 3.12+
 - **テストフレームワーク**: pytest + pytest-asyncio
 - **リンター**: ruff
 - **非同期**: asyncio ベース
@@ -158,6 +174,70 @@ uv run pytest -v       # テストが通ること
 |--------|-----------|------|
 | `get_system_temperature` | なし | システム温度 |
 | `get_current_time` | なし | 現在時刻 |
+
+### sociality-mcp（統合 façade）
+
+公開用には `sociality-mcp` を使う。以下の social tool 群を 1 つの MCP サーバーから
+公開し、内部実装は `social-state-mcp` / `relationship-mcp` / `joint-attention-mcp` /
+`boundary-mcp` / `self-narrative-mcp` に分割して保守する。
+
+### social-state tools（社会的状態）
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `ingest_social_event` | event | social event を append-only に保存 |
+| `get_social_state` | window_seconds?, person_id?, include_evidence? | 在席、活動、割り込み可能性、会話フェーズを返す |
+| `should_interrupt` | candidate_action, urgency?, person_id?, message_preview? | 話しかけるべきか判定 |
+| `get_turn_taking_state` | person_id? | ターン保持/応答を返す |
+| `summarize_social_context` | person_id?, max_chars? | 短い社会的要約 |
+
+### relationship tools（関係性）
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `upsert_person` | person_id, canonical_name, aliases?, role? | 人物レコード更新 |
+| `ingest_interaction` | person_id, channel, direction, text, ts | やり取りを要約ベースで保存 |
+| `get_person_model` | person_id | 好み、約束、未解決ループ、境界を返す |
+| `create_commitment` / `complete_commitment` | person_id..., commitment_id | 約束管理 |
+| `list_open_loops` / `suggest_followup` | person_id..., context? | 継続性のある follow-up を返す |
+| `record_boundary` | person_id, kind, rule, source_text | 人ごとの境界を保存 |
+
+### joint-attention tools（共同注意）
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `ingest_scene_parse` | scene | 構造化 scene parse を保存 |
+| `resolve_reference` | expression, person_id?, lookback_frames? | 指示語や属性参照を解決 |
+| `get_current_joint_focus` / `set_joint_focus` | person_id?, target_id? | 共同注視対象を管理 |
+| `compare_recent_scenes` | person_id?, window_minutes? | 最近の scene 差分を返す |
+
+### boundary tools（行動ゲート）
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `evaluate_action` | action_type, channel?, person_id?, context?, payload_preview?, urgency? | 発話/投稿/促しを事前評価 |
+| `review_social_post` | channel, text, scene_contains_face?, person_mentions? | 投稿のリスクレビュー |
+| `record_consent` | person_id, consent_type, value, source | 同意を保存 |
+| `get_quiet_mode_state` | ts | quiet mode 状態を返す |
+
+### self-narrative tools（自己要約）
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `append_daybook` | day? | 日次の narrative 要約を更新 |
+| `get_self_summary` | なし | prompt 注入向け自己要約 |
+| `list_active_arcs` | なし | 進行中の narrative arc |
+| `reflect_on_change` | horizon_days? | 最近の変化を要約 |
+
+## Heartbeat Protocol
+
+自律行動や会話中に sociality を使うときは、最低限この順序を守ること。
+
+1. 話しかける前、say 前、軽く促す前: `get_social_state` → `evaluate_action`
+2. X 投稿前: `get_social_state` → `get_person_model`（人が絡むなら）→ `review_social_post` → `evaluate_action`
+3. 人の発話・要求・境界・約束を拾ったら: `ingest_social_event` と `ingest_interaction` を保存。境界なら `record_boundary`、約束なら `create_commitment`
+4. 構造化できる scene が取れたら: `ingest_scene_parse`。指示語が曖昧なら `resolve_reference`
+5. 毎日1回か節目で: `append_daybook` を呼んで自己要約を更新
 
 ## 注意事項
 

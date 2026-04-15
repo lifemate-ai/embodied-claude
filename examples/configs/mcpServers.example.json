@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sociality": {
+      "command": "uv",
+      "args": ["run", "sociality-mcp"],
+      "cwd": "/path/to/embodied-claude/sociality-mcp",
+      "env": {
+        "SOCIAL_POLICY_PATH": "/path/to/embodied-claude/socialPolicy.toml"
+      }
+    }
+  }
+}

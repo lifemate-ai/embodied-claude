@@ -28,6 +28,7 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 | [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | Body temperature | System temperature monitoring | Linux sensors |
 | [x-mcp](./x-mcp/) | Social | Search & post to X (Twitter) via Grok + Twitter API | xAI API key + X Developer account |
+| [sociality-mcp](./sociality-mcp/) | Sociality layer | Unified facade for social state, relationships, joint attention, boundaries, and self-narrative | Shared SQLite social DB + `socialPolicy.toml` |
 
 ## Architecture
 
@@ -194,6 +195,22 @@ uv sync
 
 > **Important**: Do NOT create a `.env` file inside `x-mcp/`. All credentials are managed centrally in `.mcp.json` (see below).
 
+#### sociality-mcp
+
+`sociality-mcp` is the preferred deployment target. It exposes the full social tool surface through
+one MCP process while reusing the split packages (`social-state-mcp`, `relationship-mcp`,
+`joint-attention-mcp`, `boundary-mcp`, `self-narrative-mcp`) for internal logic and testing.
+
+```bash
+cp examples/configs/socialPolicy.example.toml socialPolicy.toml
+
+(cd sociality-mcp && uv sync)
+```
+
+`sociality-mcp` reads `socialPolicy.toml` for boundary evaluation by default. Override with
+`SOCIAL_POLICY_PATH` if you want a different policy file. If you want to develop the internal
+modules separately, run `uv sync` inside the individual social subprojects too.
+
 ### 3. Claude Code Configuration
 
 Copy the template and fill in your credentials:
@@ -307,6 +324,69 @@ See `wifi-cam-mcp/README.md` for stereo vision / right eye tools.
 
 > **Note**: Japanese text counts as 2 characters per char (weighted). Keep Japanese tweets under ~140 chars.
 
+### sociality-mcp
+
+`sociality-mcp` is the default runtime facade. It exposes all of the tool groups below from one MCP
+server.
+
+#### social-state tools
+
+| Tool | Description |
+|------|-------------|
+| `ingest_social_event` | Append a confidence-bearing social event to the shared store |
+| `get_social_state` | Infer presence, activity, energy, interruptibility, and interaction phase |
+| `should_interrupt` | Decide whether speaking or nudging is socially acceptable |
+| `get_turn_taking_state` | Infer whether the current turn belongs to the human or the AI |
+| `summarize_social_context` | Return a short prompt-ready social summary |
+
+#### relationship tools
+
+| Tool | Description |
+|------|-------------|
+| `upsert_person` | Create/update a compact person record |
+| `ingest_interaction` | Store relationship-relevant interaction summaries |
+| `get_person_model` | Return compact preferences, open loops, commitments, rituals, boundaries |
+| `create_commitment` / `complete_commitment` | Track promises and reminders across restarts |
+| `list_open_loops` / `suggest_followup` | Keep continuity without raw transcript dumps |
+| `record_boundary` | Store person-specific communication boundaries |
+
+#### joint-attention tools
+
+| Tool | Description |
+|------|-------------|
+| `ingest_scene_parse` | Store a structured scene parse from an adapter or orchestrator |
+| `resolve_reference` | Resolve phrases like "that mug" or "the blue mug" |
+| `get_current_joint_focus` / `set_joint_focus` | Track what both sides are attending to |
+| `compare_recent_scenes` | Summarize recent scene changes |
+
+#### boundary tools
+
+| Tool | Description |
+|------|-------------|
+| `evaluate_action` | Gate speech, nudges, posts, and other socially risky actions |
+| `review_social_post` | Check an X draft for privacy or tact problems |
+| `record_consent` | Store consent/denial for face photos and similar actions |
+| `get_quiet_mode_state` | Return whether quiet mode is currently active |
+
+#### self-narrative tools
+
+| Tool | Description |
+|------|-------------|
+| `append_daybook` | Build a compact daily narrative summary from shared events |
+| `get_self_summary` | Return a prompt-ready self summary |
+| `list_active_arcs` | List current narrative arcs |
+| `reflect_on_change` | Summarize recent narrative change |
+
+## Sociality Orchestration
+
+When `sociality-mcp` is enabled, the highest-value contract is:
+
+1. Before speaking or nudging: call `get_social_state`, then `evaluate_action`.
+2. Before posting to X: call `get_social_state`, `get_person_model` if a person is implicated, `review_social_post`, then `evaluate_action`.
+3. After seeing/hearing something: call `ingest_social_event`; if you can structure the scene, also call `ingest_scene_parse`; if it concerns a person, call `ingest_interaction`.
+4. During live conversation: call `get_turn_taking_state`, and use `resolve_reference` when deictic expressions are ambiguous.
+5. Once per day or during a lull: call `append_daybook` to keep the compact self-narrative current.
+
 ## Taking It Outside (Optional)
 
 With a mobile battery and smartphone tethering, you can mount the camera on your shoulder and go for a walk.
@@ -387,7 +467,7 @@ Claude Code has a built-in voice input mode. Combined with **tts-mcp**, you get 
 
 ```bash
 cp autonomous-mcp.json.example autonomous-mcp.json
-# Edit autonomous-mcp.json to set camera credentials
+# Edit autonomous-mcp.json to set camera credentials and sociality paths
 ```
 
 2. **Set up the desire system**

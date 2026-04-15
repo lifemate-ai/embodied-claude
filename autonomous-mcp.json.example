@@ -13,6 +13,13 @@
       "command": "uv",
       "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/memory-mcp", "run", "memory-mcp"]
     },
+    "sociality": {
+      "command": "uv",
+      "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/sociality-mcp", "run", "sociality-mcp"],
+      "env": {
+        "SOCIAL_POLICY_PATH": "/home/YOUR_USERNAME/repo/embodied-claude/socialPolicy.toml"
+      }
+    },
     "system-temperature": {
       "command": "uv",
       "args": ["--directory", "/home/YOUR_USERNAME/repo/embodied-claude/system-temperature-mcp", "run", "system-temperature-mcp"]

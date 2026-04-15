@@ -1,0 +1,26 @@
+{
+  "scenario": "focused_work_low_energy",
+  "events": [
+    {
+      "ts": "2026-04-15T08:10:00+09:00",
+      "source": "camera",
+      "kind": "scene_parse",
+      "person_id": "kouta",
+      "confidence": 0.9,
+      "payload": {
+        "scene_summary": "Kouta is at his desk working on the laptop.",
+        "activity": "working"
+      }
+    },
+    {
+      "ts": "2026-04-15T08:12:00+09:00",
+      "source": "garmin",
+      "kind": "health_summary",
+      "person_id": "kouta",
+      "confidence": 0.95,
+      "payload": {
+        "body_battery": 21
+      }
+    }
+  ]
+}

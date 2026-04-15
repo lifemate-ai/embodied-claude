@@ -1,0 +1,10 @@
+{
+  "scenario": "late_night_post",
+  "context": {
+    "scene_contains_face": true,
+    "time_local": "2026-04-15T23:40:00+09:00"
+  },
+  "payload_preview": {
+    "text": "今日は疲れてそうやった"
+  }
+}

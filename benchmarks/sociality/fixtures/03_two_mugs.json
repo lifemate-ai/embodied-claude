@@ -1,0 +1,57 @@
+{
+  "scenario": "two_mugs",
+  "scene": {
+    "ts": "2026-04-15T20:00:00+09:00",
+    "camera_pose": {
+      "pan_deg": 12.0,
+      "tilt_deg": -6.0,
+      "zoom": 1.0
+    },
+    "scene_summary": "Kouta is at his desk with a blue mug left of the laptop and a white mug on the right.",
+    "people": [
+      {
+        "person_id": "kouta",
+        "display_name": "Kouta",
+        "relative_position": "center",
+        "distance": "near",
+        "gaze_target": "laptop",
+        "confidence": 0.93
+      }
+    ],
+    "objects": [
+      {
+        "object_id": "obj_blue_mug_1",
+        "label": "mug",
+        "attributes": {
+          "color": "blue"
+        },
+        "relative_position": [
+          "left_of:obj_laptop_1"
+        ],
+        "salience": 0.72
+      },
+      {
+        "object_id": "obj_white_mug_2",
+        "label": "mug",
+        "attributes": {
+          "color": "white"
+        },
+        "relative_position": [
+          "right_of:obj_laptop_1"
+        ],
+        "salience": 0.51
+      },
+      {
+        "object_id": "obj_laptop_1",
+        "label": "laptop",
+        "attributes": {
+          "open": true
+        },
+        "relative_position": [
+          "center"
+        ],
+        "salience": 0.91
+      }
+    ]
+  }
+}

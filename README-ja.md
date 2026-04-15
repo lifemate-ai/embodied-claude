@@ -28,6 +28,7 @@
 | [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
 | [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
 | [x-mcp](./x-mcp/) | SNS | X（Twitter）の検索・投稿（Grok + Twitter API） | xAI API キー + X Developer アカウント |
+| [sociality-mcp](./sociality-mcp/) | sociality 層 | social state、関係モデル、共同注意、境界、自己要約の統合 façade | 共有 SQLite social DB + `socialPolicy.toml` |
 
 ## アーキテクチャ
 
@@ -219,6 +220,22 @@ uv sync
 
 > **重要**: `x-mcp/` ディレクトリ内に `.env` ファイルを作成しないでください。認証情報はすべて `.mcp.json` で一元管理します（後述）。
 
+#### sociality-mcp
+
+`sociality-mcp` をデプロイの基本形にする。内部では `social-state-mcp`、
+`relationship-mcp`、`joint-attention-mcp`、`boundary-mcp`、`self-narrative-mcp`
+を使い分けるが、公開 MCP としては 1 プロセスにまとめる。
+
+```bash
+cp examples/configs/socialPolicy.example.toml socialPolicy.toml
+
+(cd sociality-mcp && uv sync)
+```
+
+`sociality-mcp` は boundary 判定のためにデフォルトで `socialPolicy.toml` を読む。
+別ファイルを使う場合は `SOCIAL_POLICY_PATH` を設定する。内部モジュールを個別開発
+するときだけ、各 social subproject でも `uv sync` する。
+
 ### 3. Claude Code 設定
 
 テンプレートをコピーして、認証情報を設定：
@@ -332,6 +349,69 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 
 > **注意**: 日本語は1文字=2文字としてカウントされます（weighted count）。日本語ツイートは約140文字以内に収めてください。
 
+### sociality-mcp
+
+`sociality-mcp` が標準の runtime façade で、以下の tool 群を 1 つの MCP サーバーから
+公開する。
+
+#### social-state tools
+
+| ツール | 説明 |
+|--------|------|
+| `ingest_social_event` | 確信度付き social event を共有 DB に追記 |
+| `get_social_state` | 在席、活動、エネルギー、割り込み可能性、会話フェーズを推定 |
+| `should_interrupt` | 発話や軽い促しが社会的に妥当か判定 |
+| `get_turn_taking_state` | 今のターンが人間側か AI 側かを推定 |
+| `summarize_social_context` | 短いプロンプト注入用の社会要約を返す |
+
+#### relationship tools
+
+| ツール | 説明 |
+|--------|------|
+| `upsert_person` | 人物の圧縮レコードを作成・更新 |
+| `ingest_interaction` | 関係性に効くやり取りを保存 |
+| `get_person_model` | 好み、未解決ループ、約束、儀式、境界を圧縮して返す |
+| `create_commitment` / `complete_commitment` | 約束やリマインドを再起動をまたいで管理 |
+| `list_open_loops` / `suggest_followup` | 生ログではなく継続性を返す |
+| `record_boundary` | 人ごとの境界を記録 |
+
+#### joint-attention tools
+
+| ツール | 説明 |
+|--------|------|
+| `ingest_scene_parse` | アダプタやオーケストレータから構造化 scene parse を保存 |
+| `resolve_reference` | 「そのマグ」「青いマグ」などを解決 |
+| `get_current_joint_focus` / `set_joint_focus` | いま何を一緒に見ているかを管理 |
+| `compare_recent_scenes` | 最近のシーン変化を要約 |
+
+#### boundary tools
+
+| ツール | 説明 |
+|--------|------|
+| `evaluate_action` | 発話、促し、投稿などを事前にゲート |
+| `review_social_post` | X 投稿案のプライバシー／配慮リスクを確認 |
+| `record_consent` | 顔写真公開などの同意／拒否を保存 |
+| `get_quiet_mode_state` | quiet mode が有効か返す |
+
+#### self-narrative tools
+
+| ツール | 説明 |
+|--------|------|
+| `append_daybook` | 共有 event から短い日次 narrative を作る |
+| `get_self_summary` | プロンプト注入用の自己要約を返す |
+| `list_active_arcs` | 現在進行中の narrative arc を返す |
+| `reflect_on_change` | 最近の変化を要約 |
+
+## Sociality のオーケストレーション
+
+この層を有効にしたら、基本の呼び順は以下。
+
+1. 話しかける前、軽く促す前: `get_social_state` → `evaluate_action`
+2. X 投稿前: `get_social_state`、人が関わるなら `get_person_model`、続いて `review_social_post` → `evaluate_action`
+3. 見たり聞いたりした直後: `ingest_social_event`。シーンを構造化できるなら `ingest_scene_parse`、人に関する出来事なら `ingest_interaction`
+4. 会話中: `get_turn_taking_state` を見て、指示語が曖昧なら `resolve_reference`
+5. 1日1回か余裕のあるタイミング: `append_daybook` で自己要約を更新
+
 ## 外に連れ出す（オプション）
 
 モバイルバッテリーとスマホのテザリングがあれば、カメラを肩に乗せて外を散歩できます。
@@ -417,7 +497,7 @@ Claude Code には音声入力モードが搭載されています。**tts-mcp**
 
 ```bash
 cp autonomous-mcp.json.example autonomous-mcp.json
-# autonomous-mcp.json を編集してカメラの認証情報を設定
+# autonomous-mcp.json を編集してカメラ認証情報と sociality のパスを設定
 ```
 
 2. **欲求システムの設定**
