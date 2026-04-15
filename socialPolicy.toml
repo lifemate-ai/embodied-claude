@@ -1,0 +1,18 @@
+[global]
+quiet_hours = ["00:00-07:00"]
+max_nudges_per_hour = 2
+
+[[privacy_zones]]
+name = "sleeping_area"
+camera_presets = ["bed", "sofa_sleep"]
+deny_actions = ["speak_loud", "continuous_listen", "post_image"]
+
+[[posting_rules]]
+channel = "x"
+require_face_consent = true
+require_review_if_person_present = true
+
+[[person_rules]]
+person_id = "kouta"
+avoid_actions = ["camera_speaker_after_midnight"]
+preferred_nudge_style = "brief_gentle"

@@ -70,11 +70,18 @@ allowedTools の動作チェック。以下のツールを順番に1つずつ試
 ### MCP: system-temperature
 13. mcp__system-temperature__get_current_time — 現在時刻取得
 
+### MCP: sociality
+14. mcp__sociality__get_social_state — 現在の social state を取得
+15. mcp__sociality__get_person_model — kouta の person model を取得
+16. mcp__sociality__get_current_joint_focus — joint focus を取得
+17. mcp__sociality__get_quiet_mode_state — quiet mode 状態を取得
+18. mcp__sociality__get_self_summary — 自己要約を取得
+
 ### スキル
-14. Skill(read) — /read https://example.com をテスト（--info のみ）
+19. Skill(read) — /read https://example.com をテスト（--info のみ）
 
 ### Bash
-15. Bash(bun run) — bun --version を実行
+20. Bash(bun run) — bun --version を実行
 
 ## レポート形式
 
@@ -86,7 +93,7 @@ allowedTools の動作チェック。以下のツールを順番に1つずつ試
 2. Write:      OK/NG
 3. Edit:       OK/NG
 ...
-=== 合計: X/15 OK ===
+=== 合計: X/20 OK ===
 ```
 PROMPT
 
