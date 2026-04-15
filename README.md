@@ -37,6 +37,12 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 
 ## Requirements
 
+### Platform
+
+**Supported:** macOS, Linux, WSL2 (Ubuntu 24 recommended)
+
+> Windows native is not officially supported. Use WSL2 instead.
+
 ### Hardware
 - **USB Webcam** (optional): nuroum V11 etc.
 - **Wi-Fi PTZ Camera** (recommended): TP-Link Tapo C210 or C220 (~$30)
@@ -155,7 +161,6 @@ cp .env.example .env
 > |----|---------|
 > | macOS | `brew install mpv` |
 > | Ubuntu / Debian | `sudo apt install mpv` |
-> | Windows | [mpv.io/installation](https://mpv.io/installation/) or `winget install ffmpeg` |
 >
 > If neither is installed, TTS will generate audio but not play it locally (no error is raised).
 

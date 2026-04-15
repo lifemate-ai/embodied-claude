@@ -37,6 +37,12 @@
 
 ## 必要なもの
 
+### 動作プラットフォーム
+
+**サポート対象:** macOS、Linux、WSL2（Ubuntu 24 推奨）
+
+> Windows ネイティブは正式サポートしていません。WSL2 を使ってください。
+
 ### ハードウェア
 - **USB ウェブカメラ**（任意）: nuroum V11 等
 - **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
@@ -180,7 +186,6 @@ cp .env.example .env
 > |----|------------|
 > | macOS | `brew install mpv` |
 > | Ubuntu / Debian | `sudo apt install mpv` |
-> | Windows | [mpv.io/installation](https://mpv.io/installation/) または `winget install ffmpeg` |
 >
 > mpv も ffplay もない場合、音声生成は行われますが再生されません（エラーにはなりません）。
 
