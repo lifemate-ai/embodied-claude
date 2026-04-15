@@ -1640,15 +1640,69 @@ Date Range:
         finally:
             await self.disconnect_memory()
 
+    # ── Lightweight HTTP recall endpoint ──────────────────────
+    async def _handle_http_recall(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Handle a single HTTP request for /recall."""
+        try:
+            request_line = await asyncio.wait_for(reader.readline(), timeout=5)
+            # Read remaining headers
+            while True:
+                line = await asyncio.wait_for(reader.readline(), timeout=5)
+                if line in (b"\r\n", b"\n", b""):
+                    break
+
+            # Parse GET /recall?q=...
+            req = request_line.decode("utf-8", errors="replace")
+            import urllib.parse
+            if "GET /recall" in req:
+                path = req.split(" ")[1]
+                parsed = urllib.parse.urlparse(path)
+                params = urllib.parse.parse_qs(parsed.query)
+                query = params.get("q", [""])[0]
+                n = int(params.get("n", ["3"])[0])
+
+                if query and self._memory_store:
+                    results = await self._memory_store.recall(query, n_results=n)
+                    items = []
+                    for r in results:
+                        items.append({
+                            "content": r.memory.content[:200] if hasattr(r, "memory") else str(r)[:200],
+                            "emotion": r.memory.emotion if hasattr(r, "memory") else "",
+                            "score": round(r.score, 3) if hasattr(r, "score") else 0,
+                        })
+                    body = json.dumps(items, ensure_ascii=False)
+                else:
+                    body = "[]"
+
+                response = f"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(body.encode())}\r\nConnection: close\r\n\r\n{body}"
+            else:
+                body = '{"error":"use GET /recall?q=query"}'
+                response = f"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {len(body.encode())}\r\nConnection: close\r\n\r\n{body}"
+
+            writer.write(response.encode("utf-8"))
+            await writer.drain()
+        except Exception as e:
+            logger.debug(f"HTTP recall error: {e}")
+        finally:
+            writer.close()
+
     async def run(self) -> None:
         """Run the MCP server."""
         async with self.run_context():
-            async with stdio_server() as (read_stream, write_stream):
-                await self._server.run(
-                    read_stream,
-                    write_stream,
-                    self._server.create_initialization_options(),
-                )
+            # Start lightweight HTTP recall server
+            http_port = int(__import__("os").environ.get("MEMORY_HTTP_PORT", "18900"))
+            http_server = await asyncio.start_server(
+                self._handle_http_recall, "127.0.0.1", http_port
+            )
+            logger.info(f"HTTP recall endpoint listening on 127.0.0.1:{http_port}")
+
+            async with http_server:
+                async with stdio_server() as (read_stream, write_stream):
+                    await self._server.run(
+                        read_stream,
+                        write_stream,
+                        self._server.create_initialization_options(),
+                    )
 
 
 def main() -> None:

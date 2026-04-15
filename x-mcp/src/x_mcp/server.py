@@ -158,6 +158,18 @@ def post_tweet(text: str, image_path: str = "", reply_to: str = "") -> str:
     return f"Posted! https://x.com/xai_kokone/status/{tweet_id}"
 
 
+@mcp.tool()
+def delete_tweet(tweet_id: str) -> str:
+    """Delete a tweet by ID.
+
+    Args:
+        tweet_id: The tweet ID to delete.
+    """
+    client = _tweepy_client()
+    client.delete_tweet(tweet_id)
+    return f"Deleted tweet {tweet_id}"
+
+
 def main():
     mcp.run()
 

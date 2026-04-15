@@ -311,16 +311,48 @@ def review_social_post(
 ) -> dict[str, Any]:
     """Review a post draft for privacy and tact risk."""
 
-    return (
-        _stores()
-        .boundary.review_social_post(
-            channel=channel,
-            text=text,
-            scene_contains_face=scene_contains_face,
-            person_mentions=person_mentions,
-        )
-        .model_dump(mode="json")
+    stores = _stores()
+    result = stores.boundary.review_social_post(
+        channel=channel,
+        text=text,
+        scene_contains_face=scene_contains_face,
+        person_mentions=person_mentions,
     )
+    out = result.model_dump(mode="json")
+
+    # Enhanced: check recorded boundaries for mentioned persons
+    person_mentions = person_mentions or []
+    for pid in person_mentions:
+        rows = stores.db.connect().execute(
+            "SELECT rule FROM person_boundaries WHERE person_id = ? AND kind = 'privacy'",
+            (pid,),
+        ).fetchall()
+        for row in rows:
+            rule_lower = (row[0] if isinstance(row, tuple) else row["rule"]).lower()
+            # Location identification patterns
+            if "住所" in rule_lower or "特定" in rule_lower:
+                import re
+                location_signals = re.findall(
+                    r'(\d+階|マンション|ベランダ|看板|教育セミナー|郵便局|薬局|橋|タワー)',
+                    text,
+                )
+                if len(location_signals) >= 2:
+                    out["risk_level"] = "high"
+                    out["issues"] = out.get("issues", []) + [
+                        f"location identification risk: {len(location_signals)} signals found ({', '.join(location_signals)})"
+                    ]
+                    out["recommendation"] = "deny"
+            # Window/balcony photo rule
+            if ("窓" in rule_lower or "ベランダ" in rule_lower) and ("写真" in rule_lower or "投稿" in rule_lower):
+                if "ベランダ" in text or "窓から" in text:
+                    if scene_contains_face or "写真" in text or "画像" in text:
+                        out["risk_level"] = "high"
+                        out["issues"] = out.get("issues", []) + [
+                            "window/balcony photo violates recorded boundary"
+                        ]
+                        out["recommendation"] = "deny"
+
+    return out
 
 
 @mcp.tool()
@@ -372,7 +404,121 @@ def reflect_on_change(horizon_days: int = 7) -> dict[str, Any]:
     )
 
 
+async def _handle_http(reader: __import__("asyncio").StreamReader, writer: __import__("asyncio").StreamWriter) -> None:
+    """Lightweight HTTP endpoints for hook integration."""
+    import asyncio
+    import json
+    import urllib.parse
+
+    try:
+        request_line = await asyncio.wait_for(reader.readline(), timeout=5)
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=5)
+            if line in (b"\r\n", b"\n", b""):
+                break
+
+        req = request_line.decode("utf-8", errors="replace")
+        path_str = req.split(" ")[1] if " " in req else "/"
+        parsed = urllib.parse.urlparse(path_str)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        body = '{"error":"unknown endpoint"}'
+        status = "404 Not Found"
+
+        if "GET /ingest" in req:
+            # Ingest a human utterance: /ingest?person_id=kouta&text=hello&kind=human_utterance
+            from datetime import datetime, timezone
+            person_id = params.get("person_id", [None])[0]
+            text = params.get("text", [""])[0]
+            kind = params.get("kind", ["human_utterance"])[0]
+            source = params.get("source", ["hook"])[0]
+
+            if text:
+                stores = _stores()
+                from social_core.events import EventStore
+                event_store = EventStore(db=stores.db)
+                stored = event_store.ingest({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "source": source,
+                    "kind": kind,
+                    "person_id": person_id,
+                    "confidence": 1.0,
+                    "payload": {"text": text},
+                })
+                body = json.dumps({"event_id": stored.event_id}, ensure_ascii=False)
+            else:
+                body = '{"error":"text required"}'
+            status = "200 OK"
+
+        elif "GET /review_post" in req:
+            # Review a tweet draft: /review_post?text=...&channel=x
+            text = params.get("text", [""])[0]
+            channel = params.get("channel", ["x"])[0]
+            face = params.get("face", ["false"])[0] == "true"
+            mentions_raw = params.get("mentions", [""])[0]
+            mentions = [m for m in mentions_raw.split(",") if m] if mentions_raw else None
+
+            if text:
+                stores = _stores()
+                result = stores.boundary.review_social_post(
+                    channel=channel, text=text,
+                    scene_contains_face=face,
+                    person_mentions=mentions,
+                )
+                body = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+            else:
+                body = '{"error":"text required"}'
+            status = "200 OK"
+
+        elif "GET /social_state" in req:
+            person_id = params.get("person_id", [None])[0]
+            stores = _stores()
+            window = int(params.get("window", ["900"])[0])
+            result = stores.social_state.get_social_state(person_id=person_id, window_seconds=window)
+            body = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+            status = "200 OK"
+
+        response = f"HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(body.encode())}\r\nConnection: close\r\n\r\n{body}"
+        writer.write(response.encode("utf-8"))
+        await writer.drain()
+    except Exception as e:
+        import traceback
+        err_body = json.dumps({"error": str(e), "trace": traceback.format_exc()})
+        err_resp = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {len(err_body.encode())}\r\nConnection: close\r\n\r\n{err_body}"
+        try:
+            writer.write(err_resp.encode("utf-8"))
+            await writer.drain()
+        except Exception:
+            pass
+    finally:
+        writer.close()
+
+
 def main() -> None:
+    import asyncio
+    import os
+    import threading
+
+    http_port = int(os.environ.get("SOCIALITY_HTTP_PORT", "18901"))
+
+    def _run_http() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _serve() -> None:
+            server = await asyncio.start_server(_handle_http, "127.0.0.1", http_port)
+            import logging
+            logging.getLogger("sociality-mcp").info(f"HTTP endpoint on 127.0.0.1:{http_port}")
+            async with server:
+                await server.serve_forever()
+
+        loop.run_until_complete(_serve())
+
+    # Start HTTP server in a background thread
+    http_thread = threading.Thread(target=_run_http, daemon=True)
+    http_thread.start()
+
+    # Run MCP server in main thread (it owns the event loop)
     mcp.run()
 
 
