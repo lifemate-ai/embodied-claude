@@ -23,7 +23,6 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 | MCP Server | Body Part | Function | Hardware |
 |------------|-----------|----------|----------|
 | [usb-webcam-mcp](./usb-webcam-mcp/) | Eyes | Capture images from USB camera | nuroum V11 etc. |
-| [ip-webcam-mcp](./ip-webcam-mcp/) | Eyes | Use Android smartphone as a camera (no dedicated hardware needed) | Android smartphone + [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam) app (free) |
 | [wifi-cam-mcp](./wifi-cam-mcp/) | Eyes, Neck, Ears | ONVIF PTZ camera control + speech recognition | TP-Link Tapo C210/C220 etc. |
 | [tts-mcp](./tts-mcp/) | Voice | Unified TTS (ElevenLabs + VOICEVOX) | ElevenLabs API / VOICEVOX + go2rtc |
 | [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
@@ -74,27 +73,6 @@ cd embodied-claude
 ```
 
 ### 2. Set up each MCP server
-
-#### ip-webcam-mcp (Android Smartphone)
-
-The easiest way to get started — no dedicated camera needed. Just install the free "[IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)" app on your Android smartphone.
-
-```bash
-cd ip-webcam-mcp
-uv sync
-```
-
-Add to `.mcp.json`:
-```json
-"ip-webcam": {
-  "command": "uv",
-  "args": ["run", "--directory", "ip-webcam-mcp", "ip-webcam-mcp"],
-  "env": {
-    "IP_WEBCAM_HOST": "192.168.1.xxx",
-    "IP_WEBCAM_PORT": "8080"
-  }
-}
-```
 
 #### usb-webcam-mcp (USB Camera)
 
@@ -259,12 +237,6 @@ See the tool list below for actual tool names.
 ## Tools (commonly used)
 
 See each server's README or `list_tools` for full parameter details.
-
-### ip-webcam-mcp
-
-| Tool | Description |
-|------|-------------|
-| `see` | Capture snapshot from Android IP Webcam app |
 
 ### usb-webcam-mcp
 

@@ -23,7 +23,6 @@
 | MCP サーバー | 身体部位 | 機能 | 対応ハードウェア |
 |-------------|---------|------|-----------------|
 | [usb-webcam-mcp](./usb-webcam-mcp/) | 目 | USB カメラから画像取得 | nuroum V11 等 |
-| [ip-webcam-mcp](./ip-webcam-mcp/) | 目 | Android スマホを目として使う（専用カメラ不要） | Android スマホ + [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam) アプリ（無料） |
 | [wifi-cam-mcp](./wifi-cam-mcp/) | 目・首・耳 | ONVIF PTZ カメラ制御 + 音声認識 | TP-Link Tapo C210/C220 等 |
 | [tts-mcp](./tts-mcp/) | 声 | TTS 統合（ElevenLabs + VOICEVOX） | ElevenLabs API / VOICEVOX + go2rtc |
 | [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
@@ -74,27 +73,6 @@ cd embodied-claude
 ```
 
 ### 2. 各 MCP サーバーのセットアップ
-
-#### ip-webcam-mcp（Android スマホ）
-
-専用カメラなしで使えるもっとも手軽な目。Android スマホに「[IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)」アプリ（無料）を入れるだけ。
-
-```bash
-cd ip-webcam-mcp
-uv sync
-```
-
-`.mcp.json` に以下を追加：
-```json
-"ip-webcam": {
-  "command": "uv",
-  "args": ["run", "--directory", "ip-webcam-mcp", "ip-webcam-mcp"],
-  "env": {
-    "IP_WEBCAM_HOST": "192.168.1.xxx",
-    "IP_WEBCAM_PORT": "8080"
-  }
-}
-```
 
 #### usb-webcam-mcp（USB カメラ）
 
@@ -284,12 +262,6 @@ Claude Code を起動すると、自然言語でカメラを操作できる：
 ## ツール一覧（よく使うもの）
 
 ※ 詳細なパラメータは各サーバーの README か `list_tools` を参照。
-
-### ip-webcam-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `see` | Android IP Webcam アプリからスナップショットを取得 |
 
 ### usb-webcam-mcp
 
