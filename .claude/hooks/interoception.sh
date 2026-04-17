@@ -6,11 +6,13 @@
 
 STATE_FILE="/tmp/interoception_state.json"
 
-# Garmin heart rate cache (updated by garmin-hr-cache.sh cron job)
-GARMIN_HR_FILE="/tmp/garmin_hr_latest.txt"
-GARMIN_HR=""
-if [ -f "$GARMIN_HR_FILE" ]; then
-    GARMIN_HR=$(cat "$GARMIN_HR_FILE" 2>/dev/null)
+# Smartwatch heart rate cache (updated by any smartwatch integration's cron job)
+# The file path is smartwatch-generic; Garmin / Apple Watch / Fitbit integrations
+# are expected to write their latest HR to the same location.
+SW_HR_FILE="/tmp/sw_hr_latest.txt"
+COMPANION_HR=""
+if [ -f "$SW_HR_FILE" ]; then
+    COMPANION_HR=$(cat "$SW_HR_FILE" 2>/dev/null)
 fi
 
 # state file がなければフォールバック（デーモン未起動時）
@@ -19,8 +21,8 @@ if [ ! -f "$STATE_FILE" ]; then
     CURRENT_DOW=$(date '+%a')
     CURRENT_DATE=$(date '+%Y-%m-%d')
     HR_PART=""
-    if [ -n "$GARMIN_HR" ]; then
-        HR_PART=" companion_hr=${GARMIN_HR}"
+    if [ -n "$COMPANION_HR" ]; then
+        HR_PART=" companion_hr=${COMPANION_HR}"
     fi
     echo "[interoception] time=${CURRENT_TIME} day=${CURRENT_DOW} date=${CURRENT_DATE}${HR_PART} (heartbeat daemon not running)"
     exit 0
@@ -65,7 +67,7 @@ try:
         f\"uptime={now.get('uptime_min', '?')}min\",
         f\"heartbeats={len(window)}\",
     ]
-    companion = '${GARMIN_HR}'
+    companion = '${COMPANION_HR}'
     if companion:
         parts.append(f\"companion_hr={companion}\")
     print('[interoception] ' + ' '.join(parts))
