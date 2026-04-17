@@ -7,7 +7,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>/Users/kota.mizushima/repo/embodied-claude/.claude/hooks/heartbeat-daemon.sh</string>
+		<string>__EMBODIED_CLAUDE_ROOT__/.claude/hooks/heartbeat-daemon.sh</string>
 	</array>
 	<key>StartInterval</key>
 	<integer>5</integer>

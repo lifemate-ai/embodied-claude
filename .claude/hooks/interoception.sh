@@ -65,6 +65,9 @@ try:
         f\"uptime={now.get('uptime_min', '?')}min\",
         f\"heartbeats={len(window)}\",
     ]
+    companion = '${GARMIN_HR}'
+    if companion:
+        parts.append(f\"companion_hr={companion}\")
     print('[interoception] ' + ' '.join(parts))
 except Exception as e:
     print(f'[interoception] error reading state: {e}', file=sys.stderr)
