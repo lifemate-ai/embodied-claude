@@ -79,7 +79,24 @@ git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
-### 2. 各 MCP サーバーのセットアップ
+### 2. 依存関係の一括インストール
+
+リポジトリ内すべての MCP サーバーをまとめて動かしたい場合は、同梱のスクリプトを使ってください：
+
+```bash
+./scripts/install-mcps.sh          # ランタイム依存 + 各 MCP が必要とする extras
+./scripts/install-mcps.sh --dev    # テスト／開発用に `dev` extra も含める
+```
+
+スクリプトは各 MCP ディレクトリで `uv sync` を実行し、必要な extras を自動で渡します：
+
+- `tts-mcp` → `--extra all`（ElevenLabs と VOICEVOX 両方の統合を取り込む）
+- `wifi-cam-mcp` → `--extra transcribe`（Whisper による音声認識を追加）
+- `sociality-mcp` は uv workspace なので、`packages/*` 配下のサブ MCP は自動で解決されます
+
+一部の身体パーツだけを使いたい場合は、このスクリプトをスキップして下記の個別セットアップ手順に従ってください。
+
+### 3. 各 MCP サーバーのセットアップ
 
 #### usb-webcam-mcp（USB カメラ）
 

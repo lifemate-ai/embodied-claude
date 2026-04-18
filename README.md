@@ -79,7 +79,24 @@ git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
-### 2. Set up each MCP server
+### 2. Install dependencies (one-shot)
+
+If you want every MCP server in this repo ready to run, use the bundled script:
+
+```bash
+./scripts/install-mcps.sh          # runtime deps + the extras each MCP requires
+./scripts/install-mcps.sh --dev    # also include the `dev` extra for testing / contributing
+```
+
+The script runs `uv sync` in each MCP directory and passes the right extras:
+
+- `tts-mcp` → `--extra all` (pulls in both the ElevenLabs and VOICEVOX integrations)
+- `wifi-cam-mcp` → `--extra transcribe` (adds Whisper-based speech recognition)
+- `sociality-mcp` is a uv workspace; its `packages/*` sub-MCPs are resolved automatically
+
+If you only want a subset of body parts, skip the script and follow the per-server steps below instead.
+
+### 3. Set up each MCP server
 
 #### usb-webcam-mcp (USB Camera)
 
