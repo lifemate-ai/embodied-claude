@@ -441,17 +441,19 @@ class TapoCamera:
             case Direction.RIGHT:
                 pan_delta = -_degrees_to_normalized_pan(degrees)
             case Direction.UP:
-                # Tapo C220 ONVIF: y+ = physical UP, y- = physical DOWN
-                tilt_delta = _degrees_to_normalized_tilt(degrees)
-            case Direction.DOWN:
+                # Tapo C220 ONVIF: y+ = physical DOWN, y- = physical UP
+                # (confirmed: y=1.0 is the lower limit when desk-mounted)
                 tilt_delta = -_degrees_to_normalized_tilt(degrees)
+            case Direction.DOWN:
+                tilt_delta = _degrees_to_normalized_tilt(degrees)
 
         # In ceiling mount mode the camera is upside-down:
+        # - Tilt inverts (y=+1.0 becomes the upper limit)
         # - Pan mirrors (left/right swap)
-        # - Tilt is unchanged: swapping base sign + physical inversion cancel out
         mount_mode = get_behavior("wifi-cam", "mount_mode", self._config.mount_mode)
         if mount_mode == "ceiling":
             pan_delta = -pan_delta
+            tilt_delta = -tilt_delta
 
         try:
             ptz_mode = get_behavior("wifi-cam", "ptz_mode", self._config.ptz_mode)
@@ -552,11 +554,11 @@ class TapoCamera:
             status = await self._ptz_service.GetStatus({"ProfileToken": self._profile_token})
             if status.Position and status.Position.PanTilt:
                 pan = status.Position.PanTilt.x
-                # Tapo ONVIF: y+ = physical UP
-                tilt = status.Position.PanTilt.y
+                # Tapo ONVIF: y+ = physical DOWN (desk mount), flip for user
+                tilt = -status.Position.PanTilt.y
                 mount_mode = get_behavior("wifi-cam", "mount_mode", self._config.mount_mode)
                 if mount_mode == "ceiling":
-                    # Ceiling: camera upside-down, pan mirrors, tilt inverts
+                    # Ceiling: camera upside-down, both axes mirror
                     pan = -pan
                     tilt = -tilt
                 return CameraPosition(pan=pan, tilt=tilt)
