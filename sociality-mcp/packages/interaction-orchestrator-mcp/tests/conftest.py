@@ -12,6 +12,7 @@ from self_narrative_mcp.store import SelfNarrativeStore
 from social_core import SocialDB
 from social_state_mcp.store import SocialStateStore
 
+from interaction_orchestrator_mcp.memory_adapter import NullMemoryAdapter
 from interaction_orchestrator_mcp.store import InteractionOrchestratorStore
 
 
@@ -66,4 +67,5 @@ def stores(db: SocialDB, policy_path: Path):
         "boundary": boundary,
         "self_narrative": self_narrative,
         "orchestrator": orchestrator,
+        "memory_adapter": NullMemoryAdapter(),
     }

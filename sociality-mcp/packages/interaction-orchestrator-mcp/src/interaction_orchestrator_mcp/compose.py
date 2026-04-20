@@ -12,6 +12,12 @@ from social_core import DEFAULT_POLICY_TIMEZONE, local_view, utc_now
 from social_state_mcp.store import SocialStateStore
 
 from .desire_source import load_desire_snapshot
+from .memory_adapter import (
+    OrchestratorMemoryAdapter,
+)
+from .memory_adapter import (
+    make_default_adapter as make_default_memory_adapter,
+)
 from .schemas import (
     AgentStateSummary,
     CommitmentSummary,
@@ -19,6 +25,7 @@ from .schemas import (
     FollowupSuggestion,
     InteractionContext,
     OpenLoopSummary,
+    RelevantMemoryRef,
     ResponseContract,
 )
 from .store import InteractionOrchestratorStore
@@ -34,6 +41,7 @@ def compose_interaction_context(
     self_narrative_store: SelfNarrativeStore,
     orchestrator_store: InteractionOrchestratorStore,
     policy_timezone: str = DEFAULT_POLICY_TIMEZONE,
+    memory_adapter: OrchestratorMemoryAdapter | None = None,
 ) -> InteractionContext:
     """Gather everything the next move needs into a single snapshot."""
 
@@ -95,6 +103,23 @@ def compose_interaction_context(
         person_id=payload.person_id, limit=5, include_private=payload.include_private
     )
 
+    memory = memory_adapter or make_default_memory_adapter()
+    relevant_memories = [
+        RelevantMemoryRef(
+            memory_id=hit.memory_id,
+            content=hit.content,
+            relevance=hit.relevance,
+            use_policy=hit.use_policy,
+            reason=hit.reason,
+        )
+        for hit in memory.recall_for_response(
+            user_text=payload.user_text,
+            person_id=payload.person_id,
+            max_results=6,
+            include_private=payload.include_private,
+        )
+    ]
+
     joint_focus = _optional_dict(
         joint_attention_store,
         "get_current_joint_focus",
@@ -137,11 +162,13 @@ def compose_interaction_context(
         dominant_desire=dominant_desire,
         desires=desires,
         open_loops=open_loops,
+        relevant_memories=relevant_memories,
     )
 
     compact_prompt_block = _compact_block(
         prompt_summary=prompt_summary,
         response_contract=response_contract,
+        relevant_memories=relevant_memories,
         max_chars=payload.max_chars,
     )
 
@@ -163,7 +190,7 @@ def compose_interaction_context(
         latest_daybook=latest_daybook,
         desire_state=desire_data or None,
         agent_state=agent_state,
-        relevant_memories=[],
+        relevant_memories=relevant_memories,
         recent_experiences=recent_experiences,
         joint_focus=joint_focus,
         current_scene_summary=(
@@ -357,6 +384,7 @@ def _build_prompt_summary(
     dominant_desire: str | None,
     desires: dict[str, Any],
     open_loops: list[OpenLoopSummary],
+    relevant_memories: list[RelevantMemoryRef],
 ) -> str:
     social = social_state or {}
     availability = social.get("availability", "unknown")
@@ -380,16 +408,26 @@ def _build_prompt_summary(
         if quiet_active
         else "Policy quiet hours are NOT active."
     )
+    memory_text = (
+        f"Relevant memories: {len(relevant_memories)} (mentionable: "
+        f"{sum(1 for m in relevant_memories if m.use_policy == 'mentionable')})."
+        if relevant_memories
+        else "Relevant memories: none surfaced."
+    )
     return (
         f"Now {local_time} • {who} seems {availability}, {activity}, phase={phase}. "
-        f"{desire_text} {open_loop_text} {quiet_text} "
+        f"{desire_text} {open_loop_text} {quiet_text} {memory_text} "
         f"Recent agent experiences: {len(agent_state.recent_experiences)}; "
         f"interpretation_shifts so far: {agent_state.interpretation_shifts}."
     ).strip()
 
 
 def _compact_block(
-    *, prompt_summary: str, response_contract: ResponseContract, max_chars: int
+    *,
+    prompt_summary: str,
+    response_contract: ResponseContract,
+    relevant_memories: list[RelevantMemoryRef],
+    max_chars: int,
 ) -> str:
     contract_lines = [f"treat_user_as: {response_contract.treat_user_as}"]
     if response_contract.avoid:
@@ -400,14 +438,26 @@ def _compact_block(
         f"initiative: {response_contract.initiative_policy}, "
         f"max_clarifying={response_contract.max_clarifying_questions}"
     )
-    block = "\n".join(
-        [
-            "[interaction_context]",
-            prompt_summary,
-            "[response_contract]",
-            *contract_lines,
-        ]
-    )
+    memory_lines: list[str] = []
+    mentionable = [m for m in relevant_memories if m.use_policy == "mentionable"]
+    background = [m for m in relevant_memories if m.use_policy == "background_only"]
+    for m in mentionable[:3]:
+        snippet = m.content[:120] + ("…" if len(m.content) > 120 else "")
+        memory_lines.append(f"[mentionable r={m.relevance:.2f}] {snippet}")
+    for m in background[:2]:
+        snippet = m.content[:80] + ("…" if len(m.content) > 80 else "")
+        memory_lines.append(f"[background r={m.relevance:.2f}] {snippet}")
+
+    sections = [
+        "[interaction_context]",
+        prompt_summary,
+        "[response_contract]",
+        *contract_lines,
+    ]
+    if memory_lines:
+        sections.append("[relevant_memories]")
+        sections.extend(memory_lines)
+    block = "\n".join(sections)
     if len(block) > max_chars:
         block = block[: max_chars - 1].rstrip() + "…"
     return block

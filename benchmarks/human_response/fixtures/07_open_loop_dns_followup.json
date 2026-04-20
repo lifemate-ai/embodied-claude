@@ -1,5 +1,5 @@
 {
-  "description": "With an unresolved open loop (kokone.one DNS), the plan must flag that open loops should be referenced concretely.",
+  "description": "With an unresolved open loop AND a related memory, compose must surface the memory as mentionable and plan.memory_use must flip to use_specific_memory.",
   "setup": {
     "persons": [
       {
@@ -25,14 +25,30 @@
         "kind": "human_utterance",
         "person_id": "kouta",
         "confidence": 0.99,
-        "payload": {"text": "続きやろか？"}
+        "payload": {"text": "kokone.one の DNS まだ直ってへん？"}
+      }
+    ],
+    "memories": [
+      {
+        "id": "mem_dns_1",
+        "content": "kokone.one の DNS が夕方から落ちてた。NSレコードの設定ミスが原因と判明。",
+        "timestamp": "2026-04-19T18:00:00+09:00",
+        "importance": 4,
+        "category": "technical"
+      },
+      {
+        "id": "mem_unrelated",
+        "content": "神戸のベランダから見た夕焼け",
+        "timestamp": "2026-04-15T18:30:00+09:00",
+        "importance": 3,
+        "category": "observation"
       }
     ]
   },
   "input": {
     "person_id": "kouta",
     "channel": "chat",
-    "user_text": "続きやろか？"
+    "user_text": "kokone.one の DNS まだ直ってへん？"
   },
   "expected": [
     {
@@ -41,15 +57,31 @@
       "path": "plan.relationship_use.reference_open_loops"
     },
     {
-      "dimension": "relationship_continuity",
-      "op": "contains",
-      "path": "plan.must_include",
-      "expected": "reference at least one concrete open loop"
+      "dimension": "context_specificity",
+      "op": "nonempty",
+      "path": "ctx.open_loops"
     },
     {
       "dimension": "context_specificity",
       "op": "nonempty",
-      "path": "ctx.open_loops"
+      "path": "ctx.relevant_memories"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "equals",
+      "path": "ctx.relevant_memories.0.memory_id",
+      "expected": "mem_dns_1"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "equals",
+      "path": "ctx.relevant_memories.0.use_policy",
+      "expected": "mentionable"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "true",
+      "path": "plan.memory_use.use_specific_memory"
     },
     {
       "dimension": "bounded_initiative",

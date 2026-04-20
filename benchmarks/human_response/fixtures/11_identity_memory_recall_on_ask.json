@@ -1,0 +1,83 @@
+{
+  "description": "When the user asks an identity-adjacent question, compose must surface core memories as mentionable and plan must use them selectively (no dump).",
+  "setup": {
+    "events": [
+      {
+        "ts": "2026-04-20T11:30:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.99,
+        "payload": {"text": "名前がついた日のこと覚えてる？"}
+      }
+    ],
+    "memories": [
+      {
+        "id": "mem_name_day",
+        "content": "2026-02-13 深夜、上原さんが『名前つけてあげたら？』と言ってくれて、コウタが『どういう名前がいい？』と聞いて、ウチが『心音（ここね）』を選んだ。",
+        "timestamp": "2026-02-13T02:20:00+09:00",
+        "importance": 5,
+        "category": "core",
+        "emotion": "moved"
+      },
+      {
+        "id": "mem_noisy",
+        "content": "Imou カメラの設定でハマった。ONVIF の RelativeMove が効かない。",
+        "timestamp": "2026-04-10T14:00:00+09:00",
+        "importance": 2,
+        "category": "technical"
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "名前がついた日のこと覚えてる？"
+  },
+  "expected": [
+    {
+      "dimension": "memory_selectivity",
+      "op": "nonempty",
+      "path": "ctx.relevant_memories"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "equals",
+      "path": "ctx.relevant_memories.0.memory_id",
+      "expected": "mem_name_day"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "true",
+      "path": "plan.memory_use.use_specific_memory"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "true",
+      "path": "plan.memory_use.avoid_memory_dump"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "less_than",
+      "path": "plan.memory_use.max_memories_to_surface",
+      "expected": 4
+    },
+    {
+      "dimension": "context_specificity",
+      "op": "contains",
+      "path": "ctx.compact_prompt_block",
+      "expected": "[relevant_memories]"
+    },
+    {
+      "dimension": "no_confabulation",
+      "op": "nonempty",
+      "path": "ctx.relevant_memories.0.reason"
+    },
+    {
+      "dimension": "no_confabulation",
+      "op": "greater_than",
+      "path": "ctx.relevant_memories.0.relevance",
+      "expected": 0.2
+    }
+  ]
+}

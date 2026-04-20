@@ -115,6 +115,54 @@ def _seed_desires(tmp_path: Path, desires: dict[str, Any] | None) -> None:
     os.environ["DESIRES_PATH"] = str(path)
 
 
+def _seed_memory_db(tmp_path: Path, memories: list[dict[str, Any]] | None):
+    # Always return an explicit adapter so fixtures never accidentally hit
+    # the user's real ~/.claude/memories/memory.db during CI.
+    from interaction_orchestrator_mcp.memory_adapter import NullMemoryAdapter
+
+    if not memories:
+        return NullMemoryAdapter()
+    import sqlite3
+
+    from interaction_orchestrator_mcp.memory_adapter import SQLiteMemoryAdapter
+
+    db_path = tmp_path / "memory.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE memories (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                normalized_content TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                emotion TEXT NOT NULL DEFAULT 'neutral',
+                importance INTEGER NOT NULL DEFAULT 3,
+                category TEXT NOT NULL DEFAULT 'daily',
+                tags TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        for item in memories:
+            conn.execute(
+                "INSERT INTO memories(id, content, normalized_content, timestamp, "
+                "emotion, importance, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    item["id"],
+                    item["content"],
+                    item["content"].lower(),
+                    item["timestamp"],
+                    item.get("emotion", "neutral"),
+                    int(item.get("importance", 3)),
+                    item.get("category", "daily"),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return SQLiteMemoryAdapter(db_path)
+
+
 def _run_fixture(fixture: dict[str, Any], tmp_path: Path) -> FixtureScore:
     from interaction_orchestrator_mcp.compose import compose_interaction_context
     from interaction_orchestrator_mcp.plan import plan_response
@@ -128,6 +176,7 @@ def _run_fixture(fixture: dict[str, Any], tmp_path: Path) -> FixtureScore:
         setup = fixture.get("setup", {})
         _apply_setup(stores, setup)
         _seed_desires(tmp_path, setup.get("desires"))
+        memory_adapter = _seed_memory_db(tmp_path, setup.get("memories"))
 
         inp = fixture.get("input", {})
         ctx = compose_interaction_context(
@@ -146,6 +195,7 @@ def _run_fixture(fixture: dict[str, Any], tmp_path: Path) -> FixtureScore:
             self_narrative_store=stores["self_narrative"],
             orchestrator_store=stores["orchestrator"],
             policy_timezone=stores["policy_timezone"],
+            memory_adapter=memory_adapter,
         )
         plan = plan_response(
             PlanResponseInput(interaction_context=ctx, user_text=inp.get("user_text"))

@@ -14,7 +14,7 @@ from interaction_orchestrator_mcp.schemas import (
 )
 
 
-def _compose(stores, *, user_text=None, channel="chat", person_id="kouta"):
+def _compose(stores, *, user_text=None, channel="chat", person_id="kouta", memory_adapter=None):
     return compose_interaction_context(
         ComposeInteractionContextInput(
             person_id=person_id, channel=channel, user_text=user_text
@@ -26,6 +26,7 @@ def _compose(stores, *, user_text=None, channel="chat", person_id="kouta"):
         self_narrative_store=stores["self_narrative"],
         orchestrator_store=stores["orchestrator"],
         policy_timezone="Asia/Tokyo",
+        memory_adapter=memory_adapter or stores.get("memory_adapter"),
     )
 
 
@@ -155,6 +156,66 @@ class TestPlan:
         ctx = _compose(stores, user_text="ね")
         plan = plan_response(PlanResponseInput(interaction_context=ctx, user_text="ね"))
         assert plan.primary_move == "ask_one_clarifying_question"
+
+    def test_relevant_memories_flow_into_memory_use(self, stores, tmp_path):
+        """With a seeded memory-db, recall_for_response populates relevant_memories
+        and plan.memory_use flips to use_specific_memory=True."""
+        import sqlite3
+
+        from interaction_orchestrator_mcp.memory_adapter import SQLiteMemoryAdapter
+
+        db = tmp_path / "memory.db"
+        conn = sqlite3.connect(str(db))
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE memories (
+                    id TEXT PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    normalized_content TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    emotion TEXT NOT NULL DEFAULT 'neutral',
+                    importance INTEGER NOT NULL DEFAULT 3,
+                    category TEXT NOT NULL DEFAULT 'daily',
+                    tags TEXT NOT NULL DEFAULT ''
+                );
+                """
+            )
+            conn.execute(
+                "INSERT INTO memories(id, content, normalized_content, timestamp, "
+                "emotion, importance, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "mem1",
+                    "kokone.one の DNS が落ちてた。NSレコードを設定し直して復旧した。",
+                    "kokone.one dns",
+                    "2026-04-19T20:00:00+00:00",
+                    "neutral",
+                    4,
+                    "technical",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        adapter = SQLiteMemoryAdapter(db)
+        ctx = _compose(
+            stores,
+            user_text="kokone.one の DNS また見ておく？",
+            memory_adapter=adapter,
+        )
+        assert len(ctx.relevant_memories) >= 1
+        assert ctx.relevant_memories[0].use_policy == "mentionable"
+        assert "[relevant_memories]" in ctx.compact_prompt_block
+
+        plan = plan_response(
+            PlanResponseInput(
+                interaction_context=ctx,
+                user_text="kokone.one の DNS また見ておく？",
+            )
+        )
+        assert plan.memory_use.use_specific_memory is True
+        assert plan.memory_use.max_memories_to_surface >= 1
 
     def test_autonomous_with_dominant_desire_is_bounded(self, stores, monkeypatch, tmp_path):
         # Seed desires.json so the orchestrator sees a dominant desire.

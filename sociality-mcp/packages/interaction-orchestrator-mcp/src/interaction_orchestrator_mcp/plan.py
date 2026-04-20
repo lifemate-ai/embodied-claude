@@ -170,10 +170,20 @@ def _pick_tone(*, primary_move: PrimaryMove, quiet_active: bool) -> ToneHint:
 def _pick_memory_use(
     *, primary_move: PrimaryMove, ctx: InteractionContext
 ) -> MemoryUseHint:
+    mentionable = [m for m in ctx.relevant_memories if m.use_policy == "mentionable"]
+    has_mentionable = bool(mentionable)
+
     if primary_move in {"write_private_reflection", "compose_letter"}:
         return MemoryUseHint(
+            use_specific_memory=has_mentionable or bool(ctx.relevant_memories),
+            max_memories_to_surface=min(3, max(1, len(ctx.relevant_memories) or 2)),
+            avoid_memory_dump=True,
+        )
+    if has_mentionable:
+        # Surface hits directly; let the model quote them.
+        return MemoryUseHint(
             use_specific_memory=True,
-            max_memories_to_surface=3,
+            max_memories_to_surface=min(3, len(mentionable)),
             avoid_memory_dump=True,
         )
     if ctx.open_loops or ctx.commitments_due:
