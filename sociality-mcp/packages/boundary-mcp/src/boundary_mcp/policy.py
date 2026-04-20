@@ -56,12 +56,38 @@ class SocialPolicy:
 
 
 def get_policy_path(path: str | Path | None = None) -> Path:
+    """Resolve the socialPolicy.toml location.
+
+    Search order:
+    1. Explicit ``path`` argument (for tests / programmatic callers).
+    2. ``SOCIAL_POLICY_PATH`` environment variable.
+    3. Walk upward from ``cwd`` (bounded to 6 parents) looking for
+       ``socialPolicy.toml`` — lets the MCP find the file whether it is
+       launched from the repo root or from a sub-package's directory.
+    4. Fall back to ``cwd / socialPolicy.toml`` even if missing, so the
+       caller can surface the intended-but-absent path in errors.
+    """
+
     if path is not None:
         return Path(path).expanduser()
     env = os.environ.get("SOCIAL_POLICY_PATH")
     if env:
         return Path(env).expanduser()
-    return Path.cwd() / "socialPolicy.toml"
+
+    cwd = Path.cwd()
+    for candidate in (cwd, *cwd.parents):
+        policy = candidate / "socialPolicy.toml"
+        if policy.exists():
+            return policy
+        # Stop at $HOME or once we have walked 6 levels up, whichever first.
+        try:
+            if candidate == Path.home():
+                break
+        except RuntimeError:  # HOME not set
+            pass
+        if len(candidate.parts) <= max(1, len(cwd.parts) - 6):
+            break
+    return cwd / "socialPolicy.toml"
 
 
 def load_policy(path: str | Path | None = None) -> SocialPolicy:

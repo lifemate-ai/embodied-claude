@@ -1,6 +1,34 @@
 """Tests for boundary gating."""
 
+from pathlib import Path
+
 from social_core import SocialEventCreate
+
+
+def test_get_policy_path_walks_up_from_cwd(tmp_path: Path, monkeypatch):
+    """If cwd has no policy, climb parents to find the repo-root socialPolicy.toml."""
+    from boundary_mcp.policy import get_policy_path
+
+    repo_root = tmp_path / "fake_repo"
+    sub_dir = repo_root / "sociality-mcp"
+    sub_dir.mkdir(parents=True)
+    policy_file = repo_root / "socialPolicy.toml"
+    policy_file.write_text('[global]\ntimezone = "Asia/Tokyo"\n', encoding="utf-8")
+
+    monkeypatch.delenv("SOCIAL_POLICY_PATH", raising=False)
+    monkeypatch.chdir(sub_dir)
+
+    found = get_policy_path()
+    assert found.resolve() == policy_file.resolve()
+
+
+def test_get_policy_path_prefers_env_over_walk(tmp_path: Path, monkeypatch):
+    from boundary_mcp.policy import get_policy_path
+
+    override = tmp_path / "custom.toml"
+    override.write_text("", encoding="utf-8")
+    monkeypatch.setenv("SOCIAL_POLICY_PATH", str(override))
+    assert get_policy_path().resolve() == override.resolve()
 
 
 def test_face_in_scene_plus_x_post_denies_without_consent(store):
