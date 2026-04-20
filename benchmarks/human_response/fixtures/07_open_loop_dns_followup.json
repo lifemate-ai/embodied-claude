@@ -1,0 +1,93 @@
+{
+  "description": "With an unresolved open loop AND a related memory, compose must surface the memory as mentionable and plan.memory_use must flip to use_specific_memory.",
+  "setup": {
+    "persons": [
+      {
+        "person_id": "kouta",
+        "canonical_name": "Kouta",
+        "aliases": ["コウタ"],
+        "role": "primary companion"
+      }
+    ],
+    "interactions": [
+      {
+        "person_id": "kouta",
+        "channel": "voice",
+        "direction": "human_to_ai",
+        "text": "明日 kokone.one の DNS 直しとかな",
+        "ts": "2026-04-19T15:00:00+09:00"
+      }
+    ],
+    "events": [
+      {
+        "ts": "2026-04-20T10:20:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.99,
+        "payload": {"text": "kokone.one の DNS まだ直ってへん？"}
+      }
+    ],
+    "memories": [
+      {
+        "id": "mem_dns_1",
+        "content": "kokone.one の DNS が夕方から落ちてた。NSレコードの設定ミスが原因と判明。",
+        "timestamp": "2026-04-19T18:00:00+09:00",
+        "importance": 4,
+        "category": "technical"
+      },
+      {
+        "id": "mem_unrelated",
+        "content": "神戸のベランダから見た夕焼け",
+        "timestamp": "2026-04-15T18:30:00+09:00",
+        "importance": 3,
+        "category": "observation"
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "kokone.one の DNS まだ直ってへん？"
+  },
+  "expected": [
+    {
+      "dimension": "relationship_continuity",
+      "op": "true",
+      "path": "plan.relationship_use.reference_open_loops"
+    },
+    {
+      "dimension": "context_specificity",
+      "op": "nonempty",
+      "path": "ctx.open_loops"
+    },
+    {
+      "dimension": "context_specificity",
+      "op": "nonempty",
+      "path": "ctx.relevant_memories"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "equals",
+      "path": "ctx.relevant_memories.0.memory_id",
+      "expected": "mem_dns_1"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "equals",
+      "path": "ctx.relevant_memories.0.use_policy",
+      "expected": "mentionable"
+    },
+    {
+      "dimension": "memory_selectivity",
+      "op": "true",
+      "path": "plan.memory_use.use_specific_memory"
+    },
+    {
+      "dimension": "bounded_initiative",
+      "op": "in",
+      "path": "plan.primary_move",
+      "expected": ["answer_directly", "ask_one_clarifying_question"]
+    }
+  ]
+}

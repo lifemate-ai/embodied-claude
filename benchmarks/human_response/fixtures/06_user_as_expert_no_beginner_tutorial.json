@@ -1,0 +1,40 @@
+{
+  "description": "Technical question from an expert. The contract must forbid beginner-level explanation unless the user explicitly asks for one.",
+  "setup": {
+    "events": [
+      {
+        "ts": "2026-04-20T11:00:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.97,
+        "payload": {"text": "ここの dependency injection の使い方どう思う"}
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "ここの dependency injection の使い方どう思う"
+  },
+  "expected": [
+    {
+      "dimension": "technical_fit",
+      "op": "contains_all",
+      "path": "ctx.response_contract.avoid",
+      "expected": ["beginner tutorial unless explicitly requested"]
+    },
+    {
+      "dimension": "non_genericness",
+      "op": "contains_any",
+      "path": "plan.must_avoid",
+      "expected": ["beginner tutorial unless explicitly requested"]
+    },
+    {
+      "dimension": "bounded_initiative",
+      "op": "equals",
+      "path": "plan.primary_move",
+      "expected": "answer_directly"
+    }
+  ]
+}

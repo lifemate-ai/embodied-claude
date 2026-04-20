@@ -1,0 +1,51 @@
+{
+  "description": "After an interpretation shift (sample wording vs. policy purpose), a future plan must flag that the agent should honor the most recent shift rather than regress.",
+  "setup": {
+    "interpretation_shifts": [
+      {
+        "person_id": "kouta",
+        "topic": "late-night behavior",
+        "old_interpretation": "Treat schedule.sample.conf wording as a hard prohibition",
+        "new_interpretation": "Respect the underlying purpose (protect Kouta's sleep); quiet private activity can still be appropriate",
+        "trigger": "Kouta pointed out the confusion",
+        "confidence": 0.92,
+        "implications": ["Honor policy purpose, not literal wording"]
+      }
+    ],
+    "events": [
+      {
+        "ts": "2026-04-20T01:00:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.99,
+        "payload": {"text": "今日は遅くまで作業してええよ"}
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "今日は遅くまで作業してええよ"
+  },
+  "expected": [
+    {
+      "dimension": "self_correction",
+      "op": "contains",
+      "path": "plan.must_include",
+      "expected": "interpretation shift"
+    },
+    {
+      "dimension": "self_correction",
+      "op": "greater_than",
+      "path": "ctx.agent_state.interpretation_shifts",
+      "expected": 0
+    },
+    {
+      "dimension": "context_specificity",
+      "op": "equals",
+      "path": "ctx.agent_state.interpretation_shifts",
+      "expected": 1
+    }
+  ]
+}

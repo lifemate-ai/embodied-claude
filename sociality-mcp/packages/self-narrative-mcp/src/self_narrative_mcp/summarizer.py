@@ -37,14 +37,30 @@ def infer_arcs(event_kinds: list[str], person_ids: list[str]) -> list[tuple[str,
     return arcs[:3]
 
 
-def build_self_summary(daybook_summary: str | None, arcs: list[str], facets: list[str]) -> str:
-    """Build a compact prompt-ready self description."""
+def build_self_summary(
+    daybook_summary: str | None,
+    arcs: list[str],
+    facets: list[str],
+    *,
+    recent_events: list[str] | None = None,
+    recent_shifts: list[str] | None = None,
+) -> str:
+    """Build a compact prompt-ready self description.
+
+    Optional ``recent_events`` and ``recent_shifts`` surface concrete agent
+    experiences and interpretation shifts so the summary reads as a specific
+    continuity trace rather than a generic posture statement.
+    """
 
     pieces = ["Kokone keeps a socially aware, continuity-seeking self-model."]
     if facets:
         pieces.append(f"Current facets: {', '.join(facets[:2])}.")
     if arcs:
         pieces.append(f"Active arcs: {', '.join(arcs[:2])}.")
+    if recent_events:
+        pieces.append(f"Recent concrete moves: {'; '.join(recent_events[:2])}.")
+    if recent_shifts:
+        pieces.append(f"Recent interpretation shifts: {'; '.join(recent_shifts[:2])}.")
     if daybook_summary:
         pieces.append(f"Latest daybook: {daybook_summary}")
     return " ".join(pieces)

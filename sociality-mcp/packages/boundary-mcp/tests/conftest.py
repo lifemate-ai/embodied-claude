@@ -13,6 +13,7 @@ def policy_path(tmp_path: Path) -> Path:
     path.write_text(
         """
 [global]
+timezone = "Asia/Tokyo"
 quiet_hours = ["00:00-07:00"]
 max_nudges_per_hour = 2
 

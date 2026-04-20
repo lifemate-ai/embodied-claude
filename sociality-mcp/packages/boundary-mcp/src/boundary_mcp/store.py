@@ -100,7 +100,9 @@ class BoundaryStore:
         alternatives: list[str] = []
         decision = "allow"
 
-        quiet_active, quiet_until = in_quiet_hours(ts, self.policy.global_policy.quiet_hours)
+        quiet_active, quiet_until = in_quiet_hours(
+            ts, self.policy.global_policy.quiet_hours, self.policy.global_policy.timezone
+        )
         high_urgency = urgency in {"high", "critical"} or bool(context.get("health_safety"))
         person_rule = self.policy.person_rule_for(person_id)
 
@@ -201,7 +203,9 @@ class BoundaryStore:
         return ReviewSocialPostResult(risk_level=risk, issues=issues, recommendation=recommendation)
 
     def get_quiet_mode_state(self, *, ts: str) -> QuietModeState:
-        active, until = in_quiet_hours(ts, self.policy.global_policy.quiet_hours)
+        active, until = in_quiet_hours(
+            ts, self.policy.global_policy.quiet_hours, self.policy.global_policy.timezone
+        )
         reasons = (
             ["within configured quiet hours"] if active else ["outside configured quiet hours"]
         )

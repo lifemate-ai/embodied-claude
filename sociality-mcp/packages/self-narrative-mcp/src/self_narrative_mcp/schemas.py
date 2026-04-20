@@ -19,9 +19,20 @@ class DaybookRecord(BaseModel):
 
     day: str
     summary: str
+    concrete_events: list[str] = Field(default_factory=list)
+    noticed_changes: list[str] = Field(default_factory=list)
+    relationship_moments: list[str] = Field(default_factory=list)
+    open_loops: list[str] = Field(default_factory=list)
+    boundaries_respected: list[str] = Field(default_factory=list)
+    private_reflections: list[str] = Field(default_factory=list)
+    next_gentle_actions: list[str] = Field(default_factory=list)
+    evidence_event_ids: list[str] = Field(default_factory=list)
 
 
 class SelfSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     summary: str
+    recent_concrete_events: list[str] = Field(default_factory=list)
+    recent_interpretation_shifts: list[str] = Field(default_factory=list)
+    latest_daybook: str | None = None

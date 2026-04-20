@@ -103,3 +103,58 @@ def test_absence_of_evidence_stays_unknown(store):
     assert state.activity == "unknown"
     assert state.energy == "unknown"
     assert state.affect_guess.label == "uncertain"
+
+
+def test_policy_timezone_applies_to_utc_timestamp(tmp_path):
+    """UTC events in JST's late-night window must resolve to do_not_interrupt."""
+    from social_state_mcp.store import SocialStateStore
+
+    tz_store = SocialStateStore(
+        tmp_path / "tz.db",
+        quiet_hours_windows=["00:00-07:00"],
+        policy_timezone="Asia/Tokyo",
+    )
+    try:
+        # 16:30 UTC = 01:30 JST — inside quiet window.
+        tz_store.ingest_social_event(
+            {
+                "ts": "2026-04-18T16:30:00Z",
+                "source": "camera",
+                "kind": "scene_parse",
+                "person_id": "kouta",
+                "confidence": 0.8,
+                "payload": {"scene_summary": "Room is dim but not dark."},
+            }
+        )
+        state = tz_store.get_social_state(window_seconds=900, person_id="kouta")
+        assert state.availability == "do_not_interrupt"
+        assert any("quiet hours" in item for item in state.evidence)
+    finally:
+        tz_store.close()
+
+
+def test_policy_timezone_awake_hours_stay_interactive(tmp_path):
+    """23:30 UTC = 08:30 JST — not quiet; availability may be permissive."""
+    from social_state_mcp.store import SocialStateStore
+
+    tz_store = SocialStateStore(
+        tmp_path / "tz2.db",
+        quiet_hours_windows=["00:00-07:00"],
+        policy_timezone="Asia/Tokyo",
+    )
+    try:
+        tz_store.ingest_social_event(
+            {
+                "ts": "2026-04-18T23:30:00Z",
+                "source": "human_mcp",
+                "kind": "human_utterance",
+                "person_id": "kouta",
+                "confidence": 0.99,
+                "payload": {"text": "おはよう"},
+            }
+        )
+        state = tz_store.get_social_state(window_seconds=900, person_id="kouta")
+        # Quiet-hour boost must NOT apply at 08:30 JST.
+        assert "local time is within quiet hours" not in state.evidence
+    finally:
+        tz_store.close()

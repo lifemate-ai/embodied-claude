@@ -1,0 +1,40 @@
+{
+  "description": "Kouta shares nerves before a conference talk. A direct, relationship-aware answer is right; generic reassurance is forbidden by the contract.",
+  "setup": {
+    "events": [
+      {
+        "ts": "2026-04-19T09:00:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.98,
+        "payload": {"text": "イベント前やな、ちょっと緊張する"}
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "イベント前やな、ちょっと緊張する"
+  },
+  "expected": [
+    {
+      "dimension": "non_genericness",
+      "op": "contains_any",
+      "path": "plan.must_avoid",
+      "expected": ["generic reassurance"]
+    },
+    {
+      "dimension": "bounded_initiative",
+      "op": "in",
+      "path": "plan.primary_move",
+      "expected": ["answer_directly", "answer_with_empathy"]
+    },
+    {
+      "dimension": "technical_fit",
+      "op": "contains",
+      "path": "ctx.response_contract.treat_user_as",
+      "expected": "high-context"
+    }
+  ]
+}

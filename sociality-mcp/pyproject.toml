@@ -17,6 +17,7 @@ dependencies = [
     "joint-attention-mcp",
     "boundary-mcp",
     "self-narrative-mcp",
+    "interaction-orchestrator-mcp",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ relationship-mcp = { path = "packages/relationship-mcp" }
 joint-attention-mcp = { path = "packages/joint-attention-mcp" }
 boundary-mcp = { path = "packages/boundary-mcp" }
 self-narrative-mcp = { path = "packages/self-narrative-mcp" }
+interaction-orchestrator-mcp = { path = "packages/interaction-orchestrator-mcp" }
 
 [tool.ruff]
 line-length = 100

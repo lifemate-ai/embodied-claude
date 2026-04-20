@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from social_core import clamp01, confidence_from_evidence, ensure_iso8601, parse_timestamp
+from social_core import (
+    DEFAULT_POLICY_TIMEZONE,
+    clamp01,
+    confidence_from_evidence,
+    ensure_iso8601,
+    in_quiet_hours,
+    parse_timestamp,
+)
 from social_core.models import SocialEvent
 
 from .schemas import (
@@ -14,6 +21,7 @@ from .schemas import (
     TurnTakingState,
 )
 
+DEFAULT_QUIET_HOURS = ("00:00-07:00",)
 QUIET_KEYWORDS = ("静か", "quiet", "集中", "focus", "not now", "later")
 WORK_KEYWORDS = ("work", "working", "desk", "meeting", "会議", "作業", "仕事", "集中")
 REST_KEYWORDS = ("rest", "resting", "sofa", "寝", "sleep", "眠")
@@ -30,6 +38,8 @@ def get_social_state_result(
     person_id: str | None = None,
     include_evidence: bool = True,
     reference_ts: str | None = None,
+    quiet_hours_windows: list[str] | None = None,
+    policy_timezone: str = DEFAULT_POLICY_TIMEZONE,
 ) -> SocialStateResult:
     """Infer a compact social state from recent events."""
 
@@ -47,7 +57,11 @@ def get_social_state_result(
     recent_question = _recent_human_question(ordered, ref_dt)
     quiet_request = _recent_quiet_request(ordered, ref_dt)
     recent_nudges = _count_recent_nudges(ordered, ref_dt)
-    quiet_hours = bool(ordered or reference_ts) and _is_quiet_hours(ref_dt)
+    windows = list(quiet_hours_windows) if quiet_hours_windows is not None else list(
+        DEFAULT_QUIET_HOURS
+    )
+    quiet_active, _quiet_until = in_quiet_hours(timestamp, windows, policy_timezone)
+    quiet_hours = bool(ordered or reference_ts) and quiet_active
 
     presence = "absent"
     if latest_human and _age_seconds(latest_human, ref_dt) <= 120:
@@ -205,10 +219,6 @@ def summarize_social_context(state: SocialStateResult, max_chars: int) -> Social
 
 def _latest(events: list[SocialEvent], kind: str) -> SocialEvent | None:
     return next((event for event in events if event.kind == kind), None)
-
-
-def _is_quiet_hours(reference_dt) -> bool:
-    return 0 <= reference_dt.hour < 7
 
 
 def _age_seconds(event: SocialEvent, reference_dt) -> float:

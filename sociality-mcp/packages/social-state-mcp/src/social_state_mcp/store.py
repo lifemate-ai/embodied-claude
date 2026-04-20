@@ -8,7 +8,14 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from social_core import EventStore, SocialDB, SocialEventCreate, ensure_iso8601, parse_timestamp
+from social_core import (
+    DEFAULT_POLICY_TIMEZONE,
+    EventStore,
+    SocialDB,
+    SocialEventCreate,
+    ensure_iso8601,
+    parse_timestamp,
+)
 
 from .inference import get_social_state_result
 from .schemas import SocialStateResult
@@ -17,9 +24,18 @@ from .schemas import SocialStateResult
 class SocialStateStore:
     """Store wrapper for social state tools."""
 
-    def __init__(self, path: str | Path | None = None, db: SocialDB | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        db: SocialDB | None = None,
+        *,
+        quiet_hours_windows: list[str] | None = None,
+        policy_timezone: str = DEFAULT_POLICY_TIMEZONE,
+    ) -> None:
         self.db = db or SocialDB(path)
         self.events = EventStore(self.db)
+        self.quiet_hours_windows = quiet_hours_windows
+        self.policy_timezone = policy_timezone
 
     def close(self) -> None:
         self.db.close()
@@ -50,6 +66,8 @@ class SocialStateStore:
             person_id=person_id,
             include_evidence=include_evidence,
             reference_ts=reference_ts,
+            quiet_hours_windows=self.quiet_hours_windows,
+            policy_timezone=self.policy_timezone,
         )
         self._save_snapshot(state)
         return state

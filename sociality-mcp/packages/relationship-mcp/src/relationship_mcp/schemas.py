@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CommitmentRecord(BaseModel):
@@ -37,6 +39,17 @@ class SuggestionRecord(BaseModel):
     reason: str
 
 
+class PreferenceRecord(BaseModel):
+    """A preference with evidence, confidence, and provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: list[str] = Field(default_factory=list)
+    source: Literal["explicit", "inferred", "seeded"] = "inferred"
+
+
 class PersonModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -44,7 +57,7 @@ class PersonModel(BaseModel):
     canonical_name: str
     aliases: list[str]
     role: str | None = None
-    salient_preferences: list[str]
+    salient_preferences: list[PreferenceRecord]
     open_loops: list[OpenLoopRecord]
     active_commitments: list[CommitmentRecord]
     rituals: list[RitualRecord]

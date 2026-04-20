@@ -23,7 +23,14 @@ from .inference import (
     suggest_followup_text,
     summarize_relationship,
 )
-from .schemas import CommitmentRecord, OpenLoopRecord, PersonModel, RitualRecord, SuggestionRecord
+from .schemas import (
+    CommitmentRecord,
+    OpenLoopRecord,
+    PersonModel,
+    PreferenceRecord,
+    RitualRecord,
+    SuggestionRecord,
+)
 
 
 class RelationshipStore:
@@ -468,20 +475,53 @@ class RelationshipStore:
             return _normalize_topic(text)
         return None
 
-    def _salient_preferences(self, person_id: str, boundaries: list[str]) -> list[str]:
-        preferences = ["likes contextual continuity more than generic encouragement"]
-        if any("quiet" in boundary or "midnight" in boundary for boundary in boundaries):
-            preferences.insert(0, "prefers gentle brief nudges while working")
-        elif self.db.fetchone(
-            """
-            SELECT 1
-            FROM events
-            WHERE person_id = ? AND kind = 'human_utterance' AND payload_json LIKE '%静か%'
-            LIMIT 1
-            """,
-            (person_id,),
-        ):
-            preferences.insert(0, "prefers quieter interaction when focused")
+    def _salient_preferences(
+        self, person_id: str, boundaries: list[str]
+    ) -> list[PreferenceRecord]:
+        preferences: list[PreferenceRecord] = [
+            PreferenceRecord(
+                text="likes contextual continuity more than generic encouragement",
+                confidence=0.55,
+                evidence=["heuristic: default posture for relationship continuity"],
+                source="inferred",
+            )
+        ]
+        boundary_match = next(
+            (b for b in boundaries if "quiet" in b or "midnight" in b), None
+        )
+        if boundary_match:
+            preferences.insert(
+                0,
+                PreferenceRecord(
+                    text="prefers gentle brief nudges while working",
+                    confidence=0.78,
+                    evidence=[f"boundary: {boundary_match}"],
+                    source="inferred",
+                ),
+            )
+        else:
+            row = self.db.fetchone(
+                """
+                SELECT event_id
+                FROM events
+                WHERE person_id = ?
+                  AND kind = 'human_utterance'
+                  AND payload_json LIKE '%静か%'
+                ORDER BY ts DESC
+                LIMIT 1
+                """,
+                (person_id,),
+            )
+            if row:
+                preferences.insert(
+                    0,
+                    PreferenceRecord(
+                        text="prefers quieter interaction when focused",
+                        confidence=0.7,
+                        evidence=[f"utterance evidence: event={row['event_id']}"],
+                        source="inferred",
+                    ),
+                )
         return preferences[:3]
 
 

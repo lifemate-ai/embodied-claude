@@ -14,6 +14,87 @@ class Migration:
     sql: str
 
 
+_MIGRATION_002_SQL = """
+CREATE TABLE IF NOT EXISTS agent_experiences (
+    experience_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    person_id TEXT,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    private_summary TEXT,
+    public_summary TEXT,
+    why TEXT,
+    felt_state_json TEXT NOT NULL DEFAULT '{}',
+    desires_before_json TEXT NOT NULL DEFAULT '{}',
+    desires_after_json TEXT NOT NULL DEFAULT '{}',
+    related_event_ids TEXT NOT NULL DEFAULT '',
+    related_memory_ids TEXT NOT NULL DEFAULT '',
+    artifacts_json TEXT NOT NULL DEFAULT '[]',
+    importance INTEGER NOT NULL DEFAULT 3,
+    privacy_level TEXT NOT NULL DEFAULT 'private',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_experiences_ts
+    ON agent_experiences(ts DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_experiences_person
+    ON agent_experiences(person_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_experiences_kind
+    ON agent_experiences(kind, ts DESC);
+
+CREATE TABLE IF NOT EXISTS private_reflections (
+    reflection_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    person_id TEXT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '',
+    importance INTEGER NOT NULL DEFAULT 3,
+    may_surface_later INTEGER NOT NULL DEFAULT 1,
+    surfaced_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_private_reflections_ts
+    ON private_reflections(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_private_reflections_person
+    ON private_reflections(person_id, ts DESC);
+
+CREATE TABLE IF NOT EXISTS interpretation_shifts (
+    shift_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    person_id TEXT,
+    topic TEXT NOT NULL,
+    old_interpretation TEXT NOT NULL,
+    new_interpretation TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    implications_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_interpretation_shifts_ts
+    ON interpretation_shifts(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_interpretation_shifts_topic
+    ON interpretation_shifts(topic, ts DESC);
+
+CREATE TABLE IF NOT EXISTS private_letters (
+    letter_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    person_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    intended_time TEXT,
+    visibility TEXT NOT NULL DEFAULT 'private',
+    related_open_loops TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_private_letters_person_ts
+    ON private_letters(person_id, ts DESC);
+"""
+
+
 MIGRATIONS = [
     Migration(
         name="001_initial_schema",
@@ -208,6 +289,10 @@ MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_joint_focus_person_ts
             ON joint_focus(person_id, ts DESC);
         """,
+    ),
+    Migration(
+        name="002_interaction_orchestrator",
+        sql=_MIGRATION_002_SQL,
     ),
 ]
 

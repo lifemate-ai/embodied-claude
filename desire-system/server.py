@@ -18,6 +18,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from backend import make_default_adapter
 from desire_updater import DESIRE_CONFIGS, compute_desires, save_desires
 
 # 欲求レベル読み込み元
@@ -84,16 +85,16 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Get Kokone's current desire levels and discomfort (homeostasis). "
                 "Discomfort = distance from set point. "
-                "IMPORTANT: Act immediately on any desire with discomfort >= 0.5. "
+                "When discomfort >= 0.5: pick ONE bounded action that fits the "
+                "current context (prefer private/non-interruptive during quiet "
+                "hours), then call satisfy_desire. Do NOT loop more than once "
+                "per tick. Desires bias attention; they are not a command queue. "
                 "browse_curiosity -> WebSearch something interesting; "
                 "look_outside -> use camera to look outside; "
                 "miss_companion -> talk to コウタ proactively; "
                 "observe_room -> use camera to observe room; "
                 "identity_coherence -> recall memories to reinforce self-model; "
-                "cognitive_load -> think about or discuss something interesting. "
-                "After acting, call satisfy_desire to recheck levels. "
-                "Keep acting until discomfort drops below 0.3. "
-                "Desires drive behavior - do not just report them."
+                "cognitive_load -> think about or discuss something interesting."
             ),
             inputSchema={
                 "type": "object",
@@ -104,15 +105,40 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="satisfy_desire",
             description=(
-                "Recalculate desire levels and discomfort after taking an action. "
-                "Call this after every action to check if homeostasis is restored "
-                "(discomfort < 0.3). "
-                "If still high, keep acting. "
-                "Loop: act -> satisfy_desire -> still uncomfortable? -> act again."
+                "Record that a desire has been acted on and recompute levels. "
+                "Writes a memory row with canonical satisfaction markers so "
+                "the next tick reflects the action without waiting on other "
+                "memory write paths. Prefer calling this once per action; avoid "
+                "tight act->satisfy loops."
             ),
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "desire_name": {
+                        "type": "string",
+                        "description": (
+                            "Which desire was addressed. One of: "
+                            + ", ".join(DESIRE_CONFIGS.keys())
+                            + ". If omitted, only recomputes current levels."
+                        ),
+                    },
+                    "action_summary": {
+                        "type": "string",
+                        "description": (
+                            "Short phrase describing what was done (≤120 chars). "
+                            "Stored as the satisfaction evidence."
+                        ),
+                    },
+                    "outcome": {
+                        "type": "string",
+                        "enum": ["satisfied", "partially_satisfied", "not_satisfied"],
+                        "description": "How the action landed. Defaults to satisfied.",
+                    },
+                    "person_id": {
+                        "type": "string",
+                        "description": "Optional person context for the action.",
+                    },
+                },
                 "required": [],
             },
         ),
@@ -165,19 +191,33 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=format_desires(data))]
 
     if name == "satisfy_desire":
+        desire_name = (arguments.get("desire_name") or "").strip()
+        action_summary = (arguments.get("action_summary") or "").strip()
+        outcome = arguments.get("outcome", "satisfied")
+        person_id = arguments.get("person_id")
+
         try:
-            import chromadb
-            chroma_path = os.getenv(
-                "MEMORY_DB_PATH",
-                str(Path.home() / ".claude" / "memories" / "chroma"),
-            )
-            collection_name = os.getenv("MEMORY_COLLECTION_NAME", "claude_memories")
-            client = chromadb.PersistentClient(path=chroma_path)
-            collection = client.get_or_create_collection(collection_name)
-            state = compute_desires(collection)
+            from datetime import datetime, timezone
+
+            adapter = make_default_adapter()
+            # Record evidence first so the recomputation sees it.
+            if desire_name and desire_name in DESIRE_CONFIGS and outcome == "satisfied":
+                canonical_marker = DESIRE_CONFIGS[desire_name].keywords[0]
+                summary_text = action_summary or canonical_marker
+                adapter.record_satisfaction(
+                    desire_name=desire_name,
+                    summary=f"{canonical_marker}。{summary_text}",
+                    ts=datetime.now(timezone.utc),
+                    metadata={"outcome": outcome, "person_id": person_id},
+                )
+            state = compute_desires(adapter)
             save_desires(state, DESIRES_PATH)
             data = state.to_dict()
-            return [TextContent(type="text", text=format_desires(data))]
+            header = ""
+            if desire_name and desire_name in DESIRE_CONFIGS:
+                label = DESIRE_CONFIGS[desire_name].label
+                header = f"[{outcome}] {label} — {action_summary or '(no summary)'}\n\n"
+            return [TextContent(type="text", text=header + format_desires(data))]
         except Exception as e:
             return [TextContent(type="text", text=f"欲求レベルの更新に失敗: {e}")]
 
@@ -185,6 +225,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         desire_name = arguments.get("desire_name", "")
         amount = float(arguments.get("amount", 0.2))
         amount = max(0.0, min(0.5, amount))
+
+        # Validate against the config first so orphaned keys in desires.json
+        # cannot slip through.
+        if desire_name not in DESIRE_CONFIGS:
+            valid = list(DESIRE_CONFIGS.keys())
+            return [
+                TextContent(
+                    type="text", text=f"欲求名が不正: {desire_name!r}. 有効: {valid}"
+                )
+            ]
 
         data = load_desires()
         if data is None:
@@ -195,9 +245,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         desires = data.get("desires", {})
         discomforts = data.get("discomforts", {})
-        if desire_name not in desires and desire_name not in DESIRE_CONFIGS:
-            valid = list(DESIRE_CONFIGS.keys())
-            return [TextContent(type="text", text=f"欲求名が不正: {desire_name}. 有効: {valid}")]
 
         # レベルを上げる
         desires[desire_name] = min(1.0, desires.get(desire_name, 0) + amount)
@@ -215,6 +262,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         data["desires"] = desires
         data["discomforts"] = discomforts
         data["dominant"] = dominant
+        data["updated_at"] = now.isoformat()
 
         DESIRES_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(DESIRES_PATH, "w", encoding="utf-8") as f:

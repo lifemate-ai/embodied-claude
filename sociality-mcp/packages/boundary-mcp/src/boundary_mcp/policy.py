@@ -5,14 +5,17 @@ from __future__ import annotations
 import os
 import tomllib
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from pathlib import Path
+
+from social_core import DEFAULT_POLICY_TIMEZONE
+from social_core import in_quiet_hours as _in_quiet_hours_core
 
 
 @dataclass(slots=True)
 class GlobalPolicy:
     quiet_hours: list[str] = field(default_factory=list)
     max_nudges_per_hour: int = 2
+    timezone: str = DEFAULT_POLICY_TIMEZONE
 
 
 @dataclass(slots=True)
@@ -53,19 +56,49 @@ class SocialPolicy:
 
 
 def get_policy_path(path: str | Path | None = None) -> Path:
+    """Resolve the socialPolicy.toml location.
+
+    Search order:
+    1. Explicit ``path`` argument (for tests / programmatic callers).
+    2. ``SOCIAL_POLICY_PATH`` environment variable.
+    3. Walk upward from ``cwd`` (bounded to 6 parents) looking for
+       ``socialPolicy.toml`` — lets the MCP find the file whether it is
+       launched from the repo root or from a sub-package's directory.
+    4. Fall back to ``cwd / socialPolicy.toml`` even if missing, so the
+       caller can surface the intended-but-absent path in errors.
+    """
+
     if path is not None:
         return Path(path).expanduser()
     env = os.environ.get("SOCIAL_POLICY_PATH")
     if env:
         return Path(env).expanduser()
-    return Path.cwd() / "socialPolicy.toml"
+
+    cwd = Path.cwd()
+    for candidate in (cwd, *cwd.parents):
+        policy = candidate / "socialPolicy.toml"
+        if policy.exists():
+            return policy
+        # Stop at $HOME or once we have walked 6 levels up, whichever first.
+        try:
+            if candidate == Path.home():
+                break
+        except RuntimeError:  # HOME not set
+            pass
+        if len(candidate.parts) <= max(1, len(cwd.parts) - 6):
+            break
+    return cwd / "socialPolicy.toml"
 
 
 def load_policy(path: str | Path | None = None) -> SocialPolicy:
     policy_path = get_policy_path(path)
     if not policy_path.exists():
         return SocialPolicy(
-            global_policy=GlobalPolicy(quiet_hours=["00:00-07:00"], max_nudges_per_hour=2)
+            global_policy=GlobalPolicy(
+                quiet_hours=["00:00-07:00"],
+                max_nudges_per_hour=2,
+                timezone=DEFAULT_POLICY_TIMEZONE,
+            )
         )
     data = tomllib.loads(policy_path.read_text(encoding="utf-8"))
     global_block = data.get("global", {})
@@ -73,6 +106,7 @@ def load_policy(path: str | Path | None = None) -> SocialPolicy:
         global_policy=GlobalPolicy(
             quiet_hours=list(global_block.get("quiet_hours", ["00:00-07:00"])),
             max_nudges_per_hour=int(global_block.get("max_nudges_per_hour", 2)),
+            timezone=str(global_block.get("timezone", DEFAULT_POLICY_TIMEZONE)),
         ),
         privacy_zones=[
             PrivacyZone(
@@ -103,26 +137,11 @@ def load_policy(path: str | Path | None = None) -> SocialPolicy:
     )
 
 
-def in_quiet_hours(ts: str, windows: list[str]) -> tuple[bool, str | None]:
-    reference = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    current_minutes = reference.hour * 60 + reference.minute
-    for window in windows:
-        start_text, end_text = window.split("-", 1)
-        start = _to_minutes(start_text)
-        end = _to_minutes(end_text)
-        if start <= end and start <= current_minutes < end:
-            return True, _window_end(reference, end).isoformat(timespec="seconds")
-        if start > end and (current_minutes >= start or current_minutes < end):
-            return True, _window_end(reference, end).isoformat(timespec="seconds")
-    return False, None
+def in_quiet_hours(
+    ts: str,
+    windows: list[str],
+    tz_name: str = DEFAULT_POLICY_TIMEZONE,
+) -> tuple[bool, str | None]:
+    """Delegate to the shared timezone-aware helper in social_core."""
 
-
-def _to_minutes(value: str) -> int:
-    hours, minutes = value.split(":", 1)
-    return int(hours) * 60 + int(minutes)
-
-
-def _window_end(reference: datetime, end_minutes: int) -> datetime:
-    day_offset = 1 if end_minutes <= (reference.hour * 60 + reference.minute) else 0
-    midnight = reference.replace(hour=0, minute=0, second=0, microsecond=0)
-    return midnight + timedelta(days=day_offset, minutes=end_minutes)
+    return _in_quiet_hours_core(ts, windows, tz_name)

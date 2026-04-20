@@ -87,3 +87,7 @@ devices.json
 
 # Reference implementations (cloned repos for study)
 references/
+
+# Per-person seeds for relationship-mcp (contain private facts)
+.local/
+

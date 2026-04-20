@@ -6,7 +6,19 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from boundary_mcp.policy import load_policy
 from boundary_mcp.store import BoundaryStore
+from interaction_orchestrator_mcp.compose import compose_interaction_context
+from interaction_orchestrator_mcp.plan import plan_response
+from interaction_orchestrator_mcp.schemas import (
+    AppendPrivateReflectionInput,
+    ComposeInteractionContextInput,
+    ComposePrivateLetterInput,
+    PlanResponseInput,
+    RecordAgentExperienceInput,
+    RecordInterpretationShiftInput,
+)
+from interaction_orchestrator_mcp.store import InteractionOrchestratorStore
 from joint_attention_mcp.store import JointAttentionStore
 from mcp.server.fastmcp import FastMCP
 from relationship_mcp.store import RelationshipStore
@@ -31,18 +43,27 @@ class SocialityStores:
     joint_attention: JointAttentionStore
     boundary: BoundaryStore
     self_narrative: SelfNarrativeStore
+    orchestrator: InteractionOrchestratorStore
+    policy_timezone: str
 
 
 @lru_cache(maxsize=1)
 def _stores() -> SocialityStores:
     db = SocialDB()
+    policy = load_policy()
     return SocialityStores(
         db=db,
-        social_state=SocialStateStore(db=db),
+        social_state=SocialStateStore(
+            db=db,
+            quiet_hours_windows=list(policy.global_policy.quiet_hours),
+            policy_timezone=policy.global_policy.timezone,
+        ),
         relationship=RelationshipStore(db=db),
         joint_attention=JointAttentionStore(db=db),
         boundary=BoundaryStore(db=db),
         self_narrative=SelfNarrativeStore(db=db),
+        orchestrator=InteractionOrchestratorStore(db=db),
+        policy_timezone=policy.global_policy.timezone,
     )
 
 
@@ -404,6 +425,165 @@ def reflect_on_change(horizon_days: int = 7) -> dict[str, Any]:
     )
 
 
+# ---------------------------------------------------------------------------
+# Human Response Orchestrator tools (v0.3)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def compose_interaction_context_tool(
+    person_id: str | None = "kouta",
+    channel: str = "chat",
+    user_text: str | None = None,
+    autonomous_trigger: str | None = None,
+    include_private: bool = True,
+    max_chars: int = 3000,
+) -> dict[str, Any]:
+    """Assemble a compact, prompt-ready interaction context before responding.
+
+    Call this BEFORE generating a response (or taking an autonomous action).
+    The returned object contains social state, turn-taking, relationship model,
+    open loops, commitments, self-summary, active arcs, desire state, a
+    response contract with dos/don'ts, and a compact_prompt_block ready for
+    prompt injection. Use the contract and boundary_hints to shape tone and
+    initiative, and pass this object straight into plan_response.
+    """
+
+    stores = _stores()
+    ctx = compose_interaction_context(
+        ComposeInteractionContextInput(
+            person_id=person_id,
+            channel=channel,
+            user_text=user_text,
+            autonomous_trigger=autonomous_trigger,
+            include_private=include_private,
+            max_chars=max_chars,
+        ),
+        social_state_store=stores.social_state,
+        relationship_store=stores.relationship,
+        joint_attention_store=stores.joint_attention,
+        boundary_store=stores.boundary,
+        self_narrative_store=stores.self_narrative,
+        orchestrator_store=stores.orchestrator,
+        policy_timezone=stores.policy_timezone,
+    )
+    return ctx.model_dump(mode="json")
+
+
+@mcp.tool()
+def plan_response_tool(
+    interaction_context: dict[str, Any],
+    user_text: str | None = None,
+    candidate_goal: str | None = None,
+) -> dict[str, Any]:
+    """Pick a bounded social move for the current context.
+
+    Takes the interaction_context produced by compose_interaction_context_tool
+    and returns a ResponsePlan: primary_move (answer_directly / stay_silent /
+    write_private_reflection / act_autonomously / …), tone, memory_use,
+    initiative (allowed_actions, forbidden_actions), boundary, voice hint,
+    must_include / must_avoid, and an optional followup_action. Use this to
+    shape the actual prose; do NOT let the model override a 'stay_silent'
+    plan into speech.
+    """
+
+    payload = PlanResponseInput(
+        interaction_context=interaction_context,
+        user_text=user_text,
+        candidate_goal=candidate_goal,
+    )
+    return plan_response(payload).model_dump(mode="json")
+
+
+@mcp.tool()
+def record_agent_experience(payload: dict[str, Any]) -> dict[str, str]:
+    """Persist a thing the agent just did as an experience, not a log line.
+
+    Call this AFTER each significant action — reply, private reflection,
+    autonomous move, boundary respect, desire satisfaction, user correction,
+    or interpretation shift. Stores the summary, felt state, desires before
+    and after, and related event/memory IDs so compose_interaction_context
+    sees the agent's own recent history on the next turn.
+    """
+
+    stored = _stores().orchestrator.record_agent_experience(
+        RecordAgentExperienceInput.model_validate(payload)
+    )
+    return {"experience_id": stored.experience_id, "ts": stored.ts}
+
+
+@mcp.tool()
+def record_interpretation_shift(payload: dict[str, Any]) -> dict[str, str]:
+    """Remember a moment where the agent changed how it interprets a rule.
+
+    Use this when the agent notices it had misread a convention, a policy,
+    a relationship signal, or its own self-model — and updates. Stored
+    shifts are surfaced as a counter in agent_state and constrain future
+    plans via the response contract's 'do not regress' guidance.
+    """
+
+    stored = _stores().orchestrator.record_interpretation_shift(
+        RecordInterpretationShiftInput.model_validate(payload)
+    )
+    return {"shift_id": stored.experience_id, "ts": stored.ts}
+
+
+@mcp.tool()
+def append_private_reflection(payload: dict[str, Any]) -> dict[str, str]:
+    """Write a private reflection without nudging anyone.
+
+    Private reflections belong to moments that want to be thought through,
+    not spoken. They do not create events or contact the human. They can
+    later be surfaced in compose_interaction_context via the agent_state.
+    """
+
+    stored = _stores().orchestrator.append_private_reflection(
+        AppendPrivateReflectionInput.model_validate(payload)
+    )
+    return {"reflection_id": stored.experience_id, "ts": stored.ts}
+
+
+@mcp.tool()
+def compose_private_letter(payload: dict[str, Any]) -> dict[str, str]:
+    """Store a composed letter that may later be shared.
+
+    This tool does NOT write prose — Claude composes the body; the tool
+    persists it together with metadata (intended_time, visibility,
+    related_open_loops). Useful for the morning-letter / end-of-day pattern.
+    """
+
+    stored = _stores().orchestrator.compose_private_letter(
+        ComposePrivateLetterInput.model_validate(payload)
+    )
+    return {"letter_id": stored.experience_id, "ts": stored.ts}
+
+
+@mcp.tool()
+def get_agent_state(person_id: str | None = None) -> dict[str, Any]:
+    """Return a short self-state summary: desires, recent experiences, arcs.
+
+    Lightweight alternative to compose_interaction_context when the caller
+    only wants the agent's own recent continuity, not a full interaction
+    frame. Good for introspection prompts and for autonomous ticks that do
+    not yet need social state.
+    """
+
+    stores = _stores()
+    ctx = compose_interaction_context(
+        ComposeInteractionContextInput(
+            person_id=person_id, channel="system", user_text=None, include_private=True
+        ),
+        social_state_store=stores.social_state,
+        relationship_store=stores.relationship,
+        joint_attention_store=stores.joint_attention,
+        boundary_store=stores.boundary,
+        self_narrative_store=stores.self_narrative,
+        orchestrator_store=stores.orchestrator,
+        policy_timezone=stores.policy_timezone,
+    )
+    return ctx.agent_state.model_dump(mode="json")
+
+
 async def _handle_http(reader: __import__("asyncio").StreamReader, writer: __import__("asyncio").StreamWriter) -> None:
     """Lightweight HTTP endpoints for hook integration."""
     import asyncio
@@ -412,15 +592,39 @@ async def _handle_http(reader: __import__("asyncio").StreamReader, writer: __imp
 
     try:
         request_line = await asyncio.wait_for(reader.readline(), timeout=5)
+        headers: dict[str, str] = {}
         while True:
             line = await asyncio.wait_for(reader.readline(), timeout=5)
             if line in (b"\r\n", b"\n", b""):
                 break
+            text_line = line.decode("utf-8", errors="replace").rstrip("\r\n")
+            if ":" in text_line:
+                key, _, value = text_line.partition(":")
+                headers[key.strip().lower()] = value.strip()
 
         req = request_line.decode("utf-8", errors="replace")
         path_str = req.split(" ")[1] if " " in req else "/"
         parsed = urllib.parse.urlparse(path_str)
         params = urllib.parse.parse_qs(parsed.query)
+
+        request_body_bytes = b""
+        try:
+            content_length = int(headers.get("content-length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length > 0:
+            request_body_bytes = await asyncio.wait_for(
+                reader.readexactly(content_length), timeout=5
+            )
+
+        def _json_body() -> dict[str, Any]:
+            if not request_body_bytes:
+                return {}
+            try:
+                parsed_body = json.loads(request_body_bytes.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return {}
+            return parsed_body if isinstance(parsed_body, dict) else {}
 
         body = '{"error":"unknown endpoint"}'
         status = "404 Not Found"
@@ -476,6 +680,58 @@ async def _handle_http(reader: __import__("asyncio").StreamReader, writer: __imp
             window = int(params.get("window", ["900"])[0])
             result = stores.social_state.get_social_state(person_id=person_id, window_seconds=window)
             body = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+            status = "200 OK"
+
+        elif "GET /interaction_context" in req:
+            stores = _stores()
+            ctx = compose_interaction_context(
+                ComposeInteractionContextInput(
+                    person_id=params.get("person_id", ["kouta"])[0],
+                    channel=params.get("channel", ["chat"])[0],
+                    user_text=params.get("text", [None])[0],
+                    autonomous_trigger=params.get("trigger", [None])[0],
+                    include_private=params.get("include_private", ["true"])[0] == "true",
+                    max_chars=int(params.get("max_chars", ["3000"])[0]),
+                ),
+                social_state_store=stores.social_state,
+                relationship_store=stores.relationship,
+                joint_attention_store=stores.joint_attention,
+                boundary_store=stores.boundary,
+                self_narrative_store=stores.self_narrative,
+                orchestrator_store=stores.orchestrator,
+                policy_timezone=stores.policy_timezone,
+            )
+            body = json.dumps(ctx.model_dump(mode="json"), ensure_ascii=False)
+            status = "200 OK"
+
+        elif "POST /record_agent_experience" in req:
+            stored = _stores().orchestrator.record_agent_experience(
+                RecordAgentExperienceInput.model_validate(_json_body())
+            )
+            body = json.dumps(
+                {"experience_id": stored.experience_id, "ts": stored.ts},
+                ensure_ascii=False,
+            )
+            status = "200 OK"
+
+        elif "POST /private_reflection" in req:
+            stored = _stores().orchestrator.append_private_reflection(
+                AppendPrivateReflectionInput.model_validate(_json_body())
+            )
+            body = json.dumps(
+                {"reflection_id": stored.experience_id, "ts": stored.ts},
+                ensure_ascii=False,
+            )
+            status = "200 OK"
+
+        elif "POST /interpretation_shift" in req:
+            stored = _stores().orchestrator.record_interpretation_shift(
+                RecordInterpretationShiftInput.model_validate(_json_body())
+            )
+            body = json.dumps(
+                {"shift_id": stored.experience_id, "ts": stored.ts},
+                ensure_ascii=False,
+            )
             status = "200 OK"
 
         response = f"HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(body.encode())}\r\nConnection: close\r\n\r\n{body}"
