@@ -22,18 +22,19 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
-import chromadb
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# ChromaDB設定
-CHROMA_PATH = os.getenv(
-    "MEMORY_DB_PATH",
-    str(Path.home() / ".claude" / "memories" / "chroma"),
+from backend import (
+    ChromaMemoryAdapter,
+    DesireMemoryAdapter,
+    NullMemoryAdapter,
+    SQLiteMemoryAdapter,
+    make_default_adapter,
 )
-COLLECTION_NAME = os.getenv("MEMORY_COLLECTION_NAME", "claude_memories")
+
+load_dotenv()
 
 # 欲求レベル出力先
 DESIRES_PATH = Path(os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json")))
@@ -186,39 +187,15 @@ def get_allostatic_set_point(desire_name: str, now: datetime) -> float:
 
 
 def get_latest_memory_timestamp(
-    collection: chromadb.Collection,
+    adapter_or_collection: Any,
     keywords: list[str],
 ) -> datetime | None:
+    """Return the latest timestamp in memory matching any of ``keywords``.
+
+    Accepts either a :class:`DesireMemoryAdapter` or a legacy Chroma collection.
     """
-    キーワードに一致する最新記憶のタイムスタンプを返す。
-    一致なければ None。
-    """
-    try:
-        results = collection.get(
-            limit=500,
-            include=["documents", "metadatas"],
-        )
-    except Exception:
-        return None
 
-    latest: datetime | None = None
-
-    for doc, meta in zip(results["documents"], results["metadatas"]):
-        if not any(kw in doc for kw in keywords):
-            continue
-        ts_str = meta.get("timestamp", "")
-        if not ts_str:
-            continue
-        try:
-            ts = datetime.fromisoformat(ts_str)
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            if latest is None or ts > latest:
-                latest = ts
-        except ValueError:
-            continue
-
-    return latest
+    return _coerce_adapter(adapter_or_collection).latest_satisfaction_ts(keywords)
 
 
 def calculate_desire_level(
@@ -244,18 +221,26 @@ def calculate_desire_level(
 
 
 def compute_desires(
-    collection: chromadb.Collection,
+    adapter_or_collection: Any,
     now: datetime | None = None,
 ) -> DesireState:
-    """全欲求レベルを計算してDesireStateを返す。"""
+    """全欲求レベルを計算してDesireStateを返す。
+
+    ``adapter_or_collection`` accepts either a :class:`DesireMemoryAdapter`
+    (preferred) or a legacy ChromaDB collection for backwards compatibility
+    with pre-v0.3 callers. A Chroma collection is wrapped transparently.
+    """
+
     if now is None:
         now = datetime.now(timezone.utc)
+
+    adapter = _coerce_adapter(adapter_or_collection)
 
     desires: dict[str, float] = {}
     discomforts: dict[str, float] = {}
 
     for desire_name, cfg in DESIRE_CONFIGS.items():
-        last_ts = get_latest_memory_timestamp(collection, cfg.keywords)
+        last_ts = get_latest_memory_timestamp(adapter, cfg.keywords)
         level = calculate_desire_level(last_ts, cfg.satisfaction_hours, now)
         desires[desire_name] = round(level, 3)
 
@@ -272,6 +257,57 @@ def compute_desires(
         discomforts=discomforts,
         dominant=dominant,
     )
+
+
+def _coerce_adapter(value: Any) -> DesireMemoryAdapter:
+    """Accept either a DesireMemoryAdapter, an adapter-shaped duck, or a chromadb Collection.
+
+    Detection is strict: only objects that are either (a) a concrete built-in
+    adapter class or (b) explicitly marked with ``_is_desire_adapter is True``
+    are treated as adapters. Anything else is wrapped as a legacy Chroma
+    collection. This avoids MagicMock false-positives in tests, because
+    ``getattr(mock, "_is_desire_adapter", False)`` returns a child Mock object
+    that is truthy but is not identical to ``True``.
+    """
+
+    if isinstance(value, (SQLiteMemoryAdapter, ChromaMemoryAdapter, NullMemoryAdapter)):
+        return value
+    if getattr(value, "_is_desire_adapter", False) is True:
+        return value
+    # Legacy Chroma collection — wrap it inline.
+    collection = value
+
+    class _LegacyAdapter:
+        _is_desire_adapter = True
+
+        def latest_satisfaction_ts(self, keywords):
+            try:
+                results = collection.get(limit=500, include=["documents", "metadatas"])
+            except Exception:
+                return None
+            latest: datetime | None = None
+            for doc, meta in zip(
+                results.get("documents", []), results.get("metadatas", [])
+            ):
+                if not any(kw in doc for kw in keywords):
+                    continue
+                ts_str = (meta or {}).get("timestamp", "")
+                if not ts_str:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                if latest is None or ts > latest:
+                    latest = ts
+            return latest
+
+        def record_satisfaction(self, *, desire_name, summary, ts, metadata=None):
+            return ""
+
+    return _LegacyAdapter()
 
 
 def save_desires(state: DesireState, path: Path = DESIRES_PATH) -> None:
@@ -300,19 +336,15 @@ def load_desires(path: Path = DESIRES_PATH) -> DesireState | None:
 
 def main() -> None:
     """メインエントリポイント（cronから呼ばれる）。"""
-    try:
-        client = chromadb.PersistentClient(path=CHROMA_PATH)
-        collection = client.get_or_create_collection(COLLECTION_NAME)
-    except Exception as e:
-        print(f"[desire-updater] ChromaDB接続エラー: {e}")
-        return
 
-    state = compute_desires(collection)
+    adapter = make_default_adapter()
+    state = compute_desires(adapter)
     save_desires(state)
     print(
         f"[desire-updater] 更新完了: dominant={state.dominant} "
         f"desires={state.desires} "
-        f"discomforts={state.discomforts}"
+        f"discomforts={state.discomforts} "
+        f"backend={type(adapter).__name__}"
     )
 
 

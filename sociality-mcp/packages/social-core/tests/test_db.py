@@ -12,6 +12,8 @@ def test_get_social_db_path_uses_env(monkeypatch, tmp_path):
 
 
 def test_migrations_are_idempotent(temp_db_path):
+    from social_core.migrations import MIGRATIONS
+
     db = SocialDB(temp_db_path)
     db.connect()
     db.connect()
@@ -20,6 +22,9 @@ def test_migrations_are_idempotent(temp_db_path):
     }
     assert "events" in tables
     assert "schema_migrations" in tables
+    assert "agent_experiences" in tables
+    assert "private_reflections" in tables
+    assert "interpretation_shifts" in tables
     applied = db.fetchall("SELECT name FROM schema_migrations")
-    assert len(applied) == 1
+    assert len(applied) == len(MIGRATIONS)
     db.close()

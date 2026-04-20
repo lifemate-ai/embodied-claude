@@ -67,6 +67,30 @@ def test_urgent_health_safety_can_override_quiet_rule(store):
     assert any("overrides" in reason for reason in result.reasons)
 
 
+def test_quiet_hours_uses_policy_timezone_utc_input(store):
+    # Spec §8.2 acceptance: 16:30Z is 01:30 JST and must be quiet.
+    quiet_state = store.get_quiet_mode_state(ts="2026-04-18T16:30:00Z")
+    assert quiet_state.active is True
+
+    # 23:30Z is 08:30 JST and must NOT be quiet.
+    awake_state = store.get_quiet_mode_state(ts="2026-04-18T23:30:00Z")
+    assert awake_state.active is False
+
+
+def test_quiet_hours_uses_policy_timezone_through_evaluate(store):
+    # Low-urgency speech at 16:30Z (= 01:30 JST) must be denied because
+    # boundary-mcp now resolves the policy timezone before comparing windows.
+    result = store.evaluate_action(
+        action_type="say",
+        person_id="kouta",
+        context={"time_local": "2026-04-18T16:30:00Z"},
+        payload_preview={"text": "お茶でも飲む？"},
+        urgency="low",
+    )
+    assert result.decision == "deny"
+    assert any("quiet hours" in reason for reason in result.reasons)
+
+
 def test_review_social_post_flags_private_state(store):
     review = store.review_social_post(
         channel="x",

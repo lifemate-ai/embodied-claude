@@ -92,5 +92,14 @@ def test_person_model_stays_compact_and_followup_uses_same_day_disclosure(store)
 
     assert "今日は会議多くて疲れた" not in model.relationship_summary
     assert len(model.relationship_summary) < 120
-    assert "prefers gentle brief nudges while working" in model.salient_preferences
+    preference_texts = [pref.text for pref in model.salient_preferences]
+    assert "prefers gentle brief nudges while working" in preference_texts
+    for pref in model.salient_preferences:
+        assert 0.0 <= pref.confidence <= 1.0
+        assert pref.source in {"explicit", "inferred", "seeded"}
+    boundary_pref = next(
+        (p for p in model.salient_preferences if "nudges while working" in p.text), None
+    )
+    assert boundary_pref is not None
+    assert boundary_pref.evidence  # evidence list must not be empty
     assert "会議多くて疲れた" in suggestions[0].text

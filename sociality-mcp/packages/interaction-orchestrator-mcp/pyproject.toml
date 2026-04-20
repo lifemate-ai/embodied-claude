@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sociality-mcp"
+name = "interaction-orchestrator-mcp"
 version = "0.1.0"
-description = "Unified MCP facade for Kokone's social middle layer"
+description = "Human Response Orchestrator for Embodied Claude — turns substrate signals into stable social moves"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -17,7 +17,6 @@ dependencies = [
     "joint-attention-mcp",
     "boundary-mcp",
     "self-narrative-mcp",
-    "interaction-orchestrator-mcp",
 ]
 
 [project.optional-dependencies]
@@ -27,20 +26,16 @@ dev = [
     "ruff>=0.3.0",
 ]
 
-[project.scripts]
-sociality-mcp = "sociality_mcp.server:main"
-
 [tool.hatch.build.targets.wheel]
-packages = ["src/sociality_mcp"]
+packages = ["src/interaction_orchestrator_mcp"]
 
 [tool.uv.sources]
-social-core = { path = "packages/social-core" }
-social-state-mcp = { path = "packages/social-state-mcp" }
-relationship-mcp = { path = "packages/relationship-mcp" }
-joint-attention-mcp = { path = "packages/joint-attention-mcp" }
-boundary-mcp = { path = "packages/boundary-mcp" }
-self-narrative-mcp = { path = "packages/self-narrative-mcp" }
-interaction-orchestrator-mcp = { path = "packages/interaction-orchestrator-mcp" }
+social-core = { path = "../social-core" }
+social-state-mcp = { path = "../social-state-mcp" }
+relationship-mcp = { path = "../relationship-mcp" }
+joint-attention-mcp = { path = "../joint-attention-mcp" }
+boundary-mcp = { path = "../boundary-mcp" }
+self-narrative-mcp = { path = "../self-narrative-mcp" }
 
 [tool.ruff]
 line-length = 100

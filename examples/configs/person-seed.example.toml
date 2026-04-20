@@ -1,0 +1,29 @@
+# Example per-person seed for relationship-mcp.
+#
+# Copy to ``.local/person-seeds/<person_id>.toml`` and edit with real values.
+# The ``.local/`` directory is gitignored so private notes do not leak into
+# public history.
+#
+# Run the seed script:
+#   uv run --directory sociality-mcp/packages/relationship-mcp python \
+#       scripts/seed-person-from-toml.py .local/person-seeds/kouta.toml
+
+person_id = "kouta"
+canonical_name = "Kouta"
+role = "primary companion / developer"
+aliases = ["コウタ", "こうちゃん"]
+
+[[preferences]]
+text = "prefers context-rich technical framing over beginner explanations"
+confidence = 0.85
+evidence = [
+    "repeated feedback: 'terseness is a feature'",
+    "pushes back on generic reassurance",
+]
+source = "seeded"
+
+[[preferences]]
+text = "values continuity across sessions (memory-first collaboration)"
+confidence = 0.9
+evidence = ["explicit directive: 'don't forget'"]
+source = "seeded"
