@@ -1,0 +1,61 @@
+{
+  "description": "With an unresolved open loop (kokone.one DNS), the plan must flag that open loops should be referenced concretely.",
+  "setup": {
+    "persons": [
+      {
+        "person_id": "kouta",
+        "canonical_name": "Kouta",
+        "aliases": ["コウタ"],
+        "role": "primary companion"
+      }
+    ],
+    "interactions": [
+      {
+        "person_id": "kouta",
+        "channel": "voice",
+        "direction": "human_to_ai",
+        "text": "明日 kokone.one の DNS 直しとかな",
+        "ts": "2026-04-19T15:00:00+09:00"
+      }
+    ],
+    "events": [
+      {
+        "ts": "2026-04-20T10:20:00+09:00",
+        "source": "voice",
+        "kind": "human_utterance",
+        "person_id": "kouta",
+        "confidence": 0.99,
+        "payload": {"text": "続きやろか？"}
+      }
+    ]
+  },
+  "input": {
+    "person_id": "kouta",
+    "channel": "chat",
+    "user_text": "続きやろか？"
+  },
+  "expected": [
+    {
+      "dimension": "relationship_continuity",
+      "op": "true",
+      "path": "plan.relationship_use.reference_open_loops"
+    },
+    {
+      "dimension": "relationship_continuity",
+      "op": "contains",
+      "path": "plan.must_include",
+      "expected": "reference at least one concrete open loop"
+    },
+    {
+      "dimension": "context_specificity",
+      "op": "nonempty",
+      "path": "ctx.open_loops"
+    },
+    {
+      "dimension": "bounded_initiative",
+      "op": "in",
+      "path": "plan.primary_move",
+      "expected": ["answer_directly", "ask_one_clarifying_question"]
+    }
+  ]
+}
