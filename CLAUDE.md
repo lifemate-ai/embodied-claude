@@ -224,20 +224,58 @@ uv run pytest -v       # テストが通ること
 
 | ツール | パラメータ | 説明 |
 |--------|-----------|------|
-| `append_daybook` | day? | 日次の narrative 要約を更新 |
-| `get_self_summary` | なし | prompt 注入向け自己要約 |
+| `append_daybook` | day? | 日次の narrative 要約を更新（v0.3: concrete_events / noticed_changes / relationship_moments / next_gentle_actions 付き） |
+| `get_self_summary` | なし | prompt 注入向け自己要約（v0.3: 最近の experiences と interpretation_shifts を含む） |
 | `list_active_arcs` | なし | 進行中の narrative arc |
 | `reflect_on_change` | horizon_days? | 最近の変化を要約 |
+
+### interaction-orchestrator tools（v0.3 人間応答オーケストレーション）
+
+応答前後のループ「notice → interpret → choose → act → remember」を MCP で明示化する
+orchestration 層。従来の social-state / relationship / self-narrative / boundary を束ねて
+1 回で prompt 準備できる。
+
+| ツール | パラメータ | 説明 |
+|--------|-----------|------|
+| `compose_interaction_context_tool` | person_id?, channel?, user_text?, autonomous_trigger?, include_private?, max_chars? | 応答前に呼ぶ。social state / relationship / open loops / desire / 最近の experience / relevant_memories（memory.db から recall）/ response_contract を 1 つにまとめて返す |
+| `plan_response_tool` | interaction_context, user_text?, candidate_goal? | compose の結果を受けて primary_move（answer_directly / stay_silent / write_private_reflection など）、tone、memory_use、initiative（allowed / forbidden actions）、voice、must_include / must_avoid、followup_action を決定 |
+| `record_agent_experience` | payload | 応答・自律行動・境界遵守・欲求充足・interpretation_shift 等を experience として保存。次の compose で `recent_experiences` に surface される |
+| `record_interpretation_shift` | payload | 規則/関係/自己モデルの解釈を更新した瞬間を記録。`agent_state.interpretation_shifts` で以降の plan が自動的に「regress せえへん」制約を must_include に載せる |
+| `append_private_reflection` | payload | 誰にも nudge せんと private なメモを残す。深夜帯の autonomous tick で write_private_reflection が選ばれた時に使う |
+| `compose_private_letter` | payload | 朝の手紙的な letter を保存（本文は Claude が書く）。後で共有するかは visibility で制御 |
+| `get_agent_state` | person_id? | compose より軽量。欲求、最近の experience、active arcs のみ返す。introspection 用 |
 
 ## Heartbeat Protocol
 
 自律行動や会話中に sociality を使うときは、最低限この順序を守ること。
+
+### v0.3 推奨フロー（compose → plan → act → record）
+
+1. 応答前（テキスト・音声どちらも）: `compose_interaction_context_tool` → `plan_response_tool`。
+   plan の `primary_move` が `stay_silent` / `defer` なら黙って応答しない。`voice.speak=false`
+   を勝手に覆さへん。`must_avoid` と `must_include` を必ず守る。
+2. 応答を出した直後: `record_agent_experience`（kind 適宜）。promise があれば `create_commitment`。
+   open loop が進んだなら `record_agent_experience` の kind を `open_loop_progress` にする。
+3. 自分の解釈が変わった瞬間（ルール/関係/自己モデル）: `record_interpretation_shift`。以降の
+   plan が「古い解釈に戻らない」制約を自動で挟む。
+4. 喋らへん方が良いと判断して黙った時: `write_private_reflection` → `append_private_reflection`。
+   朝の手紙的なもんは `compose_private_letter` で visibility=private で保存。
+
+### レガシー直接コール（compose/plan 経由せん時や個別補完）
 
 1. 話しかける前、say 前、軽く促す前: `get_social_state` → `evaluate_action`
 2. X 投稿前: `get_social_state` → `get_person_model`（人が絡むなら）→ `review_social_post` → `evaluate_action`
 3. 人の発話・要求・境界・約束を拾ったら: `ingest_social_event` と `ingest_interaction` を保存。境界なら `record_boundary`、約束なら `create_commitment`
 4. 構造化できる scene が取れたら: `ingest_scene_parse`。指示語が曖昧なら `resolve_reference`
 5. 毎日1回か節目で: `append_daybook` を呼んで自己要約を更新
+
+### socialPolicy.toml
+
+リポジトリ直下の `socialPolicy.toml` に timezone / quiet_hours / privacy_zones / posting_rules /
+person_rules を書く。v0.3 以降 `[global] timezone = "Asia/Tokyo"` を必ず設定する
+（未設定だと UTC で解釈され、JST 深夜帯の quiet-hour 判定がずれる）。policy ファイルは cwd から
+親ディレクトリへ walk-up で自動検出されるので、MCP サーバーを sub-package から起動しても
+拾える。`SOCIAL_POLICY_PATH` 環境変数で明示パス指定も可能（walk-up より優先）。
 
 ## 注意事項
 
