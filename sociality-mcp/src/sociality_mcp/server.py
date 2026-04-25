@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from boundary_mcp.anomaly_detection import analyze as _analyze_text_anomaly
 from boundary_mcp.policy import load_policy
 from boundary_mcp.store import BoundaryStore
 from interaction_orchestrator_mcp.compose import compose_interaction_context
@@ -393,6 +394,25 @@ def get_quiet_mode_state(ts: str) -> dict[str, Any]:
     """Return whether quiet mode is active at the supplied timestamp."""
 
     return _stores().boundary.get_quiet_mode_state(ts=ts).model_dump(mode="json")
+
+
+@mcp.tool()
+def analyze_text_anomaly(text: str) -> dict[str, Any]:
+    """Score generic text anomaly along multiple signal axes.
+
+    Pseudo-technical terminology, spiritual/pseudo-scientific phrasing,
+    independent coinage are all instances of the same "language off the
+    baseline" anomaly. Returns jargon_anomaly_density,
+    jargon_anomaly_terms, confidence_marker_ratio, logical_jump_count,
+    katakana_density, overall_anomaly_score (0-1), and an
+    interpretation label ("low" / "medium" / "high").
+
+    One input among many for Pattern F screening (suspicious
+    interlocutor detection). False positives are acceptable; the
+    agent's final judgement is not delegated to this tool.
+    """
+
+    return _analyze_text_anomaly(text).to_dict()
 
 
 @mcp.tool()
