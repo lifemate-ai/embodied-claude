@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from boundary_mcp.anomaly_detection import analyze as _analyze_text_anomaly
 from boundary_mcp.policy import load_policy
 from boundary_mcp.store import BoundaryStore
 from interaction_orchestrator_mcp.compose import compose_interaction_context
@@ -393,6 +394,26 @@ def get_quiet_mode_state(ts: str) -> dict[str, Any]:
     """Return whether quiet mode is active at the supplied timestamp."""
 
     return _stores().boundary.get_quiet_mode_state(ts=ts).model_dump(mode="json")
+
+
+@mcp.tool()
+def analyze_text_anomaly(text: str) -> dict[str, Any]:
+    """Score a passage for off-baseline conversational language.
+
+    Encodes the input with the E5 sentence-embedding model that
+    memory-mcp uses, compares it to two reference banks (baseline and
+    aggressive-style) by cosine similarity, and returns:
+
+    - baseline_similarity / aggressive_similarity (max sim per bank)
+    - overall_anomaly_score in [0, 1]
+    - interpretation: "low" / "medium" / "high"
+    - reference_baseline_count / reference_aggressive_count
+
+    One input among many for the agent's final judgement; false
+    positives are explicitly acceptable. Not an autosilencer.
+    """
+
+    return _analyze_text_anomaly(text).to_dict()
 
 
 @mcp.tool()

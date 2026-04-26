@@ -12,6 +12,8 @@ dependencies = [
     "mcp[cli]>=1.26.0",
     "pydantic>=2.7.0",
     "social-core",
+    "memory-mcp",
+    "numpy>=1.26.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +31,7 @@ packages = ["src/boundary_mcp"]
 
 [tool.uv.sources]
 social-core = { path = "../social-core" }
+memory-mcp = { path = "../../../memory-mcp" }
 
 [tool.ruff]
 line-length = 100
