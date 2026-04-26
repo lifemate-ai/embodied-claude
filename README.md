@@ -63,12 +63,40 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 | mpv or ffplay | tts-mcp | Local audio playback |
 | OpenCV | usb-webcam-mcp | USB camera only |
 | Pillow | memory-mcp | Visual memory image processing |
+| sentence-transformers + E5 model | memory-mcp, sociality-mcp | Embedding for semantic recall and conversational anomaly screening |
 | OpenAI Whisper | wifi-cam-mcp | Speech recognition (NVIDIA GPU recommended) |
 | ElevenLabs API key | tts-mcp | Cloud TTS (optional) |
 | VOICEVOX | tts-mcp | Local TTS, free (optional) |
 | go2rtc | tts-mcp | Camera speaker output (auto-downloaded) |
 | xAI API key | x-mcp | X search via Grok |
 | X Developer account | x-mcp | Tweet posting |
+
+### Embedding model options
+
+`memory-mcp` (and the `analyze_text_anomaly` tool exposed by
+`sociality-mcp`) use a multilingual sentence-transformer model. You can
+pick the size that fits your machine via the `MEMORY_EMBEDDING_MODEL`
+environment variable. The default is the **base** model.
+
+| Model | Setting | Approx. download | Memory | Notes |
+|-------|---------|------------------|--------|-------|
+| **base** (default, recommended) | unset, or `intfloat/multilingual-e5-base` | ~1.1 GB | higher | best recall quality |
+| **small** (lightweight) | `intfloat/multilingual-e5-small` | ~470 MB | lower | small recall-quality drop, friendlier on low-spec laptops |
+
+```bash
+# Lightweight option (recommended for the 5/23 hands-on or laptops with
+# limited disk / RAM)
+export MEMORY_EMBEDDING_MODEL=intfloat/multilingual-e5-small
+
+# Default (best quality)
+# Just leave the variable unset.
+```
+
+> **Note:** changing models on an existing `memory.db` requires
+> re-encoding stored embeddings (their dimensions differ). Existing
+> users who switch models will need a migration script (planned in a
+> separate PR). Fresh installs (e.g. hands-on attendees) can switch
+> freely before the first run.
 
 ## Setup
 
