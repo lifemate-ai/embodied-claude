@@ -73,14 +73,22 @@ def resolve_resolution(resolution: str | None) -> tuple[int, int]:
 
     Returns:
         (max_width, max_height) タプル
+
+    Note:
+        デフォルトは full_hd (1920x1080)。観察記憶は一次資料として
+        最高解像度で保存し、後で再評価できるようにする方針。
+        容量を抑えたい場合は明示的に "low"/"medium"/"high" を指定する。
     """
     if resolution is None:
-        return RESOLUTION_PRESETS["medium"]
-    return RESOLUTION_PRESETS.get(resolution, RESOLUTION_PRESETS["medium"])
+        return RESOLUTION_PRESETS["full_hd"]
+    return RESOLUTION_PRESETS.get(resolution, RESOLUTION_PRESETS["full_hd"])
 
 
 def resolve_quality(resolution: str | None) -> int:
-    """解像度プリセットに応じたJPEG品質を返す."""
+    """解像度プリセットに応じたJPEG品質を返す.
+
+    デフォルトは full_hd (quality 85)。
+    """
     if resolution is None:
-        return QUALITY_PRESETS["medium"]
-    return QUALITY_PRESETS.get(resolution, QUALITY_PRESETS["medium"])
+        return QUALITY_PRESETS["full_hd"]
+    return QUALITY_PRESETS.get(resolution, QUALITY_PRESETS["full_hd"])

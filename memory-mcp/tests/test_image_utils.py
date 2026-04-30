@@ -113,11 +113,14 @@ class TestResolveResolution:
     def test_high(self):
         assert resolve_resolution("high") == (640, 480)
 
-    def test_none_defaults_to_medium(self):
-        assert resolve_resolution(None) == (320, 240)
+    def test_full_hd(self):
+        assert resolve_resolution("full_hd") == (1920, 1080)
 
-    def test_unknown_defaults_to_medium(self):
-        assert resolve_resolution("ultra") == (320, 240)
+    def test_none_defaults_to_full_hd(self):
+        assert resolve_resolution(None) == (1920, 1080)
+
+    def test_unknown_defaults_to_full_hd(self):
+        assert resolve_resolution("ultra") == (1920, 1080)
 
     def test_presets_dict(self):
         assert len(RESOLUTION_PRESETS) == 4

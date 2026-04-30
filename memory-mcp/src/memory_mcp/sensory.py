@@ -46,7 +46,7 @@ class SensoryIntegration:
             importance: 重要度（1-5）
             category: カテゴリ
             auto_describe: 画像説明を自動生成（Phase 4.3では未実装）
-            resolution: 画像解像度プリセット ("low"/"medium"/"high", デフォルト: "medium")
+            resolution: 画像解像度プリセット ("low"/"medium"/"high"/"full_hd", デフォルト: "full_hd")
 
         Returns:
             保存された記憶
