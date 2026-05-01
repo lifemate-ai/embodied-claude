@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class ConsolidationEngine:
         max_replay_events: int = 200,
         link_update_strength: float = 0.2,
     ) -> ConsolidationStats:
-        cutoff = datetime.now() - timedelta(hours=max(1, window_hours))
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, window_hours))
         recent = await store.list_recent(limit=max(max_replay_events * 2, 50))
         recent = [m for m in recent if self._is_after(m, cutoff)]
 
@@ -89,4 +89,6 @@ class ConsolidationEngine:
             timestamp = datetime.fromisoformat(memory.timestamp)
         except ValueError:
             return False
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
         return timestamp >= cutoff

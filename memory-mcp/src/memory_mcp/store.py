@@ -7,7 +7,7 @@ import json
 import math
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -150,11 +150,15 @@ def calculate_time_decay(
     half_life_days: float = 30.0,
 ) -> float:
     if now is None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     try:
         memory_time = datetime.fromisoformat(timestamp)
     except ValueError:
         return 1.0
+    if memory_time.tzinfo is None:
+        memory_time = memory_time.replace(tzinfo=timezone.utc)
     age_seconds = (now - memory_time).total_seconds()
     if age_seconds < 0:
         return 1.0
@@ -660,7 +664,7 @@ class MemoryStore:
         )
 
         scored_results: list[ScoredMemory] = []
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         for memory, semantic_distance in pairs:
             time_decay = (
