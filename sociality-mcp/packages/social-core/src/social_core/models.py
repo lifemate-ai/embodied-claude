@@ -77,3 +77,41 @@ class RankedDecision(BaseModel):
     label: str
     confidence: float = Field(ge=0.0, le=1.0)
     evidence: list[str] = Field(default_factory=list)
+
+
+EVIDENCE_TYPES = (
+    "observed",
+    "inferred",
+    "remembered",
+    "heard",
+    "assumed",
+)
+
+EvidenceType = Literal[
+    "observed",
+    "inferred",
+    "remembered",
+    "heard",
+    "assumed",
+]
+
+
+class EpistemicClaim(BaseModel):
+    """A claim tagged with how the agent came to know it.
+
+    Primitive type for the Agent Grammar / Epistemic Effect System.
+
+    - observed:   directly perceived via a tool or sensor (camera, mic, etc.)
+    - inferred:   derived from one or more upstream observations
+    - remembered: recalled from the long-term memory store
+    - heard:      reported by another agent or person
+    - assumed:    prior / default, treated as low-confidence
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1)
+    evidence_type: EvidenceType
+    source: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0, default=1.0)
+    derived_from: list[str] = Field(default_factory=list)
