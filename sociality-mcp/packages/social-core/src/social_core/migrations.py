@@ -95,6 +95,30 @@ CREATE INDEX IF NOT EXISTS idx_private_letters_person_ts
 """
 
 
+_MIGRATION_005_SQL = """
+CREATE TABLE IF NOT EXISTS attention_schemas (
+    schema_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    focal_target_ref TEXT,
+    modality TEXT NOT NULL,
+    intensity REAL NOT NULL DEFAULT 0.0,
+    dwell_seconds REAL NOT NULL DEFAULT 0.0,
+    predicted_next_focus TEXT,
+    control_handle TEXT,
+    source_tick_id TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attention_schemas_ts
+    ON attention_schemas(ts DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_attention_schemas_owner
+    ON attention_schemas(owner_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_attention_schemas_modality
+    ON attention_schemas(modality, ts DESC);
+"""
+
+
 _MIGRATION_004_SQL = """
 CREATE TABLE IF NOT EXISTS tick_frames (
     tick_id TEXT PRIMARY KEY,
@@ -355,6 +379,10 @@ MIGRATIONS = [
     Migration(
         name="004_tick_frames",
         sql=_MIGRATION_004_SQL,
+    ),
+    Migration(
+        name="005_attention_schemas",
+        sql=_MIGRATION_005_SQL,
     ),
 ]
 
