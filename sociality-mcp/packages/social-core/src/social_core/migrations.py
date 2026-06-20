@@ -95,6 +95,35 @@ CREATE INDEX IF NOT EXISTS idx_private_letters_person_ts
 """
 
 
+_MIGRATION_006_SQL = """
+CREATE TABLE IF NOT EXISTS hor_records (
+    hor_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    target_kind TEXT NOT NULL,
+    target_ref TEXT,
+    asserted_mode TEXT NOT NULL,
+    asserted_content TEXT NOT NULL,
+    schema_snapshot_id TEXT,
+    source_tick_id TEXT,
+    confidence REAL NOT NULL DEFAULT 0.6,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hor_records_ts
+    ON hor_records(ts DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hor_records_owner
+    ON hor_records(owner_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_hor_records_asserted_mode
+    ON hor_records(asserted_mode, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_hor_records_target_kind
+    ON hor_records(target_kind, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_hor_records_source_tick
+    ON hor_records(source_tick_id);
+"""
+
+
 _MIGRATION_005_SQL = """
 CREATE TABLE IF NOT EXISTS attention_schemas (
     schema_id TEXT PRIMARY KEY,
@@ -383,6 +412,10 @@ MIGRATIONS = [
     Migration(
         name="005_attention_schemas",
         sql=_MIGRATION_005_SQL,
+    ),
+    Migration(
+        name="006_hor_records",
+        sql=_MIGRATION_006_SQL,
     ),
 ]
 
