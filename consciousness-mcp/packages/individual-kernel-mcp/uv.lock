@@ -9,6 +9,25 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "agent-grammar"
+version = "0.1.0"
+source = { directory = "../../../sociality-mcp/packages/agent-grammar" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "social-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
+    { name = "social-core", directory = "../../../sociality-mcp/packages/social-core" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -478,6 +497,7 @@ name = "individual-kernel-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "agent-grammar" },
     { name = "interaction-orchestrator-mcp" },
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -493,6 +513,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-grammar", directory = "../../../sociality-mcp/packages/agent-grammar" },
     { name = "interaction-orchestrator-mcp", directory = "../../../sociality-mcp/packages/interaction-orchestrator-mcp" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
     { name = "pydantic", specifier = ">=2.7.0" },

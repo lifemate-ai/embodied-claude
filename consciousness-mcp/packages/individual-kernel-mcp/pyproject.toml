@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "social-core",
     "interaction-orchestrator-mcp",
+    "agent-grammar",
 ]
 
 [project.optional-dependencies]
@@ -42,3 +43,4 @@ testpaths = ["tests"]
 [tool.uv.sources]
 social-core = { path = "../../../sociality-mcp/packages/social-core" }
 interaction-orchestrator-mcp = { path = "../../../sociality-mcp/packages/interaction-orchestrator-mcp" }
+agent-grammar = { path = "../../../sociality-mcp/packages/agent-grammar" }
