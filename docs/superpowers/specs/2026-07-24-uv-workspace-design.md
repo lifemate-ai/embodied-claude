@@ -115,4 +115,3 @@ Verification covers:
 6. Existing package test and Ruff commands pass from the shared environment.
 7. Hook CLI and hardware-free EFPF benchmark still run from the root.
 8. CI configuration and documented commands use the root workspace.
-
