@@ -10,7 +10,7 @@ Run it from the repository root:
 ```bash
 uv run \
   --package individual-kernel-mcp \
-  python consciousness-mcp/packages/individual-kernel-mcp/benchmarks/phenomenal_candidate/run.py
+  python benchmarks/phenomenal_candidate/run.py
 ```
 
 The command writes `latest/indicator-profile.json` and

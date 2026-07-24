@@ -146,7 +146,7 @@ existing interoception or recall hooks.
 ```bash
 uv run \
   --package individual-kernel-mcp \
-  python consciousness-mcp/packages/individual-kernel-mcp/benchmarks/phenomenal_candidate/run.py
+  python benchmarks/phenomenal_candidate/run.py
 ```
 
 The run writes JSON and Markdown reports containing:

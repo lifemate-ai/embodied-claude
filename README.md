@@ -40,9 +40,12 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 
 ### Platform
 
-**Supported:** macOS, Linux, WSL2 (Ubuntu 24 recommended)
+**Supported:** macOS (Apple Silicon), Linux, WSL2 (Ubuntu 24 recommended)
 
 > Windows native is not officially supported. Use WSL2 instead.
+>
+> Intel Macs are not supported by the full Python 3.13 workspace because
+> current PyTorch releases do not publish compatible macOS x86_64 wheels.
 
 ### Hardware
 - **USB Webcam** (optional): nuroum V11 etc.

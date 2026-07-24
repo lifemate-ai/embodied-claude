@@ -134,6 +134,17 @@ def test_ci_uses_the_locked_root_workspace() -> None:
     assert workflow.count("run: uv sync --locked") == 1
     assert "working-directory:" not in workflow
     assert "uv lock --check" in workflow
+    assert (
+        'uv run --project "$GITHUB_WORKSPACE" --directory memory-mcp pytest -q'
+    ) in workflow
+    assert (
+        'uv run --project "$GITHUB_WORKSPACE" --directory '
+        "consciousness-mcp/packages/individual-kernel-mcp pytest -q"
+    ) in workflow
+    assert (
+        'uv run --project "$GITHUB_WORKSPACE" --directory '
+        "sociality-mcp/packages/agent-grammar pytest -q"
+    ) in workflow
 
 
 def test_primary_docs_describe_the_single_workspace() -> None:
@@ -141,6 +152,9 @@ def test_primary_docs_describe_the_single_workspace() -> None:
     readme_ja = (ROOT / "README-ja.md").read_text()
     claude = (ROOT / "CLAUDE.md").read_text()
     consciousness = (ROOT / "consciousness-mcp" / "README.md").read_text()
+    benchmark = (
+        ROOT / "benchmarks" / "phenomenal_candidate" / "README.md"
+    ).read_text()
     kernel = (
         ROOT / "consciousness-mcp" / "packages" / "individual-kernel-mcp" / "README.md"
     ).read_text()
@@ -152,3 +166,18 @@ def test_primary_docs_describe_the_single_workspace() -> None:
     assert "uv sync --extra dev" not in claude
     assert "--package individual-kernel-mcp" in consciousness
     assert "--package individual-kernel-mcp" in kernel
+    assert "python benchmarks/phenomenal_candidate/run.py" in consciousness
+    assert "python benchmarks/phenomenal_candidate/run.py" in benchmark
+
+
+def test_docs_bound_platform_and_global_memory_launch() -> None:
+    readme = (ROOT / "README.md").read_text()
+    readme_ja = (ROOT / "README-ja.md").read_text()
+    memory = (ROOT / "memory-mcp" / "README.md").read_text()
+
+    assert "macOS (Apple Silicon)" in readme
+    assert "macOS（Apple Silicon）" in readme_ja
+    assert (
+        '"--directory", "/path/to/embodied-claude", '
+        '"--package", "memory-mcp"'
+    ) in memory

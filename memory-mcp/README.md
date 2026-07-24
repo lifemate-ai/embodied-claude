@@ -288,7 +288,7 @@ Add to your `~/.claude/settings.json`:
   "mcpServers": {
     "memory": {
       "command": "uv",
-      "args": ["run", "--package", "memory-mcp", "memory-mcp"]
+      "args": ["run", "--directory", "/path/to/embodied-claude", "--package", "memory-mcp", "memory-mcp"]
     }
   }
 }

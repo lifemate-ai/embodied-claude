@@ -40,9 +40,12 @@
 
 ### 動作プラットフォーム
 
-**サポート対象:** macOS、Linux、WSL2（Ubuntu 24 推奨）
+**サポート対象:** macOS（Apple Silicon）、Linux、WSL2（Ubuntu 24 推奨）
 
 > Windows ネイティブは正式サポートしていません。WSL2 を使ってください。
+>
+> Intel Mac は full Python 3.13 workspace の対象外です。現在の PyTorch が
+> macOS x86_64 対応 wheel を公開していないためです。
 
 ### ハードウェア
 - **USB ウェブカメラ**（任意）: nuroum V11 等

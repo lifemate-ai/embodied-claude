@@ -43,16 +43,16 @@ jobs:
       - name: Run workspace tests
         run: |
           uv run pytest tests -q
-          uv run pytest memory-mcp/tests -q
-          uv run pytest tts-mcp/tests -q
-          uv run pytest desire-system/tests -q
-          uv run pytest consciousness-mcp/packages/individual-kernel-mcp/tests -q
-          uv run pytest sociality-mcp/tests -q
-          uv run pytest sociality-mcp/packages/agent-grammar/tests -q
-          uv run pytest sociality-mcp/packages/boundary-mcp/tests -q
-          uv run pytest sociality-mcp/packages/interaction-orchestrator-mcp/tests -q
-          uv run pytest sociality-mcp/packages/joint-attention-mcp/tests -q
-          uv run pytest sociality-mcp/packages/relationship-mcp/tests -q
-          uv run pytest sociality-mcp/packages/self-narrative-mcp/tests -q
-          uv run pytest sociality-mcp/packages/social-core/tests -q
-          uv run pytest sociality-mcp/packages/social-state-mcp/tests -q
+          uv run --project "$GITHUB_WORKSPACE" --directory memory-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory tts-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory desire-system pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory consciousness-mcp/packages/individual-kernel-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/agent-grammar pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/boundary-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/interaction-orchestrator-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/joint-attention-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/relationship-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/self-narrative-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/social-core pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/social-state-mcp pytest -q
