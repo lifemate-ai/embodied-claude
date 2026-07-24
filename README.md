@@ -135,7 +135,8 @@ Read more:
 - [Consciousness architecture](./consciousness-mcp/README.md)
 - [Individual kernel runtime](./consciousness-mcp/packages/individual-kernel-mcp/README.md)
 - [Field integrity benchmarks](./benchmarks/phenomenal_candidate/README.md)
-- [Sociality architecture](./sociality-mcp/README.md)
+- [Sociality v0.3 interaction loop](./docs/sociality.md)
+- [Sociality package](./sociality-mcp/README.md)
 
 ## Repository Map
 

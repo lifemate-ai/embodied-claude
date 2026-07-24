@@ -1,70 +1,71 @@
 # sociality-mcp
 
-Unified MCP facade for Kokone's social middle layer.
+`sociality-mcp` is the unified MCP facade for embodied-claude's social middle
+layer. It composes the current relationship, turn-taking, memory, desire,
+boundary, and enacted-field context into one response plan, then records what
+the agent actually did so the next interaction can depend on it.
 
-`sociality-mcp` is the preferred deployment target for sociality. It exposes the tool families from
-`social-state-mcp`, `relationship-mcp`, `joint-attention-mcp`, `boundary-mcp`, and
-`self-narrative-mcp` through one MCP process while keeping their logic split for development and
-testing.
+## The v0.3 Interaction Loop
+
+Use the orchestrator in this order:
+
+```text
+compose_interaction_context_tool
+-> plan_response_tool
+-> act or respond
+-> record_agent_experience
+-> record_interpretation_shift (only when an interpretation changed)
+```
+
+1. Call `compose_interaction_context_tool` before a response or autonomous
+   action. Pass its complete result to `plan_response_tool`.
+2. Condition the response or action on the returned primary move, boundary,
+   tone, memory-use, and initiative constraints.
+3. Call `record_agent_experience` immediately after the response or significant
+   action. This is the recurrent update, not optional telemetry.
+4. Call `record_interpretation_shift` when the agent changed how it understands
+   a rule, relationship signal, convention, or self-model. Do not call it after
+   every ordinary response.
+5. Create or complete commitments and ingest social events when the interaction
+   actually changes those stores.
+
+The next composition surfaces recent experiences and accumulated
+interpretation shifts. `append_daybook` also reads those records. If experience
+recording is skipped, an otherwise valid daybook may have empty
+`concrete_events`, `noticed_changes`, or `relationship_moments`.
+
+For payload examples, recovery behavior, and the relationship between the
+interaction loop and the current enacted field, read the
+[Sociality v0.3 guide](../docs/sociality.md).
 
 ## Setup
 
+From the repository root, use the guided setup:
+
 ```bash
-cp examples/configs/socialPolicy.example.toml socialPolicy.toml
-uv sync
+./scripts/setup.sh --profile core --non-interactive
 ```
 
-The shared SQLite database defaults to `~/.claude/sociality/social.db`. Override with
-`SOCIAL_DB_PATH` if needed. Boundary evaluation reads `socialPolicy.toml` from the current working
-directory unless `SOCIAL_POLICY_PATH` is set.
+The setup creates `socialPolicy.toml` only when it is absent and configures the
+shared SQLite database at `~/.claude/sociality/social.db`. Override the database
+with `SOCIAL_DB_PATH` or the policy with `SOCIAL_POLICY_PATH`.
 
-## Run
+To run only this server during development:
 
 ```bash
 uv run --package sociality-mcp sociality-mcp
 ```
 
-## Exposed Tools
+## Tool Families
 
-- `ingest_social_event`
-- `get_social_state`
-- `should_interrupt`
-- `get_turn_taking_state`
-- `summarize_social_context`
-- `upsert_person`
-- `ingest_interaction`
-- `get_person_model`
-- `create_commitment`
-- `complete_commitment`
-- `list_open_loops`
-- `suggest_followup`
-- `record_boundary`
-- `ingest_scene_parse`
-- `resolve_reference`
-- `get_current_joint_focus`
-- `set_joint_focus`
-- `compare_recent_scenes`
-- `evaluate_action`
-- `review_social_post`
-- `record_consent`
-- `get_quiet_mode_state`
-- `append_daybook`
-- `get_self_summary`
-- `list_active_arcs`
-- `reflect_on_change`
+- Interaction orchestration: compose, plan, experience, interpretation shifts,
+  private reflection, and agent state.
+- Social state: events, turn-taking, interruption, and context summaries.
+- Relationships: people, interactions, commitments, open loops, and follow-up.
+- Joint attention: scene ingestion, reference resolution, and shared focus.
+- Boundaries: action evaluation, post review, consent, and quiet mode.
+- Self narrative: daybook, self summary, and active arcs.
 
-## Claude Code config
-
-```json
-{
-  "mcpServers": {
-    "sociality": {
-      "command": "uv",
-      "args": ["run", "--directory", "sociality-mcp", "sociality-mcp"],
-      "env": {
-        "SOCIAL_POLICY_PATH": "/path/to/embodied-claude/socialPolicy.toml"
-      }
-    }
-  }
-}
-```
+The complete surface and payload contracts are in
+[`docs/sociality.md`](../docs/sociality.md) and the package-level READMEs under
+[`packages/`](./packages/).
