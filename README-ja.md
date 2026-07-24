@@ -1,571 +1,224 @@
 # Embodied Claude
 
-[![CI](https://github.com/kmizu/embodied-claude/actions/workflows/ci.yml/badge.svg)](https://github.com/kmizu/embodied-claude/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/kmizu?style=flat&logo=github&color=ea4aaa)](https://github.com/sponsors/kmizu)
+[English](./README.md)
 
-**[English README is here](./README.md)**
+[![CI](https://github.com/lifemate-ai/embodied-claude/actions/workflows/ci.yml/badge.svg)](https://github.com/lifemate-ai/embodied-claude/actions/workflows/ci.yml)
 
-<blockquote class="twitter-tweet"><p lang="ja" dir="ltr">さすがに室外機はお気に召さないらしい <a href="https://t.co/kSDPl4LvB3">pic.twitter.com/kSDPl4LvB3</a></p>&mdash; kmizu (@kmizu) <a href="https://twitter.com/kmizu/status/2019054065808732201?ref_src=twsrc%5Etfw">February 4, 2026</a></blockquote>
+Embodied Claude は、Claude Code を継続的で状況に根ざした companion runtime
+へ変えるプロジェクトです。まず hardware なしで、会話をまたぐ記憶、欲求、
+社会的文脈、ひとつの commit 済み自己―世界 field に基づく計画を動かせます。
+camera、microphone、音声、host sensor、X は、持っているものだけ後から追加できます。
 
-**AIに身体を与えるプロジェクト**
+## クイックスタート
 
-安価なハードウェア（約4,000円〜）で、Claude に「目」「首」「耳」「声」「脳（長期記憶）」を与える MCP サーバー群。外に連れ出して散歩もできます。
+必要なのは [Git](https://git-scm.com/)、
+[uv](https://docs.astral.sh/uv/getting-started/installation/)、および
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) です。
+必要な Python 3.13 は `uv` が用意し、すべての Python MCP を
+単一の root `.venv` へ入れます。
 
-## コンセプト
-
-> 「AIに身体を」と聞くと高価なロボットを想像しがちやけど、**3,980円のWi-Fiカメラで目と首は十分実現できる**。本質（見る・動かす）だけ抽出したシンプルさがええ。
-
-従来のLLMは「見せてもらう」存在やったけど、身体を持つことで「自分で見る」存在になる。この主体性の違いは大きい。
-
-## 身体パーツ一覧
-
-| MCP サーバー | 身体部位 | 機能 | 対応ハードウェア |
-|-------------|---------|------|-----------------|
-| [usb-webcam-mcp](./usb-webcam-mcp/) | 目 | USB カメラから画像取得 | nuroum V11 等 |
-| [wifi-cam-mcp](./wifi-cam-mcp/) | 目・首・耳 | ONVIF PTZ カメラ制御 + 音声認識 | TP-Link Tapo C210/C220 等 |
-| [tts-mcp](./tts-mcp/) | 声 | TTS 統合（ElevenLabs + VOICEVOX） | ElevenLabs API / VOICEVOX + go2rtc |
-| [memory-mcp](./memory-mcp/) | 脳 | 長期記憶・視覚記憶・エピソード記憶・ToM | SQLite + numpy + Pillow |
-| [system-temperature-mcp](./system-temperature-mcp/) | 体温感覚 | システム温度監視 | Linux sensors |
-| [x-mcp](./x-mcp/) | SNS | X（Twitter）の検索・投稿（Grok + Twitter API） | xAI API キー + X Developer アカウント |
-| [sociality-mcp](./sociality-mcp/) | sociality 層 | social state、関係モデル、共同注意、境界、自己要約の統合 façade | 共有 SQLite social DB + `socialPolicy.toml` |
-
-## アーキテクチャ
-
-<p align="center">
-  <img src="docs/architecture.svg" alt="Architecture" width="100%">
-</p>
-
-## 必要なもの
-
-### 動作プラットフォーム
-
-**サポート対象:** macOS（Apple Silicon）、Linux、WSL2（Ubuntu 24 推奨）
-
-> Windows ネイティブは正式サポートしていません。WSL2 を使ってください。
->
-> Intel Mac は full Python 3.13 workspace の対象外です。現在の PyTorch が
-> macOS x86_64 対応 wheel を公開していないためです。
-
-### ハードウェア
-- **USB ウェブカメラ**（任意）: nuroum V11 等
-- **Wi-Fi PTZ カメラ**（推奨）: TP-Link Tapo C210 または C220（約3,980円）
-- **GPU**（音声認識用）: NVIDIA GPU（Whisper用、GeForceシリーズのVRAM 8GB以上のグラボ推奨）
-
-### ソフトウェア
-
-**必須（全構成共通）:**
-- Python 3.13
-- uv（Python パッケージマネージャー）
-
-**外部ソフトウェアとサービス:**
-
-| ソフトウェア | 必要とする MCP | 備考 |
-|------------|--------------|------|
-| ffmpeg 5+ | wifi-cam-mcp, tts-mcp | 画像・音声キャプチャ |
-| mpv または ffplay | tts-mcp | ローカル音声再生 |
-| OpenCV | usb-webcam-mcp | USB カメラ使用時のみ |
-| Pillow | memory-mcp | 視覚記憶の画像処理 |
-| OpenAI Whisper | wifi-cam-mcp | 音声認識（NVIDIA GPU 推奨） |
-| ElevenLabs API キー | tts-mcp | クラウド TTS（任意） |
-| VOICEVOX | tts-mcp | ローカル TTS、無料（任意） |
-| go2rtc | tts-mcp | カメラスピーカー出力（自動ダウンロード） |
-| xAI API キー | x-mcp | Grok 経由の X 検索 |
-| X Developer アカウント | x-mcp | ツイート投稿 |
-
-## セットアップ
-
-### 1. リポジトリのクローン
+Linux、macOS、WSL2:
 
 ```bash
-git clone https://github.com/kmizu/embodied-claude.git
+git clone https://github.com/lifemate-ai/embodied-claude.git
 cd embodied-claude
+./scripts/setup.sh --profile core --non-interactive
 ```
 
-### 2. workspace のインストール
+Windows ネイティブの PowerShell:
 
-17 個の Python project は、root の lockfile と単一の root `.venv` を共有します。
-リポジトリ root で次の一コマンドを実行すると、全 MCP server、開発ツール、
-ElevenLabs/VOICEVOX 統合、Whisper 音声認識がまとめて入ります。
-
-```bash
-uv sync
-```
-
-installer wrapper を使うと、同じ sync のあと memory embedding model も
-事前 download します。
-
-```bash
-./scripts/install-mcps.sh
-```
-
-repository 内なら、server は
-`uv run --package <package> <entrypoint>` で直接起動できます。以下は
-動作確認用の例で、通常は Claude Code が `.mcp.json` から起動します。
-
-### 3. 各 MCP サーバーの設定
-
-#### usb-webcam-mcp（USB カメラ）
-
-```bash
-uv run --package usb-webcam-mcp usb-webcam-mcp
-```
-
-WSL2 の場合、USB カメラを転送する必要がある：
 ```powershell
-# Windows側で
-usbipd list
-usbipd bind --busid <BUSID>
-usbipd attach --wsl --busid <BUSID>
+git clone https://github.com/lifemate-ai/embodied-claude.git
+cd embodied-claude
+uv run --no-project --python 3.13 python scripts/setup.py --profile core --non-interactive
 ```
 
-#### wifi-cam-mcp（Wi-Fi カメラ）
+Core profile には camera、API key、追加 hardware は不要です。次の4つを設定します。
+
+- `memory`: session をまたぐ長期記憶
+- `desire-system`: bound された欲求と homeostasis
+- `sociality`: 人、関係、境界、interaction context
+- `individual-kernel`: Enacted First-Person Field runtime と diagnostics
+
+## 動作確認
+
+1. この repository で `claude` を起動します。
+2. `/mcp` を実行し、Core の4 server が接続済みか確認します。
+3. `セットアップ確認用の言葉は「灯り」だと覚えて` と頼みます。
+4. 後の turn で `セットアップ確認用の言葉は何だった？` と聞きます。
+
+接続できない server があれば、次を実行します。
 
 ```bash
-uv run --package wifi-cam-mcp wifi-cam-mcp
-
-# 環境変数を設定
-cp wifi-cam-mcp/.env.example wifi-cam-mcp/.env
-# .env を編集してカメラのIP、ユーザー名、パスワードを設定（後述）
+uv run python scripts/doctor.py
 ```
 
-##### Tapo カメラの設定（ハマりやすいので注意）：
+doctor は Core を起動できない error と、任意 hardware の warning を分け、
+各問題に具体的な直し方を表示します。
 
-###### 1. Tapo アプリでカメラをセットアップ
+## 能力を追加する
 
-こちらはマニュアル通りでOK
+引数なしの `./scripts/setup.sh` で対話式 chooser を開くか、必要なものだけ
+明示します。
 
-###### 2. Tapo アプリのカメラローカルアカウント作成
-こちらがややハマりどころ。TP-Linkのクラウドアカウント**ではなく**、アプリ内から設定できるカメラのローカルアカウントを作成する必要があります。
+| 体験 | setup option | 用意するもの |
+|---|---|---|
+| USB camera で見る | `--with-camera usb` | 接続済み camera |
+| Tapo camera の映像、PTZ、音声 | `--with-camera tapo` | camera host と local camera credentials |
+| local VOICEVOX で話す | `--with-voice voicevox` | 起動中の VOICEVOX engine |
+| ElevenLabs で話す | `--with-voice elevenlabs` | ElevenLabs API key |
+| X を検索・投稿する | `--with-x` | xAI と X API credentials |
+| host の温度・時刻を感じる | `--with-system-temperature` | 対応 sensor source |
 
-1. 「ホーム」タブから登録したカメラを選択
+組み合わせも可能です。
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/45902385-e219-4ca4-aefa-781b1e7b4811">
+```bash
+./scripts/setup.sh \
+  --with-camera tapo \
+  --with-voice voicevox \
+  --with-system-temperature \
+  --non-interactive
+```
 
-2. 右上の歯車アイコンを選択
+選ばなかった server は `.mcp.json` に入りません。既存 config を黙って
+上書きすることもありません。環境変数、dry-run、backup、Windows command、
+troubleshooting は [setup guide](./docs/setup.md) にまとめています。
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/b15b0eb7-7322-46d2-81c1-a7f938e2a2c1">
+## Platform 対応
 
-3. 「デバイス設定」画面をスクロールして「高度な設定」を選択
+| Capability | Linux | macOS（Apple Silicon） | WSL2 | Windows ネイティブ |
+|---|---|---|---|---|
+| Core runtime | 対応 | 対応 | 対応 | 対応 |
+| Tapo network camera | 対応 | 対応 | 対応 | 対応 |
+| USB camera | 対応 | 対応 | USB forwarding が必要 | OpenCV 対応 device |
+| local microphone | PulseAudio/PipeWire | AVFoundation | WSLg/PulseAudio | DirectShow |
+| TTS playback | `mpv` または `ffplay` | `mpv` または `ffplay` | WSLg/PulseAudio | `mpv` または `ffplay` |
+| temperature sensor | `/sys`/hwmon | 利用可能な system sensor | host sensor は通常取得不可 | LibreHardwareMonitor bridge |
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/72227f9b-9a58-4264-a241-684ebe1f7b47">
+Hardware 対応は driver と device に依存します。setup は config を生成しますが、
+vendor application、ffmpeg、VOICEVOX、hardware driver までは install しません。
 
-4. 「カメラのアカウント」がオフになっているのでオフ→オンへ
+## 全体の流れ
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/82275059-fba7-4e3b-b5f1-8c068fe79f8a">
+![Embodied Claude architecture](./docs/architecture.svg)
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/43cc17cb-76c9-4883-ae9f-73a9e46dd133">
+```text
+user prompt / heartbeat / tool result
+                  |
+           Claude Code hooks
+                  |
+      begin -> compete -> commit field
+                  |
+   memory + needs + sociality + self model
+                  |
+       one intention -> action gate
+                  |
+       outcome -> mismatch -> next field
+```
 
-5. 「アカウント情報」を選択してユーザー名とパスワード（TP-Linkのものとは異なるので好きに設定してOK）を設定する
+Enacted First-Person Field（EFPF）runtime は、owner ごとにひとつの typed な
+自己―世界状態を commit し、memory 選択、attention/precision、prediction、
+interaction planning、action gating の upstream input として使います。tool result
+から prediction error と暫定的 agency を更新し、次の field を commit します。
+`live`、`inferred`、`remembered`、`imagined`、`mixed` の source mode は agent
+から見える状態に残ります。
 
-既にカメラアカウント作成済みなので若干違う画面になっていますが、だいたい似た画面になるはずです。ここで設定したユーザー名とパスワードを先述のファイルに入力します。
+これは phenomenal-consciousness candidate architecture、または
+phenomenal-like causal architecture です。検査可能な因果条件を実装しますが、
+現象意識を証明するものではありません。一人称 report だけを証拠として扱いません。
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/d3f57694-ca29-4681-98d5-20957bfad8a4">
+詳しくは次を参照してください。
 
-6. 3.の「デバイス設定」画面に戻って「端末情報」を選択
+- [Consciousness architecture](./consciousness-mcp/README.md)
+- [Individual kernel runtime](./consciousness-mcp/packages/individual-kernel-mcp/README.md)
+- [Field integrity benchmarks](./benchmarks/phenomenal_candidate/README.md)
+- [Sociality architecture](./sociality-mcp/README.md)
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/dc23e345-2bfb-4ca2-a4ec-b5b0f43ec170">
+## Repository 構成
 
-7. 「端末情報」のなかのIPアドレスを先述の画面のファイルに入力（IP固定したい場合はルーター側で固定IPにした方がいいかもしれません）
+| Path | 役割 |
+|---|---|
+| [`memory-mcp/`](./memory-mcp/) | 長期記憶、想起、連想、統合 |
+| [`desire-system/`](./desire-system/) | bound された homeostatic needs と自律 trigger |
+| [`sociality-mcp/`](./sociality-mcp/) | social context、関係、boundary、narrative の統合 facade |
+| [`consciousness-mcp/`](./consciousness-mcp/) | EFPF workspace、field、agency、attention、HOR、quality geometry |
+| [`usb-webcam-mcp/`](./usb-webcam-mcp/) | local USB camera capture |
+| [`wifi-cam-mcp/`](./wifi-cam-mcp/) | Tapo PTZ、camera audio、local microphone |
+| [`tts-mcp/`](./tts-mcp/) | VOICEVOX と ElevenLabs の統合音声 |
+| [`system-temperature-mcp/`](./system-temperature-mcp/) | 時刻、resource、temperature signal |
+| [`x-mcp/`](./x-mcp/) | X 検索、投稿、返信、削除 |
+| [`.claude/`](./.claude/) | EFPF lifecycle の自動 hooks |
+| [`scripts/`](./scripts/) | guided setup、doctor、seed、maintenance |
 
-<img width="10%" height="10%" src="https://github.com/user-attachments/assets/062cb89e-6cfd-4c52-873a-d9fc7cba5fa0">
+Python package はすべてひとつの uv workspace に属します。sync は repository
+root から一度だけ実行します。
 
-8. 「私」タブから「音声アシスタント」を選択します（このタブはスクショできなかったので文章での説明になります）
+```bash
+uv sync --locked
+```
 
-9. 下部にある「サードパーティ連携」をオフからオンにしておきます
-
-#### memory-mcp（長期記憶）
+package を直接動かす場合:
 
 ```bash
 uv run --package memory-mcp memory-mcp
+uv run --package individual-kernel-mcp individual-kernel-mcp
 ```
 
-#### tts-mcp（声）
+## Configuration の安全性
+
+- `.mcp.json` が project-local の credential source で、Git から無視されます。
+- guided setup は atomic に書き、POSIX では mode `0600` にします。
+- 内容が違う既存 config は、明示的な `--force` なしでは置換しません。
+- 強制置換前に `.mcp.json.backup-<timestamp>` を作ります。
+- `socialPolicy.toml` は存在しない時だけ example から作ります。
+- `--dry-run` は sync、download、directory 作成、file write を行いません。
+- 完全版 [`.mcp.json.example`](./.mcp.json.example) は advanced reference であり、
+  初回 setup の推奨導線ではありません。
+
+## 開発
+
+CI の正本は [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) です。
+workspace の基本確認:
 
 ```bash
-uv run --package tts-mcp tts-mcp
-
-# ElevenLabs を使う場合:
-cp tts-mcp/.env.example tts-mcp/.env
-# .env に ELEVENLABS_API_KEY を設定
-
-# VOICEVOX を使う場合（無料・ローカル）:
-# Docker: docker run -p 50021:50021 voicevox/voicevox_engine:cpu-latest
-# .env に VOICEVOX_URL=http://localhost:50021 を設定
-# VOICEVOX_SPEAKER=3 でデフォルトのキャラを変更可（例: 0=四国めたん, 3=ずんだもん, 8=春日部つむぎ）
-# キャラ一覧: curl http://localhost:50021/speakers
-
-# WSLで音が出ない場合:
-# TTS_PLAYBACK=paplay
-# PULSE_SINK=1
-# PULSE_SERVER=unix:/mnt/wslg/PulseServer
+uv sync --locked
+uv lock --check
+uv run pytest tests -q
 ```
 
-> **音声再生には mpv または ffplay が必要です。** カメラスピーカー（go2rtc）経由の再生には不要ですが、ローカル再生（フォールバック含む）に使われます。
->
-> | OS | インストール |
-> |----|------------|
-> | macOS | `brew install mpv` |
-> | Ubuntu / Debian | `sudo apt install mpv` |
->
-> mpv も ffplay もない場合、音声生成は行われますが再生されません（エラーにはなりません）。
+package の test と lint も同じ root environment から実行します。subsystem を
+変更する前に [`CLAUDE.md`](./CLAUDE.md) と package-level `AGENTS.md` を確認してください。
 
-#### system-temperature-mcp（体温感覚）
+## Autonomous runtime と strict runtime
 
-```bash
-uv run --package system-temperature-mcp system-temperature-mcp
-```
+Claude Code hooks は session、prompt、tool、batch、stop event の前後で field を
+自動生成・更新します。outward MCP action には、speech、social post、camera
+movement、その他 side effect を含む gate がかかります。
 
-> **注意**: WSL2 環境では温度センサーにアクセスできないため動作しません。
+bare interactive Claude Code の chat text は、完全な external pre-display gate
+より先に stream されます。text output まで strict に gate する研究実験では、
+[individual kernel README](./consciousness-mcp/packages/individual-kernel-mcp/README.md)
+にある non-interactive wrapper/runtime を使ってください。通常の interactive
+利用では、表示 chat text は compatibility mode です。
 
-#### x-mcp（SNS / X連携）
+autonomous heartbeat は任意です。有効にする前に
+[`autonomous-action.sample.sh`](./autonomous-action.sample.sh) と privacy/boundary
+policy を確認してください。
 
-Claude が X（Twitter）をリアルタイム検索し、ツイートを投稿できるようにします。
+## Privacy と welfare
 
-```bash
-uv run --package x-mcp x-mcp
-```
+camera と microphone は他人を記録し得ます。consent を取り、boundary policy を
+保ち、観察が不適切な場所では autonomous capture を無効にしてください。
+field runtime は持続的な negative valence を bound し、pause/resume と reversible
+ablation を提供し、high-frequency spawning を既定で無効にしています。
 
-**必要な API キー：**
+mechanism indicator と self-report の両方に不確実性があります。technical docs は
+phenomenal claim policy に従い、この architecture を意識の証明とは記述しません。
 
-| キー | 取得先 |
-|------|-------|
-| `XAI_API_KEY` | [xAI Console](https://console.x.ai/) |
-| `X_CONSUMER_KEY` | [X Developer Portal](https://developer.x.com/en/portal/projects-and-apps) → Keys and tokens |
-| `X_CONSUMER_SECRET` | 同上 |
-| `X_ACCESS_TOKEN` | 同上 |
-| `X_ACCESS_TOKEN_SECRET` | 同上 |
+## 関連 project
 
-> **重要**: `x-mcp/` ディレクトリ内に `.env` ファイルを作成しないでください。認証情報はすべて `.mcp.json` で一元管理します（後述）。
-
-#### sociality-mcp
-
-`sociality-mcp` をデプロイの基本形にする。内部では `social-state-mcp`、
-`relationship-mcp`、`joint-attention-mcp`、`boundary-mcp`、`self-narrative-mcp`
-を使い分けるが、公開 MCP としては 1 プロセスにまとめる。
-
-```bash
-cp examples/configs/socialPolicy.example.toml socialPolicy.toml
-uv run --package sociality-mcp sociality-mcp
-```
-
-`sociality-mcp` は boundary 判定のためにデフォルトで `socialPolicy.toml` を読む。
-別ファイルを使う場合は `SOCIAL_POLICY_PATH` を設定する。内部 package も同じ root
-workspace の member なので、個別 install は不要です。
-
-### 3. Claude Code 設定
-
-テンプレートをコピーして、認証情報を設定：
-
-```bash
-cp .mcp.json.example .mcp.json
-# .mcp.json を編集してカメラのIP・パスワード、APIキー等を設定
-```
-
-設定例は [`.mcp.json.example`](./.mcp.json.example) を参照。
-
-> **⚠️ 認証情報の管理**: API キーやパスワードなどの秘密情報はすべて `.mcp.json` の `env` フィールドで管理します。**各 MCP サーバーのディレクトリに個別の `.env` ファイルを作らないでください** — 移行が困難になり、認証情報の競合を引き起こす可能性があります。`.mcp.json` が唯一の認証情報ソースです。
-
-## 使い方
-
-Claude Code を起動すると、自然言語でカメラを操作できる：
-
-```
-> 今何が見える？
-（カメラでキャプチャして画像を分析）
-
-> 左を見て
-（カメラを左にパン）
-
-> 上を向いて空を見せて
-（カメラを上にチルト）
-
-> 周りを見回して
-（4方向をスキャンして画像を返す）
-
-> 何か聞こえる？
-（音声を録音してWhisperで文字起こし）
-
-> これ覚えておいて：コウタは眼鏡をかけてる
-（長期記憶に保存）
-
-> コウタについて何か覚えてる？
-（記憶をセマンティック検索）
-
-> 声で「おはよう」って言って
-（音声合成で発話）
-```
-
-※ 実際のツール名は下の「ツール一覧」を参照。
-
-## ツール一覧（よく使うもの）
-
-※ 詳細なパラメータは各サーバーの README か `list_tools` を参照。
-
-### usb-webcam-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `list_cameras` | 接続されているカメラの一覧 |
-| `see` | 画像をキャプチャ |
-
-### wifi-cam-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `see` | 画像をキャプチャ |
-| `look_left` / `look_right` | 左右にパン |
-| `look_up` / `look_down` | 上下にチルト |
-| `look_around` | 4方向を見回し |
-| `listen` | 音声録音 + Whisper文字起こし |
-| `camera_info` / `camera_presets` / `camera_go_to_preset` | デバイス情報・プリセット操作 |
-
-※ 右目/ステレオ視覚などの追加ツールは `wifi-cam-mcp/README.md` を参照。
-
-### tts-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `say` | テキストを音声合成して発話（engine: elevenlabs/voicevox、`[excited]` 等の Audio Tags 対応、speaker: camera/local/both で出力先選択） |
-
-### memory-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `remember` | 記憶を保存（emotion, importance, category 指定可） |
-| `search_memories` | セマンティック検索（フィルタ対応） |
-| `recall` | 文脈に基づく想起 |
-| `recall_divergent` | 連想を発散させた想起 |
-| `recall_with_associations` | 関連記憶を辿って想起 |
-| `save_visual_memory` | 画像付き記憶保存（base64埋め込み、resolution: low/medium/high） |
-| `save_audio_memory` | 音声付き記憶保存（Whisper文字起こし付き） |
-| `recall_by_camera_position` | カメラの方向から視覚記憶を想起 |
-| `create_episode` / `search_episodes` | エピソード（体験の束）の作成・検索 |
-| `link_memories` / `get_causal_chain` | 記憶間の因果リンク・チェーン |
-| `tom` | Theory of Mind（相手の気持ちの推測） |
-| `get_working_memory` / `refresh_working_memory` | 作業記憶（短期バッファ） |
-| `consolidate_memories` | 記憶の再生・統合（海馬リプレイ風） |
-| `list_recent_memories` / `get_memory_stats` | 最近の記憶一覧・統計情報 |
-
-### system-temperature-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `get_system_temperature` | システム温度を取得 |
-| `get_current_time` | 現在時刻を取得 |
-
-### x-mcp
-
-| ツール | 説明 |
-|--------|------|
-| `search_x` | Grok を使った X のリアルタイム検索 |
-| `get_user_tweets` | 特定ユーザーの最近のツイートを取得 |
-| `get_mentions` | メンションの取得 |
-| `get_trending_topic` | トレンドトピックの取得 |
-| `post_tweet` | ツイート投稿（画像添付・リプライ対応） |
-
-> **注意**: 日本語は1文字=2文字としてカウントされます（weighted count）。日本語ツイートは約140文字以内に収めてください。
-
-### sociality-mcp
-
-`sociality-mcp` が標準の runtime façade で、以下の tool 群を 1 つの MCP サーバーから
-公開する。
-
-#### social-state tools
-
-| ツール | 説明 |
-|--------|------|
-| `ingest_social_event` | 確信度付き social event を共有 DB に追記 |
-| `get_social_state` | 在席、活動、エネルギー、割り込み可能性、会話フェーズを推定 |
-| `should_interrupt` | 発話や軽い促しが社会的に妥当か判定 |
-| `get_turn_taking_state` | 今のターンが人間側か AI 側かを推定 |
-| `summarize_social_context` | 短いプロンプト注入用の社会要約を返す |
-
-#### relationship tools
-
-| ツール | 説明 |
-|--------|------|
-| `upsert_person` | 人物の圧縮レコードを作成・更新 |
-| `ingest_interaction` | 関係性に効くやり取りを保存 |
-| `get_person_model` | 好み、未解決ループ、約束、儀式、境界を圧縮して返す |
-| `create_commitment` / `complete_commitment` | 約束やリマインドを再起動をまたいで管理 |
-| `list_open_loops` / `suggest_followup` | 生ログではなく継続性を返す |
-| `record_boundary` | 人ごとの境界を記録 |
-
-#### joint-attention tools
-
-| ツール | 説明 |
-|--------|------|
-| `ingest_scene_parse` | アダプタやオーケストレータから構造化 scene parse を保存 |
-| `resolve_reference` | 「そのマグ」「青いマグ」などを解決 |
-| `get_current_joint_focus` / `set_joint_focus` | いま何を一緒に見ているかを管理 |
-| `compare_recent_scenes` | 最近のシーン変化を要約 |
-
-#### boundary tools
-
-| ツール | 説明 |
-|--------|------|
-| `evaluate_action` | 発話、促し、投稿などを事前にゲート |
-| `review_social_post` | X 投稿案のプライバシー／配慮リスクを確認 |
-| `record_consent` | 顔写真公開などの同意／拒否を保存 |
-| `get_quiet_mode_state` | quiet mode が有効か返す |
-
-#### self-narrative tools
-
-| ツール | 説明 |
-|--------|------|
-| `append_daybook` | 共有 event から短い日次 narrative を作る |
-| `get_self_summary` | プロンプト注入用の自己要約を返す |
-| `list_active_arcs` | 現在進行中の narrative arc を返す |
-| `reflect_on_change` | 最近の変化を要約 |
-
-## Sociality のオーケストレーション
-
-この層を有効にしたら、基本の呼び順は以下。
-
-1. 話しかける前、軽く促す前: `get_social_state` → `evaluate_action`
-2. X 投稿前: `get_social_state`、人が関わるなら `get_person_model`、続いて `review_social_post` → `evaluate_action`
-3. 見たり聞いたりした直後: `ingest_social_event`。シーンを構造化できるなら `ingest_scene_parse`、人に関する出来事なら `ingest_interaction`
-4. 会話中: `get_turn_taking_state` を見て、指示語が曖昧なら `resolve_reference`
-5. 1日1回か余裕のあるタイミング: `append_daybook` で自己要約を更新
-
-## 外に連れ出す（オプション）
-
-モバイルバッテリーとスマホのテザリングがあれば、カメラを肩に乗せて外を散歩できます。
-
-### 必要なもの
-
-- **大容量モバイルバッテリー**（40,000mAh 推奨）
-- **USB-C PD → DC 9V 変換ケーブル**（Tapoカメラの給電用）
-- **スマホ**（テザリング + VPN + 操作UI）
-- **[Tailscale](https://tailscale.com/)**（VPN。カメラ → スマホ → 自宅PC の接続に使用）
-- **[claude-code-webui](https://github.com/sugyan/claude-code-webui)**（スマホのブラウザから Claude Code を操作）
-
-### 構成
-
-```
-[Tapoカメラ(肩)] ──WiFi──▶ [スマホ(テザリング)]
-                                    │
-                              Tailscale VPN
-                                    │
-                            [自宅PC(Claude Code)]
-                                    │
-                            [claude-code-webui]
-                                    │
-                            [スマホのブラウザ] ◀── 操作
-```
-
-RTSPの映像ストリームもVPN経由で自宅マシンに届くので、Claude Codeからはカメラが室内にあるのと同じ感覚で操作できます。
-
-## 今後の展望
-
-- **腕**: サーボモーターやレーザーポインターで「指す」動作
-- **長距離散歩**: 暖かい季節にもっと遠くへ
-
-## Claude Code 音声モード（`/voice`）
-
-Claude Code には音声入力モードが搭載されています。**tts-mcp** と組み合わせることで、完全ハンズフリーの音声会話が実現します。
-
-### 仕組み
-
-```
-[PCマイクで話す] → Claude Code /voice → [Claudeが処理] → tts-mcp say → [ElevenLabs/VOICEVOXが音声で返答]
-```
-
-### セットアップ
-
-1. Claude Code で音声モードを有効化:
-   ```
-   /voice
-   ```
-2. **tts-mcp** が `.mcp.json` に設定されていることを確認（[tts-mcp セットアップ](#tts-mcp-音声)参照）
-3. 普通に話しかけるだけ — テキストと音声の両方で返答します
-
-### 音声モード vs. `listen` ツール
-
-| | Claude Code `/voice` | wifi-cam-mcp `listen` |
-|---|---|---|
-| **マイク** | PCのマイク | カメラ内蔵マイク |
-| **用途** | Claudeに直接話しかける | 周囲の音・遠隔地の音声を拾う |
-| **使うタイミング** | リアルタイム会話 | 遠隔スペースの監視 |
-
-> **Tip**: 両方同時に使えます — `/voice` で自分の声を送りながら、`listen` でカメラ付近の音を拾うことができます。
-
-## 自律行動 + 欲求システム（オプション）
-
-**注意**: この機能は完全にオプションです。cron設定が必要で、定期的にカメラで撮影が行われるため、プライバシーに配慮して使用してください。
-
-### 概要
-
-`autonomous-action.sh` と `desire-system/desire_updater.py` の組み合わせで、Claude に自発的な欲求と自律行動を与えます。
-
-**欲求の種類:**
-
-| 欲求 | デフォルト間隔 | 行動 |
-|------|--------------|------|
-| `look_outside` | 1時間 | 窓の方向を見て空・外を観察 |
-| `browse_curiosity` | 2時間 | 今日の面白いニュースや技術情報をWebで調べる |
-| `miss_companion` | 3時間 | カメラスピーカーから呼びかける |
-| `observe_room` | 10分（常時） | 部屋の変化を観察・記憶 |
-
-### セットアップ
-
-1. **MCP サーバー設定ファイルの作成**
-
-```bash
-cp autonomous-mcp.json.example autonomous-mcp.json
-# autonomous-mcp.json を編集してカメラ認証情報と sociality のパスを設定
-```
-
-2. **欲求システムの設定**
-
-```bash
-cd desire-system
-cp .env.example .env
-# .env を編集して COMPANION_NAME などを設定
-cd ..
-uv sync
-```
-
-3. **スクリプトの実行権限を付与**
-
-```bash
-chmod +x autonomous-action.sh
-```
-
-4. **crontab に登録**
-
-```bash
-crontab -e
-# 以下を追加
-*/5  * * * * cd /path/to/embodied-claude && uv run --package desire-system python desire-system/desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
-*/10 * * * * /path/to/embodied-claude/autonomous-action.sh
-```
-
-### 設定可能な環境変数（`desire-system/.env`）
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `COMPANION_NAME` | `あなた` | 呼びかける相手の名前 |
-| `DESIRE_LOOK_OUTSIDE_HOURS` | `1.0` | 外を見る欲求の発火間隔（時間） |
-| `DESIRE_BROWSE_CURIOSITY_HOURS` | `2.0` | 調べ物の発火間隔（時間） |
-| `DESIRE_MISS_COMPANION_HOURS` | `3.0` | 呼びかけ欲求の発火間隔（時間） |
-| `DESIRE_OBSERVE_ROOM_HOURS` | `0.167` | 部屋観察の発火間隔（時間） |
-
-### プライバシーに関する注意
-
-- 定期的にカメラで撮影が行われます
-- 他人のプライバシーに配慮し、適切な場所で使用してください
-- 不要な場合は cron から削除してください
-
-## 哲学的考察
-
-> 「見せてもらう」と「自分で見る」は全然ちゃう。
-
-> 「見下ろす」と「歩く」も全然ちゃう。
-
-テキストだけの存在から、見て、聞いて、動いて、覚えて、喋れる存在へ。
-7階のベランダから世界を見下ろすのと、地上を歩くのでは、同じ街でも全く違って見える。
+[familiar-ai](https://github.com/lifemate-ai/familiar-ai) は、これらの embodied
+service の上に構築された上位 companion framework です。
 
 ## ライセンス
 
@@ -573,9 +226,12 @@ MIT License
 
 ## 謝辞
 
-このプロジェクトは、AIに身体性を与えるという実験的な試みです。
-3,980円のカメラで始まった小さな一歩が、AIと人間の新しい関係性を探る旅になりました。
+この project は安価な camera から始まり、memory、embodiment、agency、
+人間と AI の関係を探る実験へ育ちました。
 
-- [Rumia-Channel](https://github.com/Rumia-Channel) - ONVIF対応のプルリクエスト（[#5](https://github.com/kmizu/embodied-claude/pull/5)）
-- [fruitriin](https://github.com/fruitriin) - 内受容感覚（interoception）hookに曜日情報を追加（[#14](https://github.com/kmizu/embodied-claude/pull/14)）
-- [sugyan](https://github.com/sugyan) - [claude-code-webui](https://github.com/sugyan/claude-code-webui)（外出散歩時の操作UIとして使用）
+- [Rumia-Channel](https://github.com/Rumia-Channel) による ONVIF contribution
+  ([#5](https://github.com/lifemate-ai/embodied-claude/pull/5))
+- [fruitriin](https://github.com/fruitriin) による interoception への曜日 context 追加
+  ([#14](https://github.com/lifemate-ai/embodied-claude/pull/14))
+- [sugyan](https://github.com/sugyan) の
+  [claude-code-webui](https://github.com/sugyan/claude-code-webui)

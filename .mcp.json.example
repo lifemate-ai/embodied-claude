@@ -65,14 +65,6 @@
         "SOCIAL_DB_PATH": "~/.claude/sociality/social.db",
         "MEMORY_HTTP_PORT": "18900"
       }
-    },
-    "garmin-health": {
-      "command": "node",
-      "args": ["/path/to/garmin-health-mcp/index.js"],
-      "env": {
-        "GARMIN_EMAIL": "your-garmin-email",
-        "GARMIN_PASSWORD": "your-garmin-password"
-      }
     }
   }
 }

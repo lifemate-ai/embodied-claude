@@ -194,3 +194,29 @@ def test_docs_bound_platform_and_global_memory_launch() -> None:
         '"--directory", "/path/to/embodied-claude", '
         '"--package", "memory-mcp"'
     ) in memory
+
+
+def test_primary_docs_lead_with_the_guided_core_setup() -> None:
+    readme = (ROOT / "README.md").read_text()
+    readme_ja = (ROOT / "README-ja.md").read_text()
+    setup_guide = (ROOT / "docs" / "setup.md").read_text()
+
+    for document in (readme, readme_ja):
+        assert "lifemate-ai/embodied-claude" in document
+        assert "--profile core --non-interactive" in document
+        assert "/mcp" in document
+        assert "--with-camera" in document
+        assert "--with-voice" in document
+        assert "--with-x" in document
+        assert "--with-system-temperature" in document
+        assert "scripts/doctor.py" in document
+        assert "docs/setup.md" in document
+        assert "kmizu/embodied-claude" not in document
+        assert "cp .env.example .env" not in document
+
+    assert "Windows native" in readme
+    assert "Windows ネイティブ" in readme_ja
+    assert "TAPO_CAMERA_HOST" in setup_guide
+    assert "ELEVENLABS_API_KEY" in setup_guide
+    assert "X_ACCESS_TOKEN_SECRET" in setup_guide
+    assert ".mcp.json.backup-" in setup_guide

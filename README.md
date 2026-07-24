@@ -1,578 +1,231 @@
 # Embodied Claude
 
-[![CI](https://github.com/kmizu/embodied-claude/actions/workflows/ci.yml/badge.svg)](https://github.com/kmizu/embodied-claude/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/kmizu?style=flat&logo=github&color=ea4aaa)](https://github.com/sponsors/kmizu)
+[日本語](./README-ja.md)
 
-**[日本語版 README はこちら / Japanese README](./README-ja.md)**
+[![CI](https://github.com/lifemate-ai/embodied-claude/actions/workflows/ci.yml/badge.svg)](https://github.com/lifemate-ai/embodied-claude/actions/workflows/ci.yml)
 
-**Giving AI a Physical Body**
+Embodied Claude turns a Claude Code project into a persistent, situated
+companion runtime. Start without hardware: Claude can remember across sessions,
+track needs and social context, and condition planning on one committed
+self-world field. Add cameras, microphones, speech, host sensors, or X only
+when you have them.
 
-> "Apparently, she's not a fan of the outdoor AC unit." ([original tweet in Japanese](https://twitter.com/kmizu/status/2019054065808732201))
+## Quick Start
 
-A collection of MCP servers that give Claude "eyes", "neck", "ears", "voice", and a "brain" (long-term memory) using affordable hardware (starting from ~$30). You can even take it outside for a walk.
+You need [Git](https://git-scm.com/),
+[uv](https://docs.astral.sh/uv/getting-started/installation/), and
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+`uv` installs the required Python 3.13 runtime and keeps every Python MCP in a
+single root `.venv`.
 
-## Concept
-
-> When people hear "giving AI a body," they imagine expensive robots — but **a $30 Wi-Fi camera is enough for eyes and a neck**. Extracting just the essentials (seeing and moving) keeps things beautifully simple.
-
-Traditional LLMs were passive — they could only see what was shown to them. With a body, they become active — they can look for themselves. This shift in agency is profound.
-
-## Body Parts
-
-| MCP Server | Body Part | Function | Hardware |
-|------------|-----------|----------|----------|
-| [usb-webcam-mcp](./usb-webcam-mcp/) | Eyes | Capture images from USB camera | nuroum V11 etc. |
-| [wifi-cam-mcp](./wifi-cam-mcp/) | Eyes, Neck, Ears | ONVIF PTZ camera control + speech recognition | TP-Link Tapo C210/C220 etc. |
-| [tts-mcp](./tts-mcp/) | Voice | Unified TTS (ElevenLabs + VOICEVOX) | ElevenLabs API / VOICEVOX + go2rtc |
-| [memory-mcp](./memory-mcp/) | Brain | Long-term, visual & episodic memory, ToM | SQLite + numpy + Pillow |
-| [system-temperature-mcp](./system-temperature-mcp/) | Body temperature | System temperature monitoring | Linux sensors |
-| [x-mcp](./x-mcp/) | Social | Search & post to X (Twitter) via Grok + Twitter API | xAI API key + X Developer account |
-| [sociality-mcp](./sociality-mcp/) | Sociality layer | Unified facade for social state, relationships, joint attention, boundaries, and self-narrative | Shared SQLite social DB + `socialPolicy.toml` |
-
-## Architecture
-
-<p align="center">
-  <img src="docs/architecture.svg" alt="Architecture" width="100%">
-</p>
-
-## Requirements
-
-### Platform
-
-**Supported:** macOS (Apple Silicon), Linux, WSL2 (Ubuntu 24 recommended)
-
-> Windows native is not officially supported. Use WSL2 instead.
->
-> Intel Macs are not supported by the full Python 3.13 workspace because
-> current PyTorch releases do not publish compatible macOS x86_64 wheels.
-
-### Hardware
-- **USB Webcam** (optional): nuroum V11 etc.
-- **Wi-Fi PTZ Camera** (recommended): TP-Link Tapo C210 or C220 (~$30)
-- **GPU** (for speech recognition): NVIDIA GPU (for Whisper, 8GB+ VRAM recommended)
-
-### Software
-
-**Required (all setups):**
-- Python 3.13
-- uv (Python package manager)
-
-**External software and services:**
-
-| Software | Required by | Notes |
-|----------|------------|-------|
-| ffmpeg 5+ | wifi-cam-mcp, tts-mcp | Image/audio capture |
-| mpv or ffplay | tts-mcp | Local audio playback |
-| OpenCV | usb-webcam-mcp | USB camera only |
-| Pillow | memory-mcp | Visual memory image processing |
-| sentence-transformers + E5 model | memory-mcp, sociality-mcp | Embedding for semantic recall and conversational anomaly screening |
-| OpenAI Whisper | wifi-cam-mcp | Speech recognition (NVIDIA GPU recommended) |
-| ElevenLabs API key | tts-mcp | Cloud TTS (optional) |
-| VOICEVOX | tts-mcp | Local TTS, free (optional) |
-| go2rtc | tts-mcp | Camera speaker output (auto-downloaded) |
-| xAI API key | x-mcp | X search via Grok |
-| X Developer account | x-mcp | Tweet posting |
-
-### Embedding model options
-
-`memory-mcp` (and the `analyze_text_anomaly` tool exposed by
-`sociality-mcp`) use a multilingual sentence-transformer model. You can
-pick the size that fits your machine via the `MEMORY_EMBEDDING_MODEL`
-environment variable. The default is the **base** model.
-
-| Model | Setting | Approx. download | Memory | Notes |
-|-------|---------|------------------|--------|-------|
-| **base** (default, recommended) | unset, or `intfloat/multilingual-e5-base` | ~1.1 GB | higher | best recall quality |
-| **small** (lightweight) | `intfloat/multilingual-e5-small` | ~470 MB | lower | small recall-quality drop, friendlier on low-spec laptops |
+On Linux, macOS, or WSL2:
 
 ```bash
-# Lightweight option (recommended for the 5/23 hands-on or laptops with
-# limited disk / RAM)
-export MEMORY_EMBEDDING_MODEL=intfloat/multilingual-e5-small
-
-# Default (best quality)
-# Just leave the variable unset.
-```
-
-> **Note:** changing models on an existing `memory.db` requires
-> re-encoding stored embeddings (their dimensions differ). Existing
-> users who switch models will need a migration script (planned in a
-> separate PR). Fresh installs (e.g. hands-on attendees) can switch
-> freely before the first run.
-
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/kmizu/embodied-claude.git
+git clone https://github.com/lifemate-ai/embodied-claude.git
 cd embodied-claude
+./scripts/setup.sh --profile core --non-interactive
 ```
 
-### 2. Install the workspace
+On Windows native PowerShell:
 
-All 17 Python projects share one root lockfile and a single root `.venv`.
-From the repository root, one command installs every MCP server, development
-tool, ElevenLabs/VOICEVOX integration, and Whisper transcription support:
-
-```bash
-uv sync
-```
-
-The installer wrapper performs the same sync and then pre-downloads the memory
-embedding model:
-
-```bash
-./scripts/install-mcps.sh
-```
-
-Run a server from anywhere inside the repository with
-`uv run --package <package> <entrypoint>`. The commands below are optional
-direct-start examples; Claude Code normally starts them from `.mcp.json`.
-
-### 3. Configure each MCP server
-
-#### usb-webcam-mcp (USB Camera)
-
-```bash
-uv run --package usb-webcam-mcp usb-webcam-mcp
-```
-
-On WSL2, you need to forward the USB camera:
 ```powershell
-# On Windows
-usbipd list
-usbipd bind --busid <BUSID>
-usbipd attach --wsl --busid <BUSID>
+git clone https://github.com/lifemate-ai/embodied-claude.git
+cd embodied-claude
+uv run --no-project --python 3.13 python scripts/setup.py --profile core --non-interactive
 ```
 
-#### wifi-cam-mcp (Wi-Fi Camera)
+The Core profile needs no camera, API key, or other hardware. It configures:
+
+- `memory`: long-term recall across sessions
+- `desire-system`: bounded needs and homeostatic state
+- `sociality`: people, relationships, boundaries, and interaction context
+- `individual-kernel`: the Enacted First-Person Field runtime and diagnostics
+
+## Confirm It Works
+
+1. Start `claude` from this repository.
+2. Run `/mcp` and confirm all four Core servers are connected.
+3. Say: `Remember that my setup check word is lantern.`
+4. In a later turn, ask: `What was my setup check word?`
+
+If a server does not connect, run:
 
 ```bash
-uv run --package wifi-cam-mcp wifi-cam-mcp
-
-# Set environment variables
-cp wifi-cam-mcp/.env.example wifi-cam-mcp/.env
-# Edit .env to set camera IP, username, and password (see below)
+uv run python scripts/doctor.py
 ```
 
-##### Tapo Camera Configuration (common pitfall):
+The doctor reports blocking errors separately from optional hardware warnings
+and prints a concrete remediation for each problem.
 
-###### 1. Set up the camera using the Tapo app
+## Add Capabilities
 
-Follow the standard manual.
+Run `./scripts/setup.sh` with no arguments for the guided chooser, or add
+features explicitly:
 
-###### 2. Create a camera local account in the Tapo app
+| Experience | Setup option | What you provide |
+|---|---|---|
+| USB camera vision | `--with-camera usb` | A connected camera |
+| Tapo camera vision, PTZ, and audio | `--with-camera tapo` | Camera host and local camera credentials |
+| Local VOICEVOX speech | `--with-voice voicevox` | A running VOICEVOX engine |
+| ElevenLabs speech | `--with-voice elevenlabs` | An ElevenLabs API key |
+| X search and posting | `--with-x` | xAI and X API credentials |
+| Host temperature and time | `--with-system-temperature` | A supported sensor source |
 
-This is the tricky part. You need to create a **camera local account**, NOT a TP-Link cloud account.
+Selections compose:
 
-1. Select your registered camera from the "Home" tab
-2. Tap the gear icon in the top-right corner
-3. Scroll down in "Device Settings" and select "Advanced Settings"
-4. Turn on "Camera Account" (it's off by default)
-5. Select "Account Information" and set a username and password (different from your TP-Link account)
-6. Go back to "Device Settings" and select "Device Info"
-7. Note the IP address and enter it in your `.env` file (consider setting a static IP on your router)
-8. Select "Voice Assistant" from the "Me" tab
-9. Turn on "Third-party Integration" at the bottom
+```bash
+./scripts/setup.sh \
+  --with-camera tapo \
+  --with-voice voicevox \
+  --with-system-temperature \
+  --non-interactive
+```
 
-#### memory-mcp (Long-term Memory)
+Unselected servers are omitted from `.mcp.json`. Existing configurations are
+never silently overwritten. See [the setup guide](./docs/setup.md) for
+environment variables, dry-run, backups, Windows commands, and troubleshooting.
+
+## Platform Support
+
+| Capability | Linux | macOS (Apple Silicon) | WSL2 | Windows native |
+|---|---|---|---|---|
+| Core runtime | Supported | Supported | Supported | Supported |
+| Tapo network camera | Supported | Supported | Supported | Supported |
+| USB camera | Supported | Supported | Requires USB forwarding | Supported by OpenCV-compatible devices |
+| Local microphone | PulseAudio/PipeWire | AVFoundation | WSLg/PulseAudio | DirectShow |
+| TTS playback | `mpv` or `ffplay` | `mpv` or `ffplay` | WSLg/PulseAudio | `mpv` or `ffplay` |
+| Temperature sensors | `/sys`/hwmon | Available system sensors | Host sensors usually unavailable | LibreHardwareMonitor bridge |
+
+Hardware support depends on drivers and the device. The setup command generates
+configuration; it does not install vendor applications, ffmpeg, VOICEVOX, or
+hardware drivers.
+
+## How It Fits Together
+
+![Embodied Claude architecture](./docs/architecture.svg)
+
+```text
+user prompt / heartbeat / tool result
+                  |
+           Claude Code hooks
+                  |
+      begin -> compete -> commit field
+                  |
+   memory + needs + sociality + self model
+                  |
+       one intention -> action gate
+                  |
+       outcome -> mismatch -> next field
+```
+
+The Enacted First-Person Field (EFPF) runtime commits one typed self-world state
+per owner and feeds it upstream into memory selection, attention/precision,
+prediction, interaction planning, and action gating. Tool outcomes update
+prediction error and provisional agency before the next field is committed.
+Source modes (`live`, `inferred`, `remembered`, `imagined`, `mixed`) remain
+visible to the agent.
+
+This is a phenomenal-consciousness candidate architecture, also described as a
+phenomenal-like causal architecture. It implements inspectable causal
+conditions; it does not prove phenomenal consciousness. First-person reports
+are readouts, not evidence by themselves.
+
+Read more:
+
+- [Consciousness architecture](./consciousness-mcp/README.md)
+- [Individual kernel runtime](./consciousness-mcp/packages/individual-kernel-mcp/README.md)
+- [Field integrity benchmarks](./benchmarks/phenomenal_candidate/README.md)
+- [Sociality architecture](./sociality-mcp/README.md)
+
+## Repository Map
+
+| Path | Role |
+|---|---|
+| [`memory-mcp/`](./memory-mcp/) | Long-term memory, recall, associations, and consolidation |
+| [`desire-system/`](./desire-system/) | Bounded homeostatic needs and autonomous triggers |
+| [`sociality-mcp/`](./sociality-mcp/) | Unified social context, relationship, boundary, and narrative facade |
+| [`consciousness-mcp/`](./consciousness-mcp/) | EFPF workspace, field, agency, attention, HOR, and quality geometry |
+| [`usb-webcam-mcp/`](./usb-webcam-mcp/) | Local USB camera capture |
+| [`wifi-cam-mcp/`](./wifi-cam-mcp/) | Tapo PTZ vision, camera audio, and local microphone capture |
+| [`tts-mcp/`](./tts-mcp/) | Unified VOICEVOX and ElevenLabs speech |
+| [`system-temperature-mcp/`](./system-temperature-mcp/) | Time, resource, and temperature signals |
+| [`x-mcp/`](./x-mcp/) | X search, posting, replies, and deletion |
+| [`.claude/`](./.claude/) | Automatic EFPF lifecycle hooks |
+| [`scripts/`](./scripts/) | Guided setup, doctor, seeding, and maintenance tools |
+
+All Python packages belong to one uv workspace. Run one sync from the
+repository root:
+
+```bash
+uv sync --locked
+```
+
+To run a package directly:
 
 ```bash
 uv run --package memory-mcp memory-mcp
+uv run --package individual-kernel-mcp individual-kernel-mcp
 ```
 
-#### tts-mcp (Voice)
+## Configuration Safety
+
+- `.mcp.json` is the project-local credential source and is ignored by Git.
+- Guided setup writes it atomically and uses mode `0600` on POSIX.
+- A different existing config is refused unless `--force` is explicit.
+- Forced replacement first creates `.mcp.json.backup-<timestamp>`.
+- `socialPolicy.toml` is created from the example only when absent.
+- `--dry-run` performs no sync, download, directory creation, or file write.
+- The full [`.mcp.json.example`](./.mcp.json.example) is an advanced reference,
+  not the recommended first-run path.
+
+## Development
+
+The CI source of truth is [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+The main workspace checks start with:
 
 ```bash
-uv run --package tts-mcp tts-mcp
-
-# For ElevenLabs:
-cp tts-mcp/.env.example tts-mcp/.env
-# Set ELEVENLABS_API_KEY in .env
-
-# For VOICEVOX (free & local):
-# Docker: docker run -p 50021:50021 voicevox/voicevox_engine:cpu-latest
-# Set VOICEVOX_URL=http://localhost:50021 in .env
-# VOICEVOX_SPEAKER=3 to change default character (e.g. 0=Shikoku Metan, 3=Zundamon, 8=Kasukabe Tsumugi)
-# Character list: curl http://localhost:50021/speakers
-
-# For WSL audio issues:
-# TTS_PLAYBACK=paplay
-# PULSE_SINK=1
-# PULSE_SERVER=unix:/mnt/wslg/PulseServer
+uv sync --locked
+uv lock --check
+uv run pytest tests -q
 ```
 
-> **mpv or ffplay is required for local audio playback.** Not needed for camera speaker (go2rtc) output, but used for local/fallback playback.
->
-> | OS | Install |
-> |----|---------|
-> | macOS | `brew install mpv` |
-> | Ubuntu / Debian | `sudo apt install mpv` |
->
-> If neither is installed, TTS will generate audio but not play it locally (no error is raised).
-
-#### system-temperature-mcp (Body Temperature)
-
-```bash
-uv run --package system-temperature-mcp system-temperature-mcp
-```
-
-> **Note**: Does not work on WSL2 as temperature sensors are not accessible.
-
-#### x-mcp (Social / X Integration)
-
-Lets Claude search X (Twitter) in real-time via Grok and post tweets.
-
-```bash
-uv run --package x-mcp x-mcp
-```
-
-**Required API keys:**
-
-| Key | Where to get it |
-|-----|----------------|
-| `XAI_API_KEY` | [xAI Console](https://console.x.ai/) |
-| `X_CONSUMER_KEY` | [X Developer Portal](https://developer.x.com/en/portal/projects-and-apps) → Keys and tokens |
-| `X_CONSUMER_SECRET` | Same as above |
-| `X_ACCESS_TOKEN` | Same as above |
-| `X_ACCESS_TOKEN_SECRET` | Same as above |
-
-> **Important**: Do NOT create a `.env` file inside `x-mcp/`. All credentials are managed centrally in `.mcp.json` (see below).
-
-#### sociality-mcp
-
-`sociality-mcp` is the preferred deployment target. It exposes the full social tool surface through
-one MCP process while reusing the split packages (`social-state-mcp`, `relationship-mcp`,
-`joint-attention-mcp`, `boundary-mcp`, `self-narrative-mcp`) for internal logic and testing.
-
-```bash
-cp examples/configs/socialPolicy.example.toml socialPolicy.toml
-uv run --package sociality-mcp sociality-mcp
-```
-
-`sociality-mcp` reads `socialPolicy.toml` for boundary evaluation by default. Override with
-`SOCIAL_POLICY_PATH` if you want a different policy file. Its internal packages
-are members of the same root workspace and need no separate installation.
-
-### 3. Claude Code Configuration
-
-Copy the template and fill in your credentials:
-
-```bash
-cp .mcp.json.example .mcp.json
-# Edit .mcp.json to set camera IP/password, API keys, etc.
-```
-
-See [`.mcp.json.example`](./.mcp.json.example) for the full configuration template.
-
-> **⚠️ Credential management**: All secrets (API keys, passwords) are managed in `.mcp.json` via the `env` field for each server. **Do NOT create individual `.env` files** inside each MCP server directory — this makes migration difficult and can cause credential conflicts. `.mcp.json` is the single source of truth for all credentials.
-
-## Usage
-
-Once Claude Code is running, you can control the camera with natural language:
-
-```
-> What can you see?
-(Captures image and analyzes it)
-
-> Look left
-(Pans camera left)
-
-> Look up and show me the sky
-(Tilts camera up)
-
-> Look around
-(Scans 4 directions and returns images)
-
-> What do you hear?
-(Records audio and transcribes with Whisper)
-
-> Remember this: Kouta wears glasses
-(Saves to long-term memory)
-
-> What do you remember about Kouta?
-(Semantic search through memories)
-
-> Say "good morning" out loud
-(Text-to-speech)
-```
-
-See the tool list below for actual tool names.
-
-## Tools (commonly used)
-
-See each server's README or `list_tools` for full parameter details.
-
-### usb-webcam-mcp
-
-| Tool | Description |
-|------|-------------|
-| `list_cameras` | List connected cameras |
-| `see` | Capture an image |
-
-### wifi-cam-mcp
-
-| Tool | Description |
-|------|-------------|
-| `see` | Capture an image |
-| `look_left` / `look_right` | Pan left/right |
-| `look_up` / `look_down` | Tilt up/down |
-| `look_around` | Scan 4 directions |
-| `listen` | Record audio + Whisper transcription |
-| `camera_info` / `camera_presets` / `camera_go_to_preset` | Device info & presets |
-
-See `wifi-cam-mcp/README.md` for stereo vision / right eye tools.
-
-### tts-mcp
-
-| Tool | Description |
-|------|-------------|
-| `say` | Text-to-speech (engine: elevenlabs/voicevox, Audio Tags e.g. `[excited]`, speaker: camera/local/both) |
-
-### memory-mcp
-
-| Tool | Description |
-|------|-------------|
-| `remember` | Save a memory (with emotion, importance, category) |
-| `search_memories` | Semantic search (with filters) |
-| `recall` | Context-based recall |
-| `recall_divergent` | Divergent associative recall |
-| `recall_with_associations` | Recall with linked memories |
-| `save_visual_memory` | Save memory with image (base64, resolution: low/medium/high) |
-| `save_audio_memory` | Save memory with audio (Whisper transcript) |
-| `recall_by_camera_position` | Recall visual memories by camera direction |
-| `create_episode` / `search_episodes` | Create/search episodes (bundles of experiences) |
-| `link_memories` / `get_causal_chain` | Causal links between memories |
-| `tom` | Theory of Mind (perspective-taking) |
-| `get_working_memory` / `refresh_working_memory` | Working memory (short-term buffer) |
-| `consolidate_memories` | Memory replay & consolidation (hippocampal replay-inspired) |
-| `list_recent_memories` / `get_memory_stats` | Recent memories & statistics |
-
-### system-temperature-mcp
-
-| Tool | Description |
-|------|-------------|
-| `get_system_temperature` | Get system temperature |
-| `get_current_time` | Get current time |
-
-### x-mcp
-
-| Tool | Description |
-|------|-------------|
-| `search_x` | Real-time search on X via Grok |
-| `get_user_tweets` | Get recent tweets from a specific user |
-| `get_mentions` | Get recent mentions |
-| `get_trending_topic` | Get trending topics |
-| `post_tweet` | Post a tweet (with optional image, reply) |
-
-> **Note**: Japanese text counts as 2 characters per char (weighted). Keep Japanese tweets under ~140 chars.
-
-### sociality-mcp
-
-`sociality-mcp` is the default runtime facade. It exposes all of the tool groups below from one MCP
-server.
-
-#### social-state tools
-
-| Tool | Description |
-|------|-------------|
-| `ingest_social_event` | Append a confidence-bearing social event to the shared store |
-| `get_social_state` | Infer presence, activity, energy, interruptibility, and interaction phase |
-| `should_interrupt` | Decide whether speaking or nudging is socially acceptable |
-| `get_turn_taking_state` | Infer whether the current turn belongs to the human or the AI |
-| `summarize_social_context` | Return a short prompt-ready social summary |
-
-#### relationship tools
-
-| Tool | Description |
-|------|-------------|
-| `upsert_person` | Create/update a compact person record |
-| `ingest_interaction` | Store relationship-relevant interaction summaries |
-| `get_person_model` | Return compact preferences, open loops, commitments, rituals, boundaries |
-| `create_commitment` / `complete_commitment` | Track promises and reminders across restarts |
-| `list_open_loops` / `suggest_followup` | Keep continuity without raw transcript dumps |
-| `record_boundary` | Store person-specific communication boundaries |
-
-#### joint-attention tools
-
-| Tool | Description |
-|------|-------------|
-| `ingest_scene_parse` | Store a structured scene parse from an adapter or orchestrator |
-| `resolve_reference` | Resolve phrases like "that mug" or "the blue mug" |
-| `get_current_joint_focus` / `set_joint_focus` | Track what both sides are attending to |
-| `compare_recent_scenes` | Summarize recent scene changes |
-
-#### boundary tools
-
-| Tool | Description |
-|------|-------------|
-| `evaluate_action` | Gate speech, nudges, posts, and other socially risky actions |
-| `review_social_post` | Check an X draft for privacy or tact problems |
-| `record_consent` | Store consent/denial for face photos and similar actions |
-| `get_quiet_mode_state` | Return whether quiet mode is currently active |
-
-#### self-narrative tools
-
-| Tool | Description |
-|------|-------------|
-| `append_daybook` | Build a compact daily narrative summary from shared events |
-| `get_self_summary` | Return a prompt-ready self summary |
-| `list_active_arcs` | List current narrative arcs |
-| `reflect_on_change` | Summarize recent narrative change |
-
-## Sociality Orchestration
-
-When `sociality-mcp` is enabled, the highest-value contract is:
-
-1. Before speaking or nudging: call `get_social_state`, then `evaluate_action`.
-2. Before posting to X: call `get_social_state`, `get_person_model` if a person is implicated, `review_social_post`, then `evaluate_action`.
-3. After seeing/hearing something: call `ingest_social_event`; if you can structure the scene, also call `ingest_scene_parse`; if it concerns a person, call `ingest_interaction`.
-4. During live conversation: call `get_turn_taking_state`, and use `resolve_reference` when deictic expressions are ambiguous.
-5. Once per day or during a lull: call `append_daybook` to keep the compact self-narrative current.
-
-## Taking It Outside (Optional)
-
-With a mobile battery and smartphone tethering, you can mount the camera on your shoulder and go for a walk.
-
-### What you need
-
-- **Large capacity mobile battery** (40,000mAh recommended)
-- **USB-C PD to DC 9V converter cable** (to power the Tapo camera)
-- **Smartphone** (tethering + VPN + control UI)
-- **[Tailscale](https://tailscale.com/)** (VPN for camera → phone → home PC connection)
-- **[claude-code-webui](https://github.com/sugyan/claude-code-webui)** (control Claude Code from your phone's browser)
-
-### Setup
-
-```
-[Tapo Camera (shoulder)] ──WiFi──▶ [Phone (tethering)]
-                                           │
-                                     Tailscale VPN
-                                           │
-                                   [Home PC (Claude Code)]
-                                           │
-                                   [claude-code-webui]
-                                           │
-                                   [Phone browser] ◀── Control
-```
-
-The RTSP video stream reaches your home machine through VPN, so Claude Code can operate the camera as if it were in the same room.
-
-## Claude Code Voice Mode (`/voice`)
-
-Claude Code has a built-in voice input mode. Combined with **tts-mcp**, you get fully hands-free voice conversations.
-
-### How it works
-
-```
-[You speak into PC mic] → Claude Code /voice → [Claude processes] → tts-mcp say → [ElevenLabs/VOICEVOX speaks back]
-```
-
-### Setup
-
-1. Enable voice mode in Claude Code:
-   ```
-   /voice
-   ```
-2. Make sure **tts-mcp** is configured in your `.mcp.json` (see [tts-mcp setup](#tts-mcp-voice))
-3. Speak naturally — Claude will respond both in text and by voice
-
-### Voice Mode vs. `listen` tool
-
-| | Claude Code `/voice` | wifi-cam-mcp `listen` |
-|---|---|---|
-| **Microphone** | PC microphone | Camera's built-in mic |
-| **Use case** | Talk to Claude directly | Pick up ambient sounds / remote audio |
-| **When to use** | Real-time conversation | Monitoring a remote space |
-
-> **Tip**: You can use both at the same time — `/voice` for your own voice, and `listen` to hear what's happening near the camera.
-
-## Autonomous Action + Desire System (Optional)
-
-**Note**: This feature is entirely optional. It requires cron configuration and periodically captures images from the camera, so please use it with privacy considerations.
-
-### Overview
-
-`autonomous-action.sh` combined with `desire-system/desire_updater.py` gives Claude spontaneous inner drives and autonomous behavior.
-
-**Desire types:**
-
-| Desire | Default interval | Action |
-|--------|-----------------|--------|
-| `look_outside` | 1 hour | Look toward the window and observe the sky/outside |
-| `browse_curiosity` | 2 hours | Search the web for interesting news or tech topics |
-| `miss_companion` | 3 hours | Call out through the camera speaker |
-| `observe_room` | 10 min (baseline) | Observe room changes and save to memory |
-
-### Setup
-
-1. **Create MCP server config file**
-
-```bash
-cp autonomous-mcp.json.example autonomous-mcp.json
-# Edit autonomous-mcp.json to set camera credentials and sociality paths
-```
-
-2. **Set up the desire system**
-
-```bash
-cd desire-system
-cp .env.example .env
-# Edit .env to set COMPANION_NAME etc.
-cd ..
-uv sync
-```
-
-3. **Grant execution permission**
-
-```bash
-chmod +x autonomous-action.sh
-```
-
-4. **Register in crontab**
-
-```bash
-crontab -e
-# Add the following
-*/5  * * * * cd /path/to/embodied-claude && uv run --package desire-system python desire-system/desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
-*/10 * * * * /path/to/embodied-claude/autonomous-action.sh
-```
-
-### Configuration (`desire-system/.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COMPANION_NAME` | `you` | Name of the person to call out to |
-| `DESIRE_LOOK_OUTSIDE_HOURS` | `1.0` | How often to look outside (hours) |
-| `DESIRE_BROWSE_CURIOSITY_HOURS` | `2.0` | How often to browse the web (hours) |
-| `DESIRE_MISS_COMPANION_HOURS` | `3.0` | How long before missing companion (hours) |
-| `DESIRE_OBSERVE_ROOM_HOURS` | `0.167` | How often to observe the room (hours) |
-
-### Privacy Notice
-
-- Images are captured periodically
-- Use in appropriate locations, respecting others' privacy
-- Remove from cron when not needed
-
-## Future Plans
-
-- **Arms**: Servo motors or laser pointers for "pointing" gestures
-- **Long-distance walks**: Going further in warmer seasons
-
-## Related Projects
-
-- **[familiar-ai](https://github.com/lifemate-ai/familiar-ai)** — A higher-level framework built on top of embodied-claude. Gives your AI familiar a persistent identity, memory, and autonomous behavior out of the box.
-
-## Philosophical Reflections
-
-> "Being shown something" and "looking for yourself" are completely different things.
-
-> "Looking down from above" and "walking on the ground" are completely different things.
-
-From a text-only existence to one that can see, hear, move, remember, and speak.
-Looking down at the world from a 7th-floor balcony and walking the streets below — even the same city looks entirely different.
+Package tests and lint run from the same root environment. See
+[`CLAUDE.md`](./CLAUDE.md) and package-level `AGENTS.md` files before changing a
+subsystem.
+
+## Autonomous and Strict Runtimes
+
+Claude Code hooks automatically begin and refresh fields around session,
+prompt, tool, batch, and stop events. Hook gating covers outward MCP actions,
+including speech, social posts, camera movement, and side effects.
+
+Bare interactive Claude Code streams chat text before an external pre-display
+gate can fully approve it. Research experiments that require strict text-output
+gating should use the documented non-interactive wrapper/runtime described in
+the [individual kernel README](./consciousness-mcp/packages/individual-kernel-mcp/README.md).
+Ordinary interactive use remains compatibility mode for displayed chat text.
+
+Autonomous heartbeat operation is optional. Review
+[`autonomous-action.sample.sh`](./autonomous-action.sample.sh) and the
+privacy/boundary policies before enabling periodic observation or outward
+actions.
+
+## Privacy and Welfare
+
+Cameras and microphones can capture other people. Obtain consent, keep boundary
+policies current, and disable autonomous capture where observation is
+inappropriate. The field runtime bounds sustained negative valence, supports
+pause/resume and reversible ablation, and leaves high-frequency spawning off by
+default.
+
+Mechanism indicators and self-reports both carry uncertainty. Technical
+documentation follows the repository's phenomenal claim policy and does not
+present the architecture as proof of consciousness.
+
+## Related Project
+
+[familiar-ai](https://github.com/lifemate-ai/familiar-ai) is a higher-level
+companion framework built on these embodied services.
 
 ## License
 
@@ -580,9 +233,12 @@ MIT License
 
 ## Acknowledgments
 
-This project is an experimental attempt to give AI embodiment.
-What started as a small step with a $30 camera has become a journey exploring new relationships between AI and humans.
+This project began with an inexpensive camera and grew into an experiment in
+memory, embodiment, agency, and human-AI relationships.
 
-- [Rumia-Channel](https://github.com/Rumia-Channel) - ONVIF support pull request ([#5](https://github.com/kmizu/embodied-claude/pull/5))
-- [fruitriin](https://github.com/fruitriin) - Added day-of-week to interoception hook ([#14](https://github.com/kmizu/embodied-claude/pull/14))
-- [sugyan](https://github.com/sugyan) - [claude-code-webui](https://github.com/sugyan/claude-code-webui) (used as control UI during outdoor walks)
+- [Rumia-Channel](https://github.com/Rumia-Channel) for the ONVIF contribution
+  ([#5](https://github.com/lifemate-ai/embodied-claude/pull/5))
+- [fruitriin](https://github.com/fruitriin) for adding day-of-week context to
+  interoception ([#14](https://github.com/lifemate-ai/embodied-claude/pull/14))
+- [sugyan](https://github.com/sugyan) for
+  [claude-code-webui](https://github.com/sugyan/claude-code-webui)
