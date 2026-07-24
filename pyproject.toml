@@ -75,3 +75,6 @@ tts-mcp = { workspace = true }
 usb-webcam-mcp = { workspace = true }
 wifi-cam-mcp = { workspace = true }
 x-mcp = { workspace = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
