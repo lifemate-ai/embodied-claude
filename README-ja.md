@@ -25,12 +25,12 @@ cd embodied-claude
 ./scripts/setup.sh --profile core --non-interactive
 ```
 
-Windows ネイティブの PowerShell:
+Windows 11 ネイティブの PowerShell:
 
 ```powershell
 git clone https://github.com/lifemate-ai/embodied-claude.git
 cd embodied-claude
-uv run --no-project --python 3.13 python scripts/setup.py --profile core --non-interactive
+scripts\setup.cmd --profile core --non-interactive
 ```
 
 Core profile には camera、API key、追加 hardware は不要です。次の4つを設定します。
@@ -47,10 +47,16 @@ Core profile には camera、API key、追加 hardware は不要です。次の4
 3. `セットアップ確認用の言葉は「灯り」だと覚えて` と頼みます。
 4. 後の turn で `セットアップ確認用の言葉は何だった？` と聞きます。
 
-接続できない server があれば、次を実行します。
+接続できない server があれば、live doctor を実行します。
 
 ```bash
-uv run python scripts/doctor.py
+./scripts/doctor.sh --live
+```
+
+Windows:
+
+```powershell
+scripts\doctor.cmd --live
 ```
 
 doctor は Core を起動できない error と、任意 hardware の warning を分け、
@@ -65,6 +71,7 @@ doctor は Core を起動できない error と、任意 hardware の warning �
 |---|---|---|
 | USB camera で見る | `--with-camera usb` | 接続済み camera |
 | Tapo camera の映像、PTZ、音声 | `--with-camera tapo` | camera host と local camera credentials |
+| camera 音声の文字起こし | `--with-transcription whisper|faster` | Tapo camera と ffmpeg |
 | local VOICEVOX で話す | `--with-voice voicevox` | 起動中の VOICEVOX engine |
 | ElevenLabs で話す | `--with-voice elevenlabs` | ElevenLabs API key |
 | X を検索・投稿する | `--with-x` | xAI と X API credentials |
@@ -88,7 +95,7 @@ troubleshooting は [setup guide](./docs/setup.md) にまとめています。
 
 | Capability | Linux | macOS（Apple Silicon） | WSL2 | Windows ネイティブ |
 |---|---|---|---|---|
-| Core runtime | 対応 | 対応 | 対応 | 対応 |
+| Core runtime と Claude Code hooks | 対応 | 対応 | 対応 | 対応 |
 | Tapo network camera | 対応 | 対応 | 対応 | 対応 |
 | USB camera | 対応 | 対応 | USB forwarding が必要 | OpenCV 対応 device |
 | local microphone | PulseAudio/PipeWire | AVFoundation | WSLg/PulseAudio | DirectShow |
@@ -173,8 +180,8 @@ uv run --package individual-kernel-mcp individual-kernel-mcp
 - 強制置換前に `.mcp.json.backup-<timestamp>` を作ります。
 - `socialPolicy.toml` は存在しない時だけ example から作ります。
 - `--dry-run` は sync、download、directory 作成、file write を行いません。
-- 完全版 [`.mcp.json.example`](./.mcp.json.example) は advanced reference であり、
-  初回 setup の推奨導線ではありません。
+- [`.mcp.json.example`](./.mcp.json.example) は portable な Core 構成です。
+  guided setup が選択した capability と環境変数だけを安全に追加します。
 
 ## 開発
 

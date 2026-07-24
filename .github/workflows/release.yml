@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Verify and publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install release workspace
+        run: uv sync --locked --all-extras --group dev
+
+      - name: Validate tag, versions, and changelog
+        run: uv run python scripts/release_check.py --tag "$GITHUB_REF_NAME"
+
+      - name: Run release contract tests
+        run: uv run pytest tests/test_release_check.py -q
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          --verify-tag
+          --title "embodied-claude $GITHUB_REF_NAME"
+          --generate-notes

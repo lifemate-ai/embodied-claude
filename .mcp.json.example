@@ -1,53 +1,15 @@
 {
   "mcpServers": {
-    "usb-webcam": {
+    "memory": {
       "command": "uv",
-      "args": ["run", "--package", "usb-webcam-mcp", "usb-webcam-mcp"]
-    },
-    "wifi-cam": {
-      "command": "uv",
-      "args": ["run", "--package", "wifi-cam-mcp", "wifi-cam-mcp"],
+      "args": ["run", "--package", "memory-mcp", "memory-mcp"],
       "env": {
-        "TAPO_CAMERA_HOST": "192.168.1.xxx",
-        "TAPO_USERNAME": "your-username",
-        "TAPO_PASSWORD": "your-password"
+        "MEMORY_EMBEDDING_MODEL": "intfloat/multilingual-e5-small"
       }
     },
     "desire-system": {
       "command": "uv",
       "args": ["run", "--package", "desire-system", "desire-system"]
-    },
-    "memory": {
-      "command": "uv",
-      "args": ["run", "--package", "memory-mcp", "memory-mcp"]
-    },
-    "system-temperature": {
-      "command": "uv",
-      "args": ["run", "--package", "system-temperature-mcp", "system-temperature-mcp"]
-    },
-    "tts": {
-      "command": "uv",
-      "args": ["run", "--package", "tts-mcp", "tts-mcp"],
-      "env": {
-        "ELEVENLABS_API_KEY": "your-api-key",
-        "ELEVENLABS_VOICE_ID": "your-voice-id",
-        "ELEVENLABS_MODEL_ID": "eleven_v3",
-        "ELEVENLABS_OUTPUT_FORMAT": "mp3_44100_128",
-        "ELEVENLABS_PLAY_AUDIO": "true",
-        "ELEVENLABS_SAVE_DIR": "/tmp/elevenlabs-t2s",
-        "TTS_PLAYBACK": "auto"
-      }
-    },
-    "x-mcp": {
-      "command": "uv",
-      "args": ["run", "--package", "x-mcp", "x-mcp"],
-      "env": {
-        "XAI_API_KEY": "your-xai-api-key",
-        "X_CONSUMER_KEY": "your-x-consumer-key",
-        "X_CONSUMER_SECRET": "your-x-consumer-secret",
-        "X_ACCESS_TOKEN": "your-x-access-token",
-        "X_ACCESS_TOKEN_SECRET": "your-x-access-token-secret"
-      }
     },
     "sociality": {
       "command": "uv",

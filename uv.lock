@@ -26,7 +26,7 @@ members = [
 
 [[package]]
 name = "agent-grammar"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/agent-grammar" }
 dependencies = [
     { name = "pydantic" },
@@ -269,7 +269,7 @@ wheels = [
 
 [[package]]
 name = "boundary-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/boundary-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -582,7 +582,7 @@ nvtx = [
 
 [[package]]
 name = "desire-system"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "desire-system" }
 dependencies = [
     { name = "chromadb" },
@@ -647,7 +647,7 @@ wheels = [
 
 [[package]]
 name = "embodied-claude-workspace"
-version = "0.1.0"
+version = "0.3.0"
 source = { virtual = "." }
 dependencies = [
     { name = "desire-system" },
@@ -975,7 +975,7 @@ wheels = [
 
 [[package]]
 name = "individual-kernel-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "consciousness-mcp/packages/individual-kernel-mcp" }
 dependencies = [
     { name = "agent-grammar" },
@@ -1018,7 +1018,7 @@ wheels = [
 
 [[package]]
 name = "interaction-orchestrator-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/interaction-orchestrator-mcp" }
 dependencies = [
     { name = "boundary-mcp" },
@@ -1120,7 +1120,7 @@ wheels = [
 
 [[package]]
 name = "joint-attention-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/joint-attention-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -1353,7 +1353,7 @@ wheels = [
 
 [[package]]
 name = "memory-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "memory-mcp" }
 dependencies = [
     { name = "mcp" },
@@ -2406,7 +2406,7 @@ wheels = [
 
 [[package]]
 name = "relationship-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/relationship-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -2613,7 +2613,7 @@ wheels = [
 
 [[package]]
 name = "self-narrative-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/self-narrative-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -2696,7 +2696,7 @@ wheels = [
 
 [[package]]
 name = "social-core"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/social-core" }
 dependencies = [
     { name = "pydantic" },
@@ -2720,7 +2720,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "social-state-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp/packages/social-state-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -2748,7 +2748,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "sociality-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "sociality-mcp" }
 dependencies = [
     { name = "boundary-mcp" },
@@ -2856,7 +2856,7 @@ wheels = [
 
 [[package]]
 name = "system-temperature-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "system-temperature-mcp" }
 dependencies = [
     { name = "mcp" },
@@ -3012,7 +3012,7 @@ wheels = [
 
 [[package]]
 name = "tts-mcp"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "tts-mcp" }
 dependencies = [
     { name = "mcp" },
@@ -3119,7 +3119,7 @@ wheels = [
 
 [[package]]
 name = "usb-webcam-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "usb-webcam-mcp" }
 dependencies = [
     { name = "mcp" },
@@ -3274,7 +3274,7 @@ wheels = [
 
 [[package]]
 name = "wifi-cam-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "wifi-cam-mcp" }
 dependencies = [
     { name = "httpx" },
@@ -3319,7 +3319,7 @@ provides-extras = ["dev", "transcribe", "transcribe-faster"]
 
 [[package]]
 name = "x-mcp"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "x-mcp" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },

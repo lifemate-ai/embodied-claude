@@ -1,6 +1,6 @@
 [project]
 name = "desire-system"
-version = "0.1.0"
+version = "0.3.0"
 description = "Autonomous desire system for embodied Claude - gives Kokone inner drives"
 requires-python = ">=3.10"
 dependencies = [

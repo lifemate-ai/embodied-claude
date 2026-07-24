@@ -26,12 +26,12 @@ cd embodied-claude
 ./scripts/setup.sh --profile core --non-interactive
 ```
 
-On Windows native PowerShell:
+On Windows 11 native PowerShell:
 
 ```powershell
 git clone https://github.com/lifemate-ai/embodied-claude.git
 cd embodied-claude
-uv run --no-project --python 3.13 python scripts/setup.py --profile core --non-interactive
+scripts\setup.cmd --profile core --non-interactive
 ```
 
 The Core profile needs no camera, API key, or other hardware. It configures:
@@ -48,10 +48,16 @@ The Core profile needs no camera, API key, or other hardware. It configures:
 3. Say: `Remember that my setup check word is lantern.`
 4. In a later turn, ask: `What was my setup check word?`
 
-If a server does not connect, run:
+If a server does not connect, run the live doctor:
 
 ```bash
-uv run python scripts/doctor.py
+./scripts/doctor.sh --live
+```
+
+On Windows:
+
+```powershell
+scripts\doctor.cmd --live
 ```
 
 The doctor reports blocking errors separately from optional hardware warnings
@@ -66,6 +72,7 @@ features explicitly:
 |---|---|---|
 | USB camera vision | `--with-camera usb` | A connected camera |
 | Tapo camera vision, PTZ, and audio | `--with-camera tapo` | Camera host and local camera credentials |
+| Camera transcription | `--with-transcription whisper|faster` | Tapo camera plus ffmpeg |
 | Local VOICEVOX speech | `--with-voice voicevox` | A running VOICEVOX engine |
 | ElevenLabs speech | `--with-voice elevenlabs` | An ElevenLabs API key |
 | X search and posting | `--with-x` | xAI and X API credentials |
@@ -89,7 +96,7 @@ environment variables, dry-run, backups, Windows commands, and troubleshooting.
 
 | Capability | Linux | macOS (Apple Silicon) | WSL2 | Windows native |
 |---|---|---|---|---|
-| Core runtime | Supported | Supported | Supported | Supported |
+| Core runtime and Claude Code hooks | Supported | Supported | Supported | Supported |
 | Tapo network camera | Supported | Supported | Supported | Supported |
 | USB camera | Supported | Supported | Requires USB forwarding | Supported by OpenCV-compatible devices |
 | Local microphone | PulseAudio/PipeWire | AVFoundation | WSLg/PulseAudio | DirectShow |
@@ -176,8 +183,8 @@ uv run --package individual-kernel-mcp individual-kernel-mcp
 - Forced replacement first creates `.mcp.json.backup-<timestamp>`.
 - `socialPolicy.toml` is created from the example only when absent.
 - `--dry-run` performs no sync, download, directory creation, or file write.
-- The full [`.mcp.json.example`](./.mcp.json.example) is an advanced reference,
-  not the recommended first-run path.
+- [`.mcp.json.example`](./.mcp.json.example) is the portable Core shape. Guided
+  setup adds selected capabilities and their environment safely.
 
 ## Development
 

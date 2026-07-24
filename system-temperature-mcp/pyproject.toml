@@ -1,6 +1,6 @@
 [project]
 name = "system-temperature-mcp"
-version = "0.1.0"
+version = "0.3.0"
 description = "MCP server for monitoring system temperature - your sense of body temperature"
 requires-python = ">=3.12"
 dependencies = [

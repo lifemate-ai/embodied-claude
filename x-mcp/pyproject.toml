@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "x-mcp"
-version = "0.1.0"
+version = "0.3.0"
 description = "MCP server for searching and posting to X (Twitter) via xAI Grok live search"
 readme = "README.md"
 requires-python = ">=3.12"

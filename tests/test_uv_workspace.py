@@ -117,18 +117,14 @@ def test_setup_uses_one_cross_platform_workspace_entrypoint() -> None:
 def test_mcp_example_runs_python_servers_from_workspace_packages() -> None:
     config = json.loads((ROOT / ".mcp.json.example").read_text())
     expected = {
-        "usb-webcam": ("usb-webcam-mcp", "usb-webcam-mcp"),
-        "wifi-cam": ("wifi-cam-mcp", "wifi-cam-mcp"),
         "desire-system": ("desire-system", "desire-system"),
         "memory": ("memory-mcp", "memory-mcp"),
-        "system-temperature": ("system-temperature-mcp", "system-temperature-mcp"),
-        "tts": ("tts-mcp", "tts-mcp"),
-        "x-mcp": ("x-mcp", "x-mcp"),
         "sociality": ("sociality-mcp", "sociality-mcp"),
         "individual-kernel": ("individual-kernel-mcp", "individual-kernel-mcp"),
     }
 
     servers = config["mcpServers"]
+    assert set(servers) == set(expected)
     for server_name, (package, entrypoint) in expected.items():
         assert servers[server_name]["command"] == "uv"
         assert servers[server_name]["args"] == [
@@ -262,7 +258,6 @@ def test_primary_docs_lead_with_the_guided_core_setup() -> None:
         assert "--with-voice" in document
         assert "--with-x" in document
         assert "--with-system-temperature" in document
-        assert "scripts/doctor.py" in document
         assert "docs/setup.md" in document
         assert "kmizu/embodied-claude" not in document
         assert "cp .env.example .env" not in document
@@ -273,3 +268,17 @@ def test_primary_docs_lead_with_the_guided_core_setup() -> None:
     assert "ELEVENLABS_API_KEY" in setup_guide
     assert "X_ACCESS_TOKEN_SECRET" in setup_guide
     assert ".mcp.json.backup-" in setup_guide
+
+
+def test_primary_docs_make_windows_and_live_diagnostics_first_class() -> None:
+    readme = (ROOT / "README.md").read_text()
+    readme_ja = (ROOT / "README-ja.md").read_text()
+    setup_guide = (ROOT / "docs" / "setup.md").read_text()
+
+    for document in (readme, readme_ja, setup_guide):
+        assert r"scripts\setup.cmd" in document
+        assert r"scripts\doctor.cmd --live" in document
+    assert "--with-transcription whisper|faster" in document
+    assert "Windows 11" in readme
+    assert "Windows 11" in setup_guide
+    assert "WSL2 is not required" in setup_guide

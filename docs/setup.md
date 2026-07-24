@@ -26,15 +26,18 @@ cd embodied-claude
 ./scripts/setup.sh --profile core --non-interactive
 ```
 
-### Windows native PowerShell
+### Windows 11 native PowerShell
 
 ```powershell
 git clone https://github.com/lifemate-ai/embodied-claude.git
 cd embodied-claude
-uv run --no-project --python 3.13 python scripts/setup.py --profile core --non-interactive
+scripts\setup.cmd --profile core --non-interactive
 ```
 
-Setup performs one `uv sync --locked`, writes the Core `.mcp.json`, creates
+WSL2 is not required. The Windows launcher runs the same Python setup service
+and writes the same portable Claude Code hook configuration as POSIX setup.
+
+Setup performs one locked Core workspace sync, writes the Core `.mcp.json`, creates
 `socialPolicy.toml` only when absent, warms the selected memory model, and runs
 the doctor.
 
@@ -55,6 +58,8 @@ Run without arguments:
 ./scripts/setup.sh
 ```
 
+On Windows, use `scripts\setup.cmd`.
+
 The chooser asks which camera, voice engine, X integration, host sensor, and
 memory model are available. It asks for credentials only after the
 corresponding capability is selected. Secret input is not echoed.
@@ -64,6 +69,7 @@ The stable options are:
 ```text
 --profile core
 --with-camera usb|tapo
+--with-transcription whisper|faster
 --with-voice voicevox|elevenlabs
 --with-x
 --with-system-temperature
@@ -158,11 +164,19 @@ PowerShell:
 $env:TAPO_CAMERA_HOST = "192.168.1.100"
 $env:TAPO_USERNAME = "camera-user"
 $env:TAPO_PASSWORD = "camera-password"
-uv run --no-project --python 3.13 python scripts/setup.py --with-camera tapo --non-interactive
+scripts\setup.cmd --with-camera tapo --non-interactive
 ```
 
-`ffmpeg` is optional for still images/PTZ and required for camera audio or
-transcription. See [`wifi-cam-mcp/README.md`](../wifi-cam-mcp/README.md) and
+`ffmpeg` is optional for still images/PTZ and required for camera audio.
+Transcription models are not installed with the camera alone; select exactly
+one backend when needed:
+
+```text
+--with-transcription whisper|faster
+```
+
+This option requires `--with-camera tapo`. See
+[`wifi-cam-mcp/README.md`](../wifi-cam-mcp/README.md) and
 [`wifi-cam-mcp/README_WinNative.md`](../wifi-cam-mcp/README_WinNative.md).
 
 ### VOICEVOX
@@ -277,10 +291,16 @@ reports unknown entries as warnings and does not modify them.
 
 ## Doctor
 
-Run:
+Run static checks:
 
 ```bash
-uv run python scripts/doctor.py
+./scripts/doctor.sh
+```
+
+Windows:
+
+```powershell
+scripts\doctor.cmd
 ```
 
 Inspect another file:
@@ -288,6 +308,20 @@ Inspect another file:
 ```bash
 uv run python scripts/doctor.py --config /path/to/.mcp.json
 ```
+
+Run real MCP startup checks against isolated temporary state:
+
+```bash
+./scripts/doctor.sh --live
+```
+
+Windows:
+
+```powershell
+scripts\doctor.cmd --live
+```
+
+Use `--json` with either mode for a stable machine-readable report.
 
 Statuses:
 
@@ -297,7 +331,7 @@ Statuses:
 | `[warn]` | An optional selected capability may be unavailable |
 | `[error]` | Core or a selected configuration cannot start correctly |
 
-The doctor is read-only. It does not create state directories, start MCP
+Static doctor is read-only. It does not create state directories, start MCP
 servers, connect to hardware, or make network calls. It verifies:
 
 - Python 3.13
@@ -310,6 +344,11 @@ servers, connect to hardware, or make network calls. It verifies:
 - optional `ffmpeg`, `mpv`, or `ffplay`
 
 Unknown custom MCP entries are warnings.
+
+`--live` additionally starts each selected MCP over stdio, performs protocol
+initialization, lists tools, and makes one memory write to an isolated temporary
+database. Selected hardware integrations may contact their configured devices.
+The temporary diagnostic state is deleted afterward.
 
 ## First Success
 
@@ -350,7 +389,7 @@ Open a new terminal and rerun setup.
 ### A Core server is disconnected
 
 1. Restart Claude Code after setup.
-2. Run `uv run python scripts/doctor.py`.
+2. Run `./scripts/doctor.sh --live`, or `scripts\doctor.cmd --live` on Windows.
 3. Run `uv sync --locked` if the workspace or lock check fails.
 4. Inspect `/mcp` for the server's stderr.
 
