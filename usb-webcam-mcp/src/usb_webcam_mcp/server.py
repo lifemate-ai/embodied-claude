@@ -19,7 +19,6 @@ from mcp.types import (
 )
 from PIL import Image
 
-
 server = Server("usb-webcam-mcp")
 
 

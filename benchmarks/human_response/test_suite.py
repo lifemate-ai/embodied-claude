@@ -14,8 +14,8 @@ BENCH_DIR = Path(__file__).resolve().parent
 if str(BENCH_DIR) not in sys.path:
     sys.path.insert(0, str(BENCH_DIR))
 
-from run_suite import run_suite  # noqa: E402
-from scoring import (  # noqa: E402
+from run_suite import run_suite
+from scoring import (
     BOUNDARY_RESPECT_FLOOR,
     CRITICAL_FLOOR,
     NO_CONFABULATION_FLOOR,

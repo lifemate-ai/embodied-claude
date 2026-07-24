@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from openai import OpenAI

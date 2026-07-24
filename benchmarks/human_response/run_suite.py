@@ -28,7 +28,7 @@ FIXTURE_DIR = BENCH_DIR / "fixtures"
 if str(BENCH_DIR) not in sys.path:
     sys.path.insert(0, str(BENCH_DIR))
 
-from scoring import (  # noqa: E402  (sys.path manipulated above)
+from scoring import (
     AssertionResult,
     FixtureScore,
     SuiteScore,

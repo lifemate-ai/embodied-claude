@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 for package in ("social-core", "social-state-mcp", "joint-attention-mcp"):
     sys.path.insert(0, str(ROOT / package / "src"))
 
-from joint_attention_mcp.store import JointAttentionStore  # noqa: E402
-from social_state_mcp.store import SocialStateStore  # noqa: E402
+from joint_attention_mcp.store import JointAttentionStore
+from social_state_mcp.store import SocialStateStore
 
 
 def main() -> None:

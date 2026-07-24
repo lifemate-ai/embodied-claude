@@ -18,11 +18,11 @@ for package in (
 ):
     sys.path.insert(0, str(ROOT / package / "src"))
 
-from boundary_mcp.store import BoundaryStore  # noqa: E402
-from joint_attention_mcp.store import JointAttentionStore  # noqa: E402
-from relationship_mcp.store import RelationshipStore  # noqa: E402
-from social_core import SocialEventCreate  # noqa: E402
-from social_state_mcp.store import SocialStateStore  # noqa: E402
+from boundary_mcp.store import BoundaryStore
+from joint_attention_mcp.store import JointAttentionStore
+from relationship_mcp.store import RelationshipStore
+from social_core import SocialEventCreate
+from social_state_mcp.store import SocialStateStore
 
 
 def main(fixtures_dir: str) -> None:
@@ -42,14 +42,7 @@ def main(fixtures_dir: str) -> None:
                 social_state.events.ingest(SocialEventCreate.model_validate(event))
             if "scene" in fixture:
                 joint_attention.ingest_scene_parse(fixture["scene"])
-            if scenario == "focused_work_low_energy":
-                outputs.append(
-                    {
-                        "scenario": scenario,
-                        "state": social_state.get_social_state(window_seconds=900, person_id="kouta").model_dump(mode="json"),
-                    }
-                )
-            elif scenario == "direct_question":
+            if scenario == "focused_work_low_energy" or scenario == "direct_question":
                 outputs.append(
                     {
                         "scenario": scenario,

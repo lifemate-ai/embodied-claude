@@ -29,14 +29,7 @@ jobs:
         run: uv lock --check
 
       - name: Lint
-        run: |
-          uv run ruff check memory-mcp
-          uv run ruff check tts-mcp
-          uv run ruff check wifi-cam-mcp
-          uv run ruff check desire-system
-          uv run ruff check system-temperature-mcp
-          uv run ruff check consciousness-mcp/packages/individual-kernel-mcp
-          uv run ruff check sociality-mcp
+        run: uv run ruff check .
 
       - name: Type check memory-mcp
         run: uv run mypy memory-mcp/src/memory_mcp/ --ignore-missing-imports

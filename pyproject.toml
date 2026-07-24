@@ -82,3 +82,6 @@ x-mcp = { workspace = true }
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/seed-person-from-toml.py" = ["N999"]

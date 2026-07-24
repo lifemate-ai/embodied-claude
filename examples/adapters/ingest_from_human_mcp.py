@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 for package in ("social-core", "social-state-mcp", "relationship-mcp"):
     sys.path.insert(0, str(ROOT / package / "src"))
 
-from relationship_mcp.store import RelationshipStore  # noqa: E402
-from social_state_mcp.store import SocialStateStore  # noqa: E402
+from relationship_mcp.store import RelationshipStore
+from social_state_mcp.store import SocialStateStore
 
 
 def main() -> None:

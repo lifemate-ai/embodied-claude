@@ -180,6 +180,7 @@ def test_ci_uses_the_locked_root_workspace() -> None:
     assert 'python-version: "3.13"' in workflow
     assert "run: uv sync --locked --all-extras --group dev" in workflow
     assert "run: uv sync --locked --group dev" in workflow
+    assert "run: uv run ruff check ." in workflow
     assert "working-directory:" not in workflow
     assert "uv lock --check" in workflow
     assert (

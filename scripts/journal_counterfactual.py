@@ -17,12 +17,10 @@ Usage:
 
 import argparse
 import json
-import os
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-
 
 DEFAULT_LOG_PATH = (
     Path.home() / ".claude" / "memories" / "counterfactuals.jsonl"

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "social-core" / "src"))
 sys.path.insert(0, str(ROOT / "social-state-mcp" / "src"))
 
-from social_state_mcp.store import SocialStateStore  # noqa: E402
+from social_state_mcp.store import SocialStateStore
 
 
 def main() -> None:
