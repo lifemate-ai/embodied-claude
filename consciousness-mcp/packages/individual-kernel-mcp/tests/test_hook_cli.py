@@ -167,7 +167,7 @@ def test_pre_tool_stdin_json_covers_no_field_mismatch_valid_and_second(
     assert "hash mismatch" in mismatch["hookSpecificOutput"][
         "permissionDecisionReason"
     ]
-    assert valid["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert valid["hookSpecificOutput"]["permissionDecision"] == "allow", valid
     assert second["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "one outward action" in second["hookSpecificOutput"][
         "permissionDecisionReason"

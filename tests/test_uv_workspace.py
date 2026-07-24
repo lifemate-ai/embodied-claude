@@ -30,14 +30,14 @@ MEMBERS = {
 
 
 def _root_config() -> dict:
-    return tomllib.loads((ROOT / "pyproject.toml").read_text())
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def test_root_declares_every_python_project() -> None:
     config = _root_config()
     assert set(config["tool"]["uv"]["workspace"]["members"]) == set(MEMBERS)
     assert config["project"]["requires-python"] == ">=3.13,<3.14"
-    assert (ROOT / ".python-version").read_text().strip() == "3.13"
+    assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.13"
 
 
 def test_root_dependencies_install_only_the_core_runtime() -> None:
@@ -89,12 +89,12 @@ def test_only_root_lock_and_python_pin_remain() -> None:
 
 
 def test_transcription_extra_requires_python_313_compatible_numba() -> None:
-    config = tomllib.loads((ROOT / "wifi-cam-mcp" / "pyproject.toml").read_text())
+    config = tomllib.loads((ROOT / "wifi-cam-mcp" / "pyproject.toml").read_text(encoding="utf-8"))
     assert "numba>=0.63.1" in config["project"]["optional-dependencies"]["transcribe"]
 
 
 def test_installer_performs_one_workspace_sync() -> None:
-    script = (ROOT / "scripts" / "install-mcps.sh").read_text()
+    script = (ROOT / "scripts" / "install-mcps.sh").read_text(encoding="utf-8")
     sync_commands = re.findall(r"^[ \t]*uv sync.*$", script, flags=re.MULTILINE)
     assert sync_commands == ["uv sync --locked --all-extras --group dev"]
     assert "MCP_DIRS=" not in script
@@ -102,9 +102,9 @@ def test_installer_performs_one_workspace_sync() -> None:
 
 
 def test_setup_uses_one_cross_platform_workspace_entrypoint() -> None:
-    wrapper = (ROOT / "scripts" / "setup.sh").read_text()
-    setup = (ROOT / "scripts" / "setup.py").read_text()
-    gitignore = (ROOT / ".gitignore").read_text()
+    wrapper = (ROOT / "scripts" / "setup.sh").read_text(encoding="utf-8")
+    setup = (ROOT / "scripts" / "setup.py").read_text(encoding="utf-8")
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     assert "uv run --no-project --python 3.13" in wrapper
     assert 'python scripts/setup.py "$@"' in wrapper
@@ -115,7 +115,7 @@ def test_setup_uses_one_cross_platform_workspace_entrypoint() -> None:
 
 
 def test_mcp_example_runs_python_servers_from_workspace_packages() -> None:
-    config = json.loads((ROOT / ".mcp.json.example").read_text())
+    config = json.loads((ROOT / ".mcp.json.example").read_text(encoding="utf-8"))
     expected = {
         "desire-system": ("desire-system", "desire-system"),
         "memory": ("memory-mcp", "memory-mcp"),
@@ -140,7 +140,7 @@ def test_efpf_hooks_run_from_the_root_workspace() -> None:
         ROOT / ".claude" / "settings.json",
         ROOT / ".claude" / "settings.example.json",
     ):
-        config = json.loads(settings_path.read_text())
+        config = json.loads(settings_path.read_text(encoding="utf-8"))
         hooks = [
             hook
             for entries in config["hooks"].values()
@@ -164,7 +164,7 @@ def test_efpf_hooks_run_from_the_root_workspace() -> None:
 
 
 def test_core_hook_settings_do_not_require_posix_shell_scripts() -> None:
-    config = json.loads((ROOT / ".claude" / "settings.json").read_text())
+    config = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
     hooks = [
         hook
         for entries in config["hooks"].values()
@@ -176,7 +176,7 @@ def test_core_hook_settings_do_not_require_posix_shell_scripts() -> None:
 
 
 def test_ci_uses_the_locked_root_workspace() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert 'python-version: "3.13"' in workflow
     assert "run: uv sync --locked --all-extras --group dev" in workflow
     assert "run: uv sync --locked --group dev" in workflow
@@ -197,7 +197,7 @@ def test_ci_uses_the_locked_root_workspace() -> None:
 
 
 def test_ci_release_gate_covers_linux_macos_and_windows() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "ubuntu-latest" in workflow
     assert "macos-latest" in workflow
@@ -211,16 +211,16 @@ def test_ci_release_gate_covers_linux_macos_and_windows() -> None:
 
 
 def test_primary_docs_describe_the_single_workspace() -> None:
-    readme = (ROOT / "README.md").read_text()
-    readme_ja = (ROOT / "README-ja.md").read_text()
-    claude = (ROOT / "CLAUDE.md").read_text()
-    consciousness = (ROOT / "consciousness-mcp" / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_ja = (ROOT / "README-ja.md").read_text(encoding="utf-8")
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    consciousness = (ROOT / "consciousness-mcp" / "README.md").read_text(encoding="utf-8")
     benchmark = (
         ROOT / "benchmarks" / "phenomenal_candidate" / "README.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     kernel = (
         ROOT / "consciousness-mcp" / "packages" / "individual-kernel-mcp" / "README.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
     assert "Python 3.13" in readme
     assert "Python 3.13" in readme_ja
@@ -234,9 +234,9 @@ def test_primary_docs_describe_the_single_workspace() -> None:
 
 
 def test_docs_bound_platform_and_global_memory_launch() -> None:
-    readme = (ROOT / "README.md").read_text()
-    readme_ja = (ROOT / "README-ja.md").read_text()
-    memory = (ROOT / "memory-mcp" / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_ja = (ROOT / "README-ja.md").read_text(encoding="utf-8")
+    memory = (ROOT / "memory-mcp" / "README.md").read_text(encoding="utf-8")
 
     assert "macOS (Apple Silicon)" in readme
     assert "macOS（Apple Silicon）" in readme_ja
@@ -247,9 +247,9 @@ def test_docs_bound_platform_and_global_memory_launch() -> None:
 
 
 def test_primary_docs_lead_with_the_guided_core_setup() -> None:
-    readme = (ROOT / "README.md").read_text()
-    readme_ja = (ROOT / "README-ja.md").read_text()
-    setup_guide = (ROOT / "docs" / "setup.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_ja = (ROOT / "README-ja.md").read_text(encoding="utf-8")
+    setup_guide = (ROOT / "docs" / "setup.md").read_text(encoding="utf-8")
 
     for document in (readme, readme_ja):
         assert "lifemate-ai/embodied-claude" in document
@@ -272,9 +272,9 @@ def test_primary_docs_lead_with_the_guided_core_setup() -> None:
 
 
 def test_primary_docs_make_windows_and_live_diagnostics_first_class() -> None:
-    readme = (ROOT / "README.md").read_text()
-    readme_ja = (ROOT / "README-ja.md").read_text()
-    setup_guide = (ROOT / "docs" / "setup.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_ja = (ROOT / "README-ja.md").read_text(encoding="utf-8")
+    setup_guide = (ROOT / "docs" / "setup.md").read_text(encoding="utf-8")
 
     for document in (readme, readme_ja, setup_guide):
         assert r"scripts\setup.cmd" in document
