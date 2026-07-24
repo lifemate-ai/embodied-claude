@@ -6,7 +6,10 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from boundary_mcp.store import BoundaryStore
@@ -271,7 +274,7 @@ def stop(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
             field.tick_id,
             _summary(payload.get("last_assistant_message"), limit=1000),
         )
-    return {}
+    return _heartbeat_continuation(payload)
 
 
 def stop_failure(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
@@ -296,6 +299,44 @@ def diagnostics(payload: dict[str, Any], producer: TickProducer) -> dict[str, An
             producer.agency.get_pending(owner_id).model_dump(mode="json")
             if producer.agency.get_pending(owner_id)
             else None
+        ),
+    }
+
+
+def _heartbeat_continuation(payload: dict[str, Any]) -> dict[str, Any]:
+    if os.getenv("HEARTBEAT") != "1":
+        return {}
+
+    message = str(payload.get("last_assistant_message") or "")
+    temp_root = Path(
+        os.getenv("EFPF_RUNTIME_TEMP", "").strip() or tempfile.gettempdir()
+    )
+    counter_path = temp_root / "heartbeat-continue-counter"
+    match = re.search(r"\[CONTINUE:\s*(.+?)\]", message)
+    if "[DONE]" in message or match is None:
+        counter_path.unlink(missing_ok=True)
+        return {}
+
+    try:
+        count = int(counter_path.read_text())
+    except (OSError, ValueError):
+        count = 0
+    try:
+        maximum = max(0, int(os.getenv("MAX_CONTINUES", "3")))
+    except ValueError:
+        maximum = 3
+    if count >= maximum:
+        counter_path.unlink(missing_ok=True)
+        return {}
+
+    temp_root.mkdir(parents=True, exist_ok=True)
+    next_count = count + 1
+    counter_path.write_text(str(next_count))
+    return {
+        "decision": "block",
+        "reason": (
+            f"Continue heartbeat work ({next_count}/{maximum}): "
+            + match.group(1).strip()
         ),
     }
 

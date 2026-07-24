@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import secrets
+import tempfile
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
@@ -97,6 +98,14 @@ class TemporalSequenceMetrics(BaseModel):
 BoundaryEvaluator = Callable[[str, dict[str, Any], EnactedField], tuple[bool, str]]
 
 
+def default_interoception_path() -> Path:
+    """Return the platform-native interoception state path."""
+    override = os.getenv("INTEROCEPTION_STATE_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path(tempfile.gettempdir()) / "interoception_state.json"
+
+
 class TickProducer:
     """Deterministically produces and commits one field per tick."""
 
@@ -111,7 +120,7 @@ class TickProducer:
         hors: HORStore | None = None,
         agency: AgencyStore | None = None,
         quality: QualityGeometry | None = None,
-        interoception_path: str | Path = "/tmp/interoception_state.json",
+        interoception_path: str | Path | None = None,
         desires_path: str | Path | None = None,
     ) -> None:
         self.db = db
@@ -123,7 +132,11 @@ class TickProducer:
         self.agency = agency or AgencyStore(db)
         self.quality = quality or QualityGeometry(db)
         self.events = EventStore(db=db)
-        self.interoception_path = Path(interoception_path)
+        self.interoception_path = (
+            Path(interoception_path)
+            if interoception_path is not None
+            else default_interoception_path()
+        )
         self.desires_path = (
             Path(desires_path).expanduser()
             if desires_path is not None

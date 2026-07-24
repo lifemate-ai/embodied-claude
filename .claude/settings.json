@@ -5,18 +5,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook session-start",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "session-start"
+            ],
             "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-compact-recovery.sh",
-            "timeout": 5
           }
         ]
       }
@@ -26,26 +25,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook user-prompt-submit",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "user-prompt-submit"
+            ],
             "timeout": 10
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/interoception.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-recall.sh",
-            "timeout": 4
           }
         ]
       }
@@ -55,7 +45,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook pre-tool-use",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "pre-tool-use"
+            ],
             "timeout": 5
           }
         ]
@@ -67,7 +66,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook post-tool-use",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "post-tool-use"
+            ],
             "timeout": 10
           }
         ]
@@ -79,7 +87,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook post-tool-use-failure",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "post-tool-use-failure"
+            ],
             "timeout": 10
           }
         ]
@@ -90,7 +107,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook post-tool-batch",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "post-tool-batch"
+            ],
             "timeout": 10
           }
         ]
@@ -101,16 +127,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook stop",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/continue-check.sh",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "stop"
+            ],
             "timeout": 10
           }
         ]
@@ -121,7 +147,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR\" --package individual-kernel-mcp efpf-hook stop-failure",
+            "command": "uv",
+            "args": [
+              "run",
+              "--directory",
+              "${CLAUDE_PROJECT_DIR}",
+              "--package",
+              "individual-kernel-mcp",
+              "efpf-hook",
+              "stop-failure"
+            ],
             "timeout": 10
           }
         ]

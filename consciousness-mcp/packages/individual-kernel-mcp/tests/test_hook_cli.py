@@ -4,10 +4,14 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
+import pytest
 from social_core import SocialDB
 
+from individual_kernel_mcp import tick
 from individual_kernel_mcp.agency import ActionProposal
+from individual_kernel_mcp.hook_cli import stop
 from individual_kernel_mcp.tick import FieldRuntime, TickProducer
 
 
@@ -168,3 +172,41 @@ def test_pre_tool_stdin_json_covers_no_field_mismatch_valid_and_second(
     assert "one outward action" in second["hookSpecificOutput"][
         "permissionDecisionReason"
     ]
+
+
+def test_default_interoception_path_uses_platform_temp_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("INTEROCEPTION_STATE_PATH", raising=False)
+    monkeypatch.setattr(tick.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    assert tick.default_interoception_path() == (
+        tmp_path / "interoception_state.json"
+    )
+
+
+def test_heartbeat_stop_continuation_is_cross_platform(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("HEARTBEAT", "1")
+    monkeypatch.setenv("EFPF_RUNTIME_TEMP", str(tmp_path))
+    db = SocialDB(tmp_path / "hook-social.db")
+    producer = TickProducer(
+        db,
+        interoception_path=tmp_path / "interoception.json",
+        desires_path=tmp_path / "desires.json",
+    )
+
+    result = stop(
+        {
+            "stop_hook_active": False,
+            "last_assistant_message": "[CONTINUE: finish the release check]",
+        },
+        producer,
+    )
+
+    assert result["decision"] == "block"
+    assert "finish the release check" in result["reason"]
+    db.close()
