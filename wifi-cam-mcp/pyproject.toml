@@ -26,6 +26,7 @@ dev = [
 ]
 transcribe = [
     "openai-whisper>=20231117",
+    "numba>=0.63.1",
 ]
 
 [project.scripts]

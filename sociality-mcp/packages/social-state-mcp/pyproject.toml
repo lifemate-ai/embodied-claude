@@ -27,9 +27,6 @@ social-state-mcp = "social_state_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/social_state_mcp"]
 
-[tool.uv.sources]
-social-core = { path = "../social-core" }
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"

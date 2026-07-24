@@ -41,9 +41,3 @@ select = ["E", "F", "I", "N", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[tool.uv.sources]
-social-core = { path = "../../../sociality-mcp/packages/social-core" }
-interaction-orchestrator-mcp = { path = "../../../sociality-mcp/packages/interaction-orchestrator-mcp" }
-boundary-mcp = { path = "../../../sociality-mcp/packages/boundary-mcp" }
-agent-grammar = { path = "../../../sociality-mcp/packages/agent-grammar" }

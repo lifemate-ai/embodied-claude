@@ -1,0 +1,77 @@
+[project]
+name = "embodied-claude-workspace"
+version = "0.1.0"
+description = "Unified development and runtime environment for embodied-claude MCP servers."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "agent-grammar",
+    "boundary-mcp",
+    "desire-system",
+    "individual-kernel-mcp",
+    "interaction-orchestrator-mcp",
+    "joint-attention-mcp",
+    "memory-mcp",
+    "relationship-mcp",
+    "self-narrative-mcp",
+    "social-core",
+    "social-state-mcp",
+    "sociality-mcp",
+    "system-temperature-mcp",
+    "tts-mcp[all]",
+    "usb-webcam-mcp",
+    "wifi-cam-mcp[transcribe]",
+    "x-mcp",
+]
+
+[dependency-groups]
+dev = [
+    "freezegun>=1.5.0",
+    "jurigged>=0.6.0",
+    "mypy>=1.19.1",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "consciousness-mcp/packages/individual-kernel-mcp",
+    "desire-system",
+    "memory-mcp",
+    "sociality-mcp",
+    "sociality-mcp/packages/agent-grammar",
+    "sociality-mcp/packages/boundary-mcp",
+    "sociality-mcp/packages/interaction-orchestrator-mcp",
+    "sociality-mcp/packages/joint-attention-mcp",
+    "sociality-mcp/packages/relationship-mcp",
+    "sociality-mcp/packages/self-narrative-mcp",
+    "sociality-mcp/packages/social-core",
+    "sociality-mcp/packages/social-state-mcp",
+    "system-temperature-mcp",
+    "tts-mcp",
+    "usb-webcam-mcp",
+    "wifi-cam-mcp",
+    "x-mcp",
+]
+
+[tool.uv.sources]
+agent-grammar = { workspace = true }
+boundary-mcp = { workspace = true }
+desire-system = { workspace = true }
+individual-kernel-mcp = { workspace = true }
+interaction-orchestrator-mcp = { workspace = true }
+joint-attention-mcp = { workspace = true }
+memory-mcp = { workspace = true }
+relationship-mcp = { workspace = true }
+self-narrative-mcp = { workspace = true }
+social-core = { workspace = true }
+social-state-mcp = { workspace = true }
+sociality-mcp = { workspace = true }
+system-temperature-mcp = { workspace = true }
+tts-mcp = { workspace = true }
+usb-webcam-mcp = { workspace = true }
+wifi-cam-mcp = { workspace = true }
+x-mcp = { workspace = true }

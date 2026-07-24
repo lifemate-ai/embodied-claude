@@ -27,9 +27,6 @@ relationship-mcp = "relationship_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/relationship_mcp"]
 
-[tool.uv.sources]
-social-core = { path = "../social-core" }
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"

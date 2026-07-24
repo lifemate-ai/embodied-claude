@@ -27,9 +27,6 @@ self-narrative-mcp = "self_narrative_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/self_narrative_mcp"]
 
-[tool.uv.sources]
-social-core = { path = "../social-core" }
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"

@@ -27,9 +27,6 @@ joint-attention-mcp = "joint_attention_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/joint_attention_mcp"]
 
-[tool.uv.sources]
-social-core = { path = "../social-core" }
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"

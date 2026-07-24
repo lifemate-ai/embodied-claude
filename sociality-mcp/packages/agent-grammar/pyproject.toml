@@ -33,6 +33,3 @@ select = ["E", "F", "I", "N", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[tool.uv.sources]
-social-core = { path = "../social-core" }
