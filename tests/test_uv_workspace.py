@@ -82,6 +82,19 @@ def test_installer_performs_one_workspace_sync() -> None:
     assert "uv run --package memory-mcp python -c" in script
 
 
+def test_setup_uses_one_cross_platform_workspace_entrypoint() -> None:
+    wrapper = (ROOT / "scripts" / "setup.sh").read_text()
+    setup = (ROOT / "scripts" / "setup.py").read_text()
+    gitignore = (ROOT / ".gitignore").read_text()
+
+    assert "uv run --no-project --python 3.13" in wrapper
+    assert 'python scripts/setup.py "$@"' in wrapper
+    assert "https://astral.sh/uv/install.sh" in wrapper
+    assert '["uv", "sync", "--locked"]' in setup
+    assert "MCP_DIRS=" not in setup
+    assert ".mcp.json.backup-*" in gitignore
+
+
 def test_mcp_example_runs_python_servers_from_workspace_packages() -> None:
     config = json.loads((ROOT / ".mcp.json.example").read_text())
     expected = {

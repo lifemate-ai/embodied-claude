@@ -6,6 +6,8 @@
 #   scripts/install-mcps.sh --dev     # compatibility alias; dev dependencies are installed by default
 #
 # Notes:
+#   - New users should prefer `scripts/setup.sh`, which also creates a safe
+#     Core `.mcp.json` and runs diagnostics.
 #   - The root project includes all workspace packages and required runtime extras.
 #   - `memory-mcp` pre-downloads its embedding model so the first remember() doesn't lazy-fail.
 

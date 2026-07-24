@@ -443,7 +443,9 @@ Run:
 
 ```bash
 uv run pytest tests/test_onboarding.py tests/test_uv_workspace.py -q
-uv run ruff check scripts/setup.py scripts/doctor.py scripts/onboarding.py tests
+uv run ruff check scripts/setup.py scripts/doctor.py scripts/onboarding.py \
+  scripts/setup_io.py tests/test_onboarding.py tests/test_setup_cli.py \
+  tests/test_uv_workspace.py
 ```
 
 ### Step 7: Commit
@@ -626,7 +628,9 @@ Skip the commit if no files changed.
 
 ```bash
 uv lock --check
-uv run ruff check scripts tests
+uv run ruff check scripts/setup.py scripts/doctor.py scripts/onboarding.py \
+  scripts/setup_io.py tests/test_onboarding.py tests/test_setup_cli.py \
+  tests/test_uv_workspace.py
 uv run pytest tests -q
 ```
 
