@@ -60,7 +60,11 @@
         "--directory",
         "consciousness-mcp/packages/individual-kernel-mcp",
         "individual-kernel-mcp"
-      ]
+      ],
+      "env": {
+        "SOCIAL_DB_PATH": "~/.claude/sociality/social.db",
+        "MEMORY_HTTP_PORT": "18900"
+      }
     },
     "garmin-health": {
       "command": "node",

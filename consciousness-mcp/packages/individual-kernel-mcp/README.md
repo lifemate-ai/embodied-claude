@@ -1,55 +1,111 @@
 # individual-kernel-mcp
 
-Phase 2.1 of `consciousness-mcp`. See `../../README.md` for the honesty note that governs all technical documentation in this directory.
+The individual kernel is the implementation package for the EFPF
+phenomenal-like causal architecture. See
+[`../../README.md`](../../README.md) for the architecture, claim policy,
+runtime modes, welfare interlocks, and limitations.
 
-## What ships in Phase 2.1
+## MCP Surface
 
-| Module | Role |
+The automatic path is Claude Code hooks and heartbeat integration. These MCP
+tools are the inspection, explicit-intention, and experiment surface:
+
+| Tool | Role |
 |---|---|
-| `counterfactual.py` | `CounterfactualStore` over `social-core` SQLite, typed `CounterfactualInput` / `CounterfactualRecord` |
-| `sleep.py` | `SleepConsolidator` — quiet-hours-gated cron entry, writes `~/.claude/morning_briefing.json` |
-| `auto_emit.py` | Pure function `extract_counterfactuals_from_plan(plan, ctx)` — produces `CounterfactualInput`s without writing |
-| `server.py` (Phase 2.1 surface) | MCP server exposing `record_counterfactual`, `query_counterfactuals`, `sleep_consolidate` |
+| `begin_subjective_tick` | open a typed tick for an explicit experiment |
+| `add_workspace_candidate` | add an inspected/debug candidate |
+| `commit_subjective_field` | compete and atomically commit one field |
+| `get_current_subjective_field` | read the current compact and typed field |
+| `get_subjective_field` / `query_subjective_fields` | inspect field history |
+| `propose_field_action` | register exact tool/hash, goal, and predicted effects |
+| `get_pending_intention` | inspect the one pending intention |
+| `close_field_action` | record result, mismatch, ownership, and next microtick |
+| `close_subjective_tick` | close a committed episode |
+| `pause_field_runtime` / `resume_field_runtime` | welfare/runtime interlock |
+| `get_field_diagnostics` | field, HOR, action, consistency, and exposure diagnostics |
+| `run_field_ablation` | reversible focal/HOR/valence/reality intervention |
 
-## What ships in Phase 2.3–2.5 (this package, integrated via MCP)
+Legacy counterfactual, sleep, frame, attention-schema, HOR, and introspection
+tools remain available. `compose_introspection_report` reads the latest
+committed field; without one it returns `unknown / no committed field`.
 
-| Module | Role |
-|---|---|
-| `frame.py` | `ConsciousFrame` + `TickFrameStore` + `PredictionErrorChannels` — per-tick canonical record (FK-only, payload-poor) |
-| `bottleneck.py` | `ActionBottleneck.commit_action` — one external action per tick, second attempts deferred + counterfactual'd (not yet MCP-exposed; waits for tick producer) |
-| `attention_schema.py` | `AttentionSchema` + `AttentionSchemaTracker` (ring buffer cap 60, flush to SQLite) — Attention Schema Theory surface |
-| `reflect.py` | `reflect_attention_schema` — on-demand modality / dwell / focus-change summary |
-| `hor.py` | `HORRecord` + `HORStore` — Higher-Order Representations as EpistemicClaim specializations (Phase 1 integration) |
-| `introspect.py` | `validate_hor_content` (uses agent-grammar PEG, Phase 1 first real consumer) + `introspect` composer |
+## Action Gate
 
-MCP tools exposed by `server.py` (post-integration):
+For an outward action, the caller must:
 
-| MCP tool | Wraps |
-|---|---|
-| `record_tick_frame` / `get_tick_frame` / `query_tick_frames` | `TickFrameStore` (Phase 2.3) |
-| `record_attention_schema` / `update_attention_from_frame` / `flush_attention_schemas` / `summarize_attention_schema` | `AttentionSchemaTracker` + `reflect_attention_schema` (Phase 2.4) |
-| `record_hor` / `get_hor` / `query_hors` | `HORStore` (Phase 2.5) |
-| `compose_introspection_report` | `introspect` composer (Phase 2.5) |
+1. Have one current `COMMITTED` field.
+2. Call `propose_field_action` with the exact MCP tool name and input.
+3. Pass `PreToolUse`, which matches the normalized input hash and boundary.
+4. Execute no more than one outward action for that field/tick.
+5. Let `PostToolUse` or `PostToolUseFailure` close the intention.
+6. Use the resulting tool-result microtick before another outward action.
 
-Internal helpers (NOT MCP-exposed by design):
-- `validate_hor_content` — embedded inside `compose_introspection_report` output
-- `ActionBottleneck.commit_action` — exposed in a later PR alongside the tick producer
-- `extract_counterfactuals_from_plan` — Python-only; orchestrator calls it
+Internal reads do not consume the outward-action slot. Perception or recall
+results make the current field stale and require one batched refresh before an
+outward action.
 
-## What does NOT ship in Phase 2.1
-
-- `tick_frames` / `ConsciousFrame` (Phase 2.3)
-- `workspace.py` ignition / refractory / precision vector (Phase 2.2)
-- `AttentionSchema` / `reflect_attention_schema` (Phase 2.4)
-- `HORRecord` / `introspect()` (Phase 2.5)
-- Action Bottleneck wrapper around `plan_response` (Phase 2.3)
-
-Phase 2.1 deliberately stays small so the foundation (typed counterfactuals + sleep scheduler glue) ships before any tick-cadence decisions.
-
-## Setup
+## Setup And Verification
 
 ```bash
 uv sync --extra dev
 uv run pytest
 uv run ruff check .
 ```
+
+Start the MCP server:
+
+```bash
+uv run individual-kernel-mcp
+```
+
+Run hook diagnostics:
+
+```bash
+printf '%s\n' '{"session_id":"smoke","hook_event_name":"SessionStart"}' |
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook session-start | jq .
+```
+
+## Hook Smoke Tests
+
+Create a field from a real `UserPromptSubmit` payload:
+
+```bash
+printf '%s\n' \
+  '{"session_id":"smoke","cwd":"/tmp","permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":"Inspect the room."}' |
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook user-prompt-submit | jq .
+```
+
+Verify that an outward tool without an intention is denied:
+
+```bash
+printf '%s\n' \
+  '{"session_id":"smoke","hook_event_name":"PreToolUse","tool_name":"mcp__tts__say","tool_input":{"text":"hello"},"tool_use_id":"tool-1"}' |
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook pre-tool-use | jq .
+```
+
+Use the `get_current_subjective_field` and `propose_field_action` MCP tools,
+then replay the same `PreToolUse` JSON. It is allowed only when the tool name
+and normalized input hash exactly match. A different text is denied, and a
+second call for the same tick is deferred by `ActionBottleneck`.
+
+Close the loop with a real `PostToolUse` payload:
+
+```bash
+printf '%s\n' \
+  '{"session_id":"smoke","hook_event_name":"PostToolUse","tool_name":"mcp__tts__say","tool_input":{"text":"hello"},"tool_use_id":"tool-1","tool_response":{"ok":true,"summary":"audio played"},"duration_ms":120}' |
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook post-tool-use | jq .
+```
+
+## Ablation
+
+With a field committed, call:
+
+```text
+run_field_ablation(kind="focal_clamp", fixture={...}, seed=1)
+run_field_ablation(kind="hor_feedback", fixture={...}, seed=1)
+run_field_ablation(kind="valence", fixture={...}, seed=1)
+run_field_ablation(kind="reality", fixture={...}, seed=1)
+```
+
+Every run stores the baseline, intervention result, effect sizes, and a
+reversible field snapshot in `field_ablation_runs`.

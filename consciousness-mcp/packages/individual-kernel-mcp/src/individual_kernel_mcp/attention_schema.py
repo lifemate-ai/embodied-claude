@@ -9,8 +9,9 @@ control_handle so the agent can intervene rather than only observe.
 In-memory ring buffer (default capacity 60) holds the recent trajectory.
 flush() persists to attention_schemas table on tick boundary or on demand.
 
-Phase 2.5 will surface this via introspect() and a HOR layer where each
-schema_snapshot binds to higher-order claims.
+Commit-time field production surfaces this through introspection and a grounded
+HOR layer where each schema snapshot binds to its source tick. The latest
+schema and HOR also feed the next workspace competition.
 
 See consciousness-mcp/AGENTS.md for vocabulary discipline.
 """
@@ -27,6 +28,7 @@ from social_core.db import SocialDB
 from social_core.time import utc_now
 
 from individual_kernel_mcp.frame import ConsciousFrame
+from individual_kernel_mcp.workspace import CompetitionResult
 
 Modality = Literal["visual", "auditory", "internal", "social"]
 
@@ -143,19 +145,70 @@ class AttentionSchemaTracker:
     def update_from_frame(self, frame: ConsciousFrame) -> AttentionSchema:
         """Build a schema entry from a ConsciousFrame's attention slice.
 
-        intensity is a coarse proxy: ignited→0.8, subliminal→0.3. dwell
-        accumulates only if the focal target matches the previous buffered
-        schema.
+        Legacy/manual frames do not have competition metrics. Their intensity
+        is derived from ignition, conflict, and prediction-error magnitudes
+        rather than a fixed ignited/subliminal constant.
         """
         focal = frame.attention_target_ref
         modality = self._infer_modality(focal)
-        intensity = 0.8 if frame.ignited else 0.3
+        errors = frame.prediction_error
+        mean_error = min(
+            1.0,
+            (
+                abs(errors.extero)
+                + abs(errors.intero)
+                + abs(errors.mnemonic)
+            )
+            / 3.0,
+        )
+        intensity = min(
+            1.0,
+            0.12
+            + (0.42 if frame.ignited else 0.08)
+            + 0.28 * mean_error
+            + (0.0 if frame.conflicted else 0.12),
+        )
         dwell = self._compute_dwell(focal, frame.ts)
         return self.record(
             focal_target_ref=focal,
             modality=modality,
             intensity=intensity,
             dwell_seconds=dwell,
+            predicted_next_focus=None,
+            control_handle=(
+                f"hold:{focal}" if focal and not frame.conflicted else "recompete"
+            ),
+            source_tick_id=frame.tick_id,
+            ts=frame.ts,
+        )
+
+    def update_from_competition(
+        self,
+        frame: ConsciousFrame,
+        result: CompetitionResult,
+    ) -> AttentionSchema:
+        """Build the recurrent attention model from actual competition metrics."""
+
+        focal = result.winner.content_ref
+        modality = self._infer_modality_from_candidate(
+            result.winner.modality, focal
+        )
+        predicted_next = (
+            result.top_rejected[0].content_ref if result.top_rejected else focal
+        )
+        control_handle = (
+            f"shift:{result.top_rejected[0].candidate_id}"
+            if result.conflicted and result.top_rejected
+            else f"stabilize:{result.winner.candidate_id}"
+        )
+        dwell = self._compute_dwell(focal, frame.ts)
+        return self.record(
+            focal_target_ref=focal,
+            modality=modality,
+            intensity=result.attention_intensity,
+            dwell_seconds=dwell,
+            predicted_next_focus=predicted_next,
+            control_handle=control_handle,
             source_tick_id=frame.tick_id,
             ts=frame.ts,
         )
@@ -202,6 +255,16 @@ class AttentionSchemaTracker:
         if "person:" in f or "social" in f:
             return "social"
         return "internal"
+
+    @classmethod
+    def _infer_modality_from_candidate(
+        cls,
+        modality: str,
+        focal_target_ref: str | None,
+    ) -> Modality:
+        if modality in {"visual", "auditory", "internal", "social"}:
+            return modality  # type: ignore[return-value]
+        return cls._infer_modality(focal_target_ref)
 
     def _compute_dwell(self, focal: str | None, ts: str) -> float:
         if not self._buffer:

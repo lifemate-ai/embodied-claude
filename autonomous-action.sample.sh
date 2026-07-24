@@ -417,6 +417,9 @@ if [ "$DRY_RUN" = true ]; then
   # 標準出力にも出す
   cat "$LOG_FILE"
 else
+  # UserPromptSubmit sees HEARTBEAT=1 and runs the EFPF begin/competition/commit
+  # path before Claude receives the autonomous prompt. All outward tools are
+  # subsequently checked by the PreToolUse intention gate.
   export HEARTBEAT=1
   SESSION_FILE="$SCRIPT_DIR/heartbeat-session-id"
 

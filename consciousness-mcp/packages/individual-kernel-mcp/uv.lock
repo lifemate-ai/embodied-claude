@@ -498,6 +498,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "agent-grammar" },
+    { name = "boundary-mcp" },
     { name = "interaction-orchestrator-mcp" },
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
@@ -514,6 +515,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agent-grammar", directory = "../../../sociality-mcp/packages/agent-grammar" },
+    { name = "boundary-mcp", directory = "../../../sociality-mcp/packages/boundary-mcp" },
     { name = "interaction-orchestrator-mcp", directory = "../../../sociality-mcp/packages/interaction-orchestrator-mcp" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
     { name = "pydantic", specifier = ">=2.7.0" },

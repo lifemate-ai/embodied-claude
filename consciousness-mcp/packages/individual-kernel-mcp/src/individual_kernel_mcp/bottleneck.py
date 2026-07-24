@@ -70,19 +70,36 @@ class ActionBottleneck:
         action_payload: dict | None = None,
         person_id: str | None = None,
     ) -> CommitActionResult:
-        row = self._db.fetchone(
-            "SELECT chosen_action_ref FROM tick_frames WHERE tick_id = ?",
-            (tick_id,),
-        )
-        if row is None:
-            raise ValueError(
-                f"tick_frame {tick_id!r} does not exist; "
-                f"record the frame via TickFrameStore before committing an action."
+        with self._db.transaction() as connection:
+            row = connection.execute(
+                "SELECT chosen_action_ref FROM tick_frames WHERE tick_id = ?",
+                (tick_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(
+                    f"tick_frame {tick_id!r} does not exist; "
+                    f"record the frame via TickFrameStore before committing an action."
+                )
+            claimed = connection.execute(
+                """
+                UPDATE tick_frames SET chosen_action_ref = ?
+                WHERE tick_id = ?
+                  AND (chosen_action_ref IS NULL OR chosen_action_ref = '')
+                """,
+                (action_ref, tick_id),
             )
-
-        existing = row["chosen_action_ref"]
-        if existing is not None and existing != "":
-            # Second (or later) attempt — defer + record counterfactual.
+            if claimed.rowcount == 1:
+                return CommitActionResult(
+                    ok=True,
+                    deferred=False,
+                    tick_id=tick_id,
+                    action_ref=action_ref,
+                )
+            existing_row = connection.execute(
+                "SELECT chosen_action_ref FROM tick_frames WHERE tick_id = ?",
+                (tick_id,),
+            ).fetchone()
+            existing = existing_row["chosen_action_ref"]
             cf = self._cfs.record(
                 CounterfactualInput(
                     tick_id=tick_id,
@@ -104,15 +121,3 @@ class ActionBottleneck:
                 action_ref=action_ref,
                 counterfactual_id=cf.counterfactual_id,
             )
-
-        # First commit for this tick — install chosen_action_ref.
-        self._db.execute(
-            "UPDATE tick_frames SET chosen_action_ref = ? WHERE tick_id = ?",
-            (action_ref, tick_id),
-        )
-        return CommitActionResult(
-            ok=True,
-            deferred=False,
-            tick_id=tick_id,
-            action_ref=action_ref,
-        )

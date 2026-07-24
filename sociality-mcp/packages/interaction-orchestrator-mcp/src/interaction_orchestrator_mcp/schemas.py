@@ -53,6 +53,7 @@ class ComposeInteractionContextInput(BaseModel):
     autonomous_trigger: str | None = None
     include_private: bool = True
     max_chars: int = Field(default=3000, ge=200, le=12000)
+    require_committed_field: bool = False
 
 
 class ResponseContract(BaseModel):
@@ -148,6 +149,13 @@ class InteractionContext(BaseModel):
 
     joint_focus: dict[str, Any] | None = None
     current_scene_summary: str | None = None
+    current_field_id: str | None = None
+    current_field_summary: str | None = None
+    current_field_focus_ref: str | None = None
+    current_field_mode: (
+        Literal["live", "inferred", "remembered", "imagined", "mixed"] | None
+    ) = None
+    field_compatibility_mode: bool = True
 
     response_contract: ResponseContract
     prompt_summary: str
@@ -197,6 +205,7 @@ class ResponsePlan(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     primary_move: PrimaryMove
+    source_field_id: str | None = None
     why_this_move: str
     tone: ToneHint
     memory_use: MemoryUseHint

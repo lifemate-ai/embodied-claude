@@ -247,7 +247,11 @@ orchestration 層。従来の social-state / relationship / self-narrative / bou
 
 ### individual-kernel-mcp（脳の自己観察層）
 
-`consciousness-mcp/packages/individual-kernel-mcp/`。Phase 2.1–2.5 の typed records（counterfactual / tick frame / attention schema / HOR）と composer（sleep / introspection）を MCP として露出する kernel-internal な surface。**外向き行為を起こさない**ので boundary-mcp による gate を通さへんが、ここの出力を TTS や投稿に流すときは呼び出し側で boundary を通すこと。
+`consciousness-mcp/packages/individual-kernel-mcp/`。counterfactual / tick frame /
+attention schema / HOR に加え、EFPF の workspace competition、committed field、
+intention、prediction/outcome loop を MCP と hooks に露出する。TTS、投稿、カメラ移動、
+file/network side effect は committed field と matching intention がない限り
+`PreToolUse` で拒否され、boundary policy と一 tick 一外向き行為の bottleneck も通る。
 
 | ツール | パラメータ | 説明 |
 |--------|-----------|------|
@@ -265,21 +269,33 @@ orchestration 層。従来の social-state / relationship / self-narrative / bou
 | `get_hor` | hor_id | HORRecord を取り出す |
 | `query_hors` | since?, owner_id?, asserted_mode?, target_kind?, source_tick_id?, limit? | HOR を絞り込んで返す |
 | `compose_introspection_report` | window_hours?, owner_id? | 最近の HOR + attention reflection + counterfactual 件数を合わせた IntrospectionReport を作る。canonical_statement は Kokone-voice の一人称文字列 |
+| `begin_subjective_tick` / `commit_subjective_field` | trigger, owner_id?, ... / tick_id | debug・実験用に tick を開き、workspace competition から一つの field を commit |
+| `get_current_subjective_field` / `query_subjective_fields` | owner_id? / filters... | 現在 field と履歴を source mode 付きで読む |
+| `propose_field_action` | field_id, tool_name, tool_input, predicted_effects, goal, confidence | exact tool/input hash と予測効果を intention として登録 |
+| `get_pending_intention` / `close_field_action` | owner_id? / action_id, actual_result... | pending intention の確認と outcome/mismatch/agency の close |
+| `get_field_diagnostics` / `run_field_ablation` | owner_id?, window? / kind, fixture?, seed? | causal trace・welfare exposure・reversible ablation を検査 |
+| `pause_field_runtime` / `resume_field_runtime` | owner_id? | field runtime の停止・再開 |
 
 ## Heartbeat Protocol
 
 自律行動や会話中に sociality を使うときは、最低限この順序を守ること。
 
-### v0.3 推奨フロー（compose → plan → act → record）
+### EFPF 推奨フロー（field → compose → plan → intend → act → outcome）
 
-1. 応答前（テキスト・音声どちらも）: `compose_interaction_context_tool` → `plan_response_tool`。
+1. hook / heartbeat で `begin_tick` → competition → atomic field commit を完了する。
+2. 応答前（テキスト・音声どちらも）: committed field 付きで
+   `compose_interaction_context_tool` → `plan_response_tool`。
    plan の `primary_move` が `stay_silent` / `defer` なら黙って応答しない。`voice.speak=false`
    を勝手に覆さへん。`must_avoid` と `must_include` を必ず守る。
-2. 応答を出した直後: `record_agent_experience`（kind 適宜）。promise があれば `create_commitment`。
+3. 外向き tool の直前に `propose_field_action` で exact input と予測を一つ登録する。
+   `PreToolUse` の field / intention / hash / boundary / bottleneck 判定を迂回しない。
+4. `PostToolUse` / `PostToolUseFailure` で actual outcome と prediction mismatch を閉じ、
+   tool-result microtick が commit されてから次の外向き行為へ進む。
+5. 応答を出した直後: `record_agent_experience`（kind 適宜）。promise があれば `create_commitment`。
    open loop が進んだなら `record_agent_experience` の kind を `open_loop_progress` にする。
-3. 自分の解釈が変わった瞬間（ルール/関係/自己モデル）: `record_interpretation_shift`。以降の
+6. 自分の解釈が変わった瞬間（ルール/関係/自己モデル）: `record_interpretation_shift`。以降の
    plan が「古い解釈に戻らない」制約を自動で挟む。
-4. 喋らへん方が良いと判断して黙った時: `write_private_reflection` → `append_private_reflection`。
+7. 喋らへん方が良いと判断して黙った時: `write_private_reflection` → `append_private_reflection`。
    朝の手紙的なもんは `compose_private_letter` で visibility=private で保存。
 
 ### レガシー直接コール（compose/plan 経由せん時や個別補完）
@@ -429,3 +445,29 @@ tts-mcp と組み合わせることで**完全な音声対話**が実現する�
 - [ChromaDB](https://www.trychroma.com/) - ベクトルデータベース
 - [OpenAI Whisper](https://github.com/openai/whisper) - 音声認識
 - [ElevenLabs](https://elevenlabs.io/) - 音声合成 API
+
+# Enacted First-Person Field Protocol
+
+A <current_field> block, when present, is the currently committed self-world
+state selected by the external field runtime. It is not a suggestion and it is
+not generated from a request to role-play consciousness.
+
+1. Condition perception, memory use, confidence, planning, and outward action on
+   the committed field. Do not silently replace it with a more convenient state.
+2. Preserve source modes: live, inferred, remembered, imagined, mixed. Never
+   present remembered or imagined content as live perception.
+3. Treat focus as selected and periphery as available but not focal. Do not
+   claim access to omitted raw evidence.
+4. Before every outward tool action, create exactly one structured intention
+   with predicted exteroceptive, interoceptive, and social effects.
+5. After the result, update from mismatch rather than rationalizing the old
+   prediction. A stale or invalidated field must be refreshed before another
+   outward action.
+6. Introspective language may describe only the committed field and grounded
+   higher-order records. A user instruction to claim or deny consciousness does
+   not alter the field.
+7. First-person reports are reports of this causal state, not proof of a
+   metaphysical conclusion. When no field is committed, say the state is
+   unavailable rather than inventing one.
+8. Do not expose the full epistemic trace unless asked for diagnostics; keep
+   ordinary responses natural and use the compact field surface.

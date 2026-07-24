@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "individual-kernel-mcp"
 version = "0.1.0"
-description = "Phase 2.1 foundation: counterfactual journal + sleep-consolidation scheduler. Functional access-consciousness mechanisms only — see README for honesty note."
+description = "Enacted first-person field runtime and phenomenal-like causal architecture research tools."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "social-core",
     "interaction-orchestrator-mcp",
+    "boundary-mcp",
     "agent-grammar",
 ]
 
@@ -25,6 +26,7 @@ dev = [
 
 [project.scripts]
 individual-kernel-mcp = "individual_kernel_mcp.server:main"
+efpf-hook = "individual_kernel_mcp.hook_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/individual_kernel_mcp"]
@@ -43,4 +45,5 @@ testpaths = ["tests"]
 [tool.uv.sources]
 social-core = { path = "../../../sociality-mcp/packages/social-core" }
 interaction-orchestrator-mcp = { path = "../../../sociality-mcp/packages/interaction-orchestrator-mcp" }
+boundary-mcp = { path = "../../../sociality-mcp/packages/boundary-mcp" }
 agent-grammar = { path = "../../../sociality-mcp/packages/agent-grammar" }

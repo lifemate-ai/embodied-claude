@@ -60,6 +60,26 @@ class TestPhase23to25ToolsRegistered:
             assert hasattr(server, name), f"missing tool: {name}"
             assert callable(getattr(server, name)), f"not callable: {name}"
 
+    def test_enacted_field_tools_are_registered(self) -> None:
+        names = [
+            "begin_subjective_tick",
+            "add_workspace_candidate",
+            "commit_subjective_field",
+            "get_current_subjective_field",
+            "get_subjective_field",
+            "query_subjective_fields",
+            "propose_field_action",
+            "get_pending_intention",
+            "close_field_action",
+            "close_subjective_tick",
+            "get_field_diagnostics",
+            "run_field_ablation",
+            "pause_field_runtime",
+            "resume_field_runtime",
+        ]
+        for name in names:
+            assert callable(getattr(server, name))
+
 
 class TestStoresDataclass:
     def test_stores_dataclass_exposes_phase_2_3_to_2_5_stores(self) -> None:
@@ -174,21 +194,11 @@ class TestHORRoundTrip:
 
 class TestComposeIntrospectionReport:
     def test_integrates_hor_attention_counterfactual(self) -> None:
-        # Seed a HOR
-        server.record_hor(
-            {
-                "target_kind": "none",
-                "asserted_mode": "attending",
-                "asserted_content": "I am attending the silence",
-                "source": "reflection",
-            }
+        opened = server.begin_subjective_tick(
+            trigger="user_prompt",
+            user_text="attend to the silence",
         )
-        # Seed an attention schema entry
-        server.record_attention_schema(
-            focal_target_ref="wifi_cam.see",
-            modality="visual",
-            intensity=0.7,
-        )
+        server.commit_subjective_field(opened["tick_id"])
         # Seed a counterfactual (recent)
         server.record_counterfactual(
             {
@@ -200,22 +210,62 @@ class TestComposeIntrospectionReport:
         report = server.compose_introspection_report(window_hours=24)
         assert report["canonical_statement"]  # non-empty
         assert report["current_hor"] is not None
-        assert report["current_hor"]["asserted_mode"] == "attending"
+        assert report["current_hor"]["source"] == "schema_readout"
         assert report["recent_counterfactual_count"] == 1
         assert report["hor_validation"]["well_formed"] is True
+        assert report["field_hor_consistent"] is True
 
     def test_empty_state_returns_report(self) -> None:
         report = server.compose_introspection_report()
         assert report["current_hor"] is None
         assert report["recent_counterfactual_count"] == 0
-        assert report["canonical_statement"]
+        assert report["canonical_statement"] == (
+            "Current state unavailable: no committed field."
+        )
 
 
 class TestBoundaryPolicyDocstring:
-    def test_server_module_docstring_declares_no_boundary_gating(self) -> None:
+    def test_server_module_docstring_declares_runtime_boundary_gating(self) -> None:
         doc = server.__doc__ or ""
         assert "boundary-mcp" in doc
-        assert "kernel-internal" in doc
+        assert "ActionBottleneck" in doc
+
+
+class TestFieldDiagnostics:
+    def test_reports_action_trace_consistency_and_prediction_mismatch(self) -> None:
+        opened = server.begin_subjective_tick(
+            trigger="user_prompt",
+            user_text="write the fixture",
+        )
+        field = server.commit_subjective_field(opened["tick_id"])["field"]
+        intention = server.propose_field_action(
+            field_id=field["field_id"],
+            tool_name="Write",
+            tool_input={"file_path": "/tmp/fixture", "content": "ok"},
+            predicted_effects={},
+            goal="write fixture",
+        )
+        gate = server._stores().field_runtime.gate_tool(
+            tool_name="Write",
+            tool_input={"file_path": "/tmp/fixture", "content": "ok"},
+        )
+        assert gate.allow
+        server.close_field_action(
+            action_id=intention["action_id"],
+            actual_result_summary="fixture written",
+            success=True,
+        )
+
+        diagnostics = server.get_field_diagnostics()
+
+        assert diagnostics["action_trace_consistency"] is True
+        assert diagnostics["recent_action_outcomes"][0]["mismatch_vector"]
+        assert diagnostics["runtime_safety"] == {
+            "mass_copy_enabled": False,
+            "high_frequency_spawning_enabled": False,
+            "reversible_ablation": True,
+            "pause_resume_available": True,
+        }
 
 
 class TestServerToolsHonorIsolatedDB:

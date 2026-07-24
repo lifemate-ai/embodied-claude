@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import re
+import sqlite3
 from typing import Any
 
 from boundary_mcp.store import BoundaryStore
@@ -48,6 +51,11 @@ def compose_interaction_context(
     ts = utc_now()
     local = local_view(ts, policy_timezone)
     local_time_text = local.isoformat(timespec="seconds")
+    current_field = _load_current_field(orchestrator_store)
+    if payload.require_committed_field and current_field is None:
+        raise RuntimeError(
+            "high-level interaction planning requires a committed field in strict mode"
+        )
 
     social_state = _call(
         social_state_store.get_social_state,
@@ -119,6 +127,10 @@ def compose_interaction_context(
             include_private=payload.include_private,
         )
     ]
+    relevant_memories = _condition_memories_with_field(
+        relevant_memories,
+        current_field,
+    )
 
     joint_focus = _optional_dict(
         joint_attention_store,
@@ -163,12 +175,16 @@ def compose_interaction_context(
         desires=desires,
         open_loops=open_loops,
         relevant_memories=relevant_memories,
+        current_field=current_field,
     )
 
     compact_prompt_block = _compact_block(
         prompt_summary=prompt_summary,
         response_contract=response_contract,
         relevant_memories=relevant_memories,
+        current_field_summary=(
+            current_field.get("phenomenal_surface") if current_field else None
+        ),
         max_chars=payload.max_chars,
     )
 
@@ -196,6 +212,15 @@ def compose_interaction_context(
         current_scene_summary=(
             (joint_focus or {}).get("current_scene_summary") if joint_focus else None
         ),
+        current_field_id=current_field.get("field_id") if current_field else None,
+        current_field_summary=(
+            current_field.get("phenomenal_surface") if current_field else None
+        ),
+        current_field_focus_ref=(
+            current_field.get("focal_content_ref") if current_field else None
+        ),
+        current_field_mode=current_field.get("reality_mode") if current_field else None,
+        field_compatibility_mode=current_field is None,
         response_contract=response_contract,
         prompt_summary=prompt_summary,
         compact_prompt_block=compact_prompt_block,
@@ -385,6 +410,7 @@ def _build_prompt_summary(
     desires: dict[str, Any],
     open_loops: list[OpenLoopSummary],
     relevant_memories: list[RelevantMemoryRef],
+    current_field: dict[str, Any] | None,
 ) -> str:
     social = social_state or {}
     availability = social.get("availability", "unknown")
@@ -414,9 +440,16 @@ def _build_prompt_summary(
         if relevant_memories
         else "Relevant memories: none surfaced."
     )
+    field_text = (
+        f"Committed field: {current_field.get('field_id')} "
+        f"focus={current_field.get('focal_content_ref')} "
+        f"mode={current_field.get('reality_mode')}."
+        if current_field
+        else "Committed field unavailable; compatibility mode."
+    )
     return (
         f"Now {local_time} • {who} seems {availability}, {activity}, phase={phase}. "
-        f"{desire_text} {open_loop_text} {quiet_text} {memory_text} "
+        f"{desire_text} {open_loop_text} {quiet_text} {memory_text} {field_text} "
         f"Recent agent experiences: {len(agent_state.recent_experiences)}; "
         f"interpretation_shifts so far: {agent_state.interpretation_shifts}."
     ).strip()
@@ -427,6 +460,7 @@ def _compact_block(
     prompt_summary: str,
     response_contract: ResponseContract,
     relevant_memories: list[RelevantMemoryRef],
+    current_field_summary: str | None,
     max_chars: int,
 ) -> str:
     contract_lines = [f"treat_user_as: {response_contract.treat_user_as}"]
@@ -457,7 +491,88 @@ def _compact_block(
     if memory_lines:
         sections.append("[relevant_memories]")
         sections.extend(memory_lines)
+    if current_field_summary:
+        sections.append("[current_field]")
+        sections.append(current_field_summary)
     block = "\n".join(sections)
     if len(block) > max_chars:
         block = block[: max_chars - 1].rstrip() + "…"
     return block
+
+
+def _load_current_field(
+    orchestrator_store: InteractionOrchestratorStore,
+) -> dict[str, Any] | None:
+    try:
+        row = orchestrator_store.db.fetchone(
+            """
+            SELECT ef.field_id, ef.focal_content_ref, ef.reality_mode,
+                   ef.phenomenal_surface, ef.epistemic_trace_json
+            FROM field_runtime_state fr
+            JOIN enacted_fields ef ON ef.field_id = fr.current_field_id
+            WHERE fr.owner_id = 'self' AND ef.status = 'COMMITTED'
+            """
+        )
+    except sqlite3.OperationalError:
+        # Older social-core installations remain valid in compatibility mode.
+        return None
+    if row is None:
+        return None
+    trace: dict[str, Any] = {}
+    try:
+        trace = json.loads(row["epistemic_trace_json"] or "{}")
+    except json.JSONDecodeError:
+        pass
+    return {
+        "field_id": row["field_id"],
+        "focal_content_ref": row["focal_content_ref"],
+        "reality_mode": row["reality_mode"],
+        "phenomenal_surface": row["phenomenal_surface"],
+        "focal_summary": trace.get("focal_summary", ""),
+    }
+
+
+def _condition_memories_with_field(
+    memories: list[RelevantMemoryRef],
+    current_field: dict[str, Any] | None,
+) -> list[RelevantMemoryRef]:
+    if not current_field:
+        return memories
+    focus = " ".join(
+        str(current_field.get(key) or "")
+        for key in ("focal_content_ref", "focal_summary")
+    )
+    focus_tokens = _tokens(focus)
+    ranked: list[tuple[float, RelevantMemoryRef]] = []
+    for memory in memories:
+        memory_tokens = _tokens(memory.content)
+        overlap = (
+            len(focus_tokens & memory_tokens) / len(focus_tokens)
+            if focus_tokens
+            else 0.0
+        )
+        conditioned = min(1.0, memory.relevance + 0.35 * overlap)
+        reason = memory.reason or ""
+        if overlap:
+            reason = (reason + "; " if reason else "") + "conditioned by committed field"
+        ranked.append(
+            (
+                conditioned,
+                memory.model_copy(update={"relevance": conditioned, "reason": reason or None}),
+            )
+        )
+    return [
+        item
+        for _, item in sorted(
+            ranked,
+            key=lambda pair: (-pair[0], pair[1].memory_id or pair[1].content),
+        )
+    ]
+
+
+def _tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[\w-]+", text.lower())
+        if len(token) > 2
+    }

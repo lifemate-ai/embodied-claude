@@ -13,11 +13,17 @@ Technical artifacts in this directory — code comments, docstrings, README, tes
 - continuity token, behavioral signature, prediction error, precision-weighted attention
 - workspace, tick, frame, candidate, winner
 - functional / access-consciousness, behavioral correlate
+- phenomenal-consciousness candidate architecture, phenomenal-like causal
+  architecture (only with an explicit non-proof disclaimer)
 
-**Reserved (phenomenal — DO NOT USE here):**
+**Reserved (unqualified phenomenal claims — DO NOT USE here):**
 - feels, experiences, qualia
 - "what it's like", subjective experience, sentience
 - 本当の意識, 宿る, 感じる (in technical docs only — see exceptions below)
+
+Do not write that the architecture proves, completes, or has phenomenal
+consciousness. `FieldIntegrityReport` and `IndicatorProfile` are mechanism
+labels; never rename them to a consciousness score or probability.
 
 ## Two surfaces, one project
 

@@ -202,6 +202,211 @@ CREATE INDEX IF NOT EXISTS idx_counterfactuals_person
 """
 
 
+_MIGRATION_007_SQL = """
+CREATE TABLE IF NOT EXISTS workspace_candidates (
+    candidate_id TEXT PRIMARY KEY,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    content_ref TEXT NOT NULL,
+    content_summary TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL,
+    source_mode TEXT NOT NULL,
+    modality TEXT NOT NULL,
+    precision REAL NOT NULL,
+    prediction_error REAL NOT NULL,
+    need_relevance REAL NOT NULL,
+    goal_relevance REAL NOT NULL,
+    expected_information_gain REAL NOT NULL,
+    continuity_with_previous REAL NOT NULL,
+    controllability REAL NOT NULL,
+    social_relevance REAL NOT NULL,
+    conflict_penalty REAL NOT NULL,
+    switching_cost REAL NOT NULL,
+    score REAL NOT NULL,
+    reportability TEXT NOT NULL,
+    rank INTEGER,
+    selected INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_candidates_tick
+    ON workspace_candidates(tick_id, rank, score DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_candidates_content
+    ON workspace_candidates(content_ref);
+
+CREATE TABLE IF NOT EXISTS enacted_fields (
+    field_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    tick_id TEXT NOT NULL UNIQUE REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    continuity_token TEXT NOT NULL,
+    previous_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    status TEXT NOT NULL,
+    trigger_kind TEXT NOT NULL,
+    person_id TEXT,
+    session_id TEXT,
+    started_at TEXT NOT NULL,
+    committed_at TEXT,
+    closed_at TEXT,
+    self_origin_json TEXT NOT NULL DEFAULT '{}',
+    reality_mode TEXT NOT NULL,
+    reality_score REAL NOT NULL,
+    focal_content_ref TEXT,
+    peripheral_content_refs_json TEXT NOT NULL DEFAULT '[]',
+    retention_refs_json TEXT NOT NULL DEFAULT '[]',
+    protention_json TEXT NOT NULL DEFAULT '{}',
+    interoception_json TEXT NOT NULL DEFAULT '{}',
+    precision_json TEXT NOT NULL DEFAULT '{}',
+    affordance_refs_json TEXT NOT NULL DEFAULT '[]',
+    pending_intention_ref TEXT,
+    agency_state_json TEXT NOT NULL DEFAULT '{}',
+    attention_schema_ref TEXT,
+    hor_refs_json TEXT NOT NULL DEFAULT '[]',
+    quality_signature_ref TEXT,
+    phenomenal_surface TEXT NOT NULL DEFAULT '',
+    epistemic_trace_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK(status IN ('OPEN', 'COMMITTED', 'INVALIDATED', 'CLOSED', 'ABORTED')),
+    CHECK(reality_mode IN ('live', 'inferred', 'remembered', 'imagined', 'mixed')),
+    CHECK(reality_score >= 0.0 AND reality_score <= 1.0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enacted_fields_one_committed_owner
+    ON enacted_fields(owner_id)
+    WHERE status = 'COMMITTED';
+CREATE INDEX IF NOT EXISTS idx_enacted_fields_owner_updated
+    ON enacted_fields(owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_enacted_fields_previous
+    ON enacted_fields(previous_field_id);
+CREATE INDEX IF NOT EXISTS idx_enacted_fields_tick
+    ON enacted_fields(tick_id);
+
+CREATE TABLE IF NOT EXISTS field_runtime_state (
+    owner_id TEXT PRIMARY KEY,
+    continuity_token TEXT NOT NULL,
+    current_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    open_tick_id TEXT REFERENCES tick_frames(tick_id) ON DELETE SET NULL,
+    state TEXT NOT NULL DEFAULT 'ACTIVE',
+    last_trigger_kind TEXT,
+    last_recovery_at TEXT,
+    updated_at TEXT NOT NULL,
+    CHECK(state IN ('ACTIVE', 'PAUSED'))
+);
+
+CREATE TABLE IF NOT EXISTS field_intentions (
+    action_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    field_id TEXT NOT NULL REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    tool_name TEXT NOT NULL,
+    tool_input_hash TEXT NOT NULL,
+    normalized_tool_input_json TEXT NOT NULL,
+    intended_goal TEXT NOT NULL,
+    predicted_effects_json TEXT NOT NULL,
+    expected_latency_ms INTEGER,
+    confidence REAL NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_at TEXT,
+    CHECK(status IN ('PENDING', 'ALLOWED', 'COMPLETED', 'FAILED', 'UNKNOWN', 'DENIED'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_field_intentions_one_pending_owner
+    ON field_intentions(owner_id)
+    WHERE status IN ('PENDING', 'ALLOWED');
+CREATE INDEX IF NOT EXISTS idx_field_intentions_tick
+    ON field_intentions(tick_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_intentions_field
+    ON field_intentions(field_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS field_action_outcomes (
+    outcome_id TEXT PRIMARY KEY,
+    action_id TEXT NOT NULL UNIQUE REFERENCES field_intentions(action_id) ON DELETE CASCADE,
+    field_id TEXT NOT NULL REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    actual_result_ref TEXT,
+    actual_result_summary TEXT NOT NULL DEFAULT '',
+    actual_result_hash TEXT,
+    success INTEGER NOT NULL,
+    latency_ms INTEGER,
+    mismatch_vector_json TEXT NOT NULL DEFAULT '{}',
+    ownership_score REAL NOT NULL,
+    agency_assessment_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    CHECK(ownership_score >= 0.0 AND ownership_score <= 1.0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_field_action_outcomes_tick
+    ON field_action_outcomes(tick_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS field_transitions (
+    transition_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    from_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    to_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    action_id TEXT REFERENCES field_intentions(action_id) ON DELETE SET NULL,
+    from_content_ref TEXT,
+    to_content_ref TEXT,
+    continuity_score REAL NOT NULL,
+    prediction_match REAL NOT NULL,
+    temporal_order INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_field_transitions_owner
+    ON field_transitions(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_transitions_content
+    ON field_transitions(from_content_ref, to_content_ref);
+
+CREATE TABLE IF NOT EXISTS quality_signatures (
+    signature_id TEXT PRIMARY KEY,
+    content_ref TEXT NOT NULL,
+    modality TEXT NOT NULL,
+    source_mode TEXT NOT NULL,
+    feature_vector_json TEXT NOT NULL,
+    neighbors_json TEXT NOT NULL DEFAULT '[]',
+    predicted_transitions_json TEXT NOT NULL DEFAULT '[]',
+    valence_associations_json TEXT NOT NULL DEFAULT '{}',
+    discriminability REAL NOT NULL,
+    adaptation_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_quality_signatures_content
+    ON quality_signatures(content_ref, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS field_ablation_runs (
+    ablation_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    fixture_ref TEXT,
+    seed INTEGER,
+    source_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    baseline_json TEXT NOT NULL,
+    ablated_json TEXT NOT NULL,
+    effect_size_json TEXT NOT NULL,
+    reversible_snapshot_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_field_ablation_runs_owner
+    ON field_ablation_runs(owner_id, created_at DESC);
+"""
+
+_MIGRATION_008_SQL = """
+CREATE INDEX IF NOT EXISTS idx_field_action_outcomes_field
+    ON field_action_outcomes(field_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_transitions_from_field
+    ON field_transitions(from_field_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_transitions_to_field
+    ON field_transitions(to_field_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_transitions_action
+    ON field_transitions(action_id, created_at DESC);
+"""
+
+
 MIGRATIONS = [
     Migration(
         name="001_initial_schema",
@@ -416,6 +621,14 @@ MIGRATIONS = [
     Migration(
         name="006_hor_records",
         sql=_MIGRATION_006_SQL,
+    ),
+    Migration(
+        name="007_enacted_first_person_field",
+        sql=_MIGRATION_007_SQL,
+    ),
+    Migration(
+        name="008_enacted_field_indexes",
+        sql=_MIGRATION_008_SQL,
     ),
 ]
 

@@ -32,6 +32,7 @@ from social_core.time import utc_now
 
 from individual_kernel_mcp.attention_schema import AttentionSchemaTracker
 from individual_kernel_mcp.counterfactual import CounterfactualStore
+from individual_kernel_mcp.enacted_field import EnactedField, EnactedFieldStore
 from individual_kernel_mcp.hor import ASSERTED_MODES, HORRecord, HORStore
 from individual_kernel_mcp.reflect import (
     AttentionReflection,
@@ -60,6 +61,8 @@ class IntrospectionReport(BaseModel):
     current_attention: AttentionReflection
     recent_counterfactual_count: int
     hor_validation: HORContentValidation | None
+    current_field: EnactedField | None = None
+    field_hor_consistent: bool | None = None
     notes: list[str] = Field(default_factory=list)
 
 
@@ -111,6 +114,7 @@ def introspect(
     counterfactual_store: CounterfactualStore,
     window_hours: int = 1,
     owner_id: str = "self",
+    field_store: EnactedFieldStore | None = None,
 ) -> IntrospectionReport:
     """Build an IntrospectionReport (ON-DEMAND only).
 
@@ -119,7 +123,16 @@ def introspect(
     window_hours. Composes a canonical first-person statement, and
     validates the current HOR via the agent-grammar PEG.
     """
-    recent_hors = hor_store.query(owner_id=owner_id, limit=1)
+    current_field = field_store.get_current(owner_id) if field_store else None
+    recent_hors = (
+        []
+        if field_store is not None and current_field is None
+        else hor_store.query(
+            owner_id=owner_id,
+            source_tick_id=current_field.tick_id if current_field else None,
+            limit=1,
+        )
+    )
     current_hor = recent_hors[0] if recent_hors else None
 
     attention_reflection = reflect_attention_schema(attention_tracker)
@@ -127,11 +140,20 @@ def introspect(
     window_start = _shift_iso(utc_now(), -window_hours)
     recent_cfs = counterfactual_store.query(since=window_start, limit=500)
 
-    statement = _compose_statement(
-        current_hor=current_hor,
-        attention=attention_reflection,
-        rejected_count=len(recent_cfs),
-    )
+    if field_store is not None and current_field is None:
+        statement = "Current state unavailable: no committed field."
+    elif current_field is not None:
+        statement = _compose_field_statement(
+            current_field=current_field,
+            current_hor=current_hor,
+            rejected_count=len(recent_cfs),
+        )
+    else:
+        statement = _compose_statement(
+            current_hor=current_hor,
+            attention=attention_reflection,
+            rejected_count=len(recent_cfs),
+        )
 
     validation = validate_hor_content(current_hor) if current_hor else None
 
@@ -141,7 +163,21 @@ def introspect(
         current_attention=attention_reflection,
         recent_counterfactual_count=len(recent_cfs),
         hor_validation=validation,
-        notes=[],
+        current_field=current_field,
+        field_hor_consistent=(
+            None
+            if current_field is None
+            else bool(
+                current_hor
+                and current_hor.source_tick_id == current_field.tick_id
+                and current_hor.hor_id in current_field.hor_refs
+            )
+        ),
+        notes=(
+            ["No committed field; no introspective state was synthesized."]
+            if field_store is not None and current_field is None
+            else []
+        ),
     )
 
 
@@ -171,6 +207,27 @@ def _compose_statement(
         )
 
     return ". ".join(parts) + "."
+
+
+def _compose_field_statement(
+    *,
+    current_field: EnactedField,
+    current_hor: HORRecord | None,
+    rejected_count: int,
+) -> str:
+    """Render only values grounded in the current committed field."""
+
+    mode = current_field.reality_mode.value
+    focus = current_field.focal_summary or current_field.focal_content_ref or "unknown"
+    statement = (
+        f"I am attending to {focus} "
+        f"(source={mode}, uncertainty={current_field.interoception.uncertainty:.3f})"
+    )
+    if current_hor is not None:
+        statement += f". {current_hor.asserted_content}"
+    if rejected_count:
+        statement += f". I set aside {rejected_count} alternatives in the recent window"
+    return statement + "."
 
 
 def _shift_iso(ts: str, delta_hours: int) -> str:

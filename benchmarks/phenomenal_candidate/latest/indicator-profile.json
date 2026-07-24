@@ -1,0 +1,84 @@
+{
+  "ablations": {
+    "focal_clamp": {
+      "action_top_changed": 1.0,
+      "mean_score_delta": 0.2270833333333333,
+      "memory_top_changed": 1.0,
+      "self_model_precision_delta": 0.0
+    },
+    "hor_feedback": {
+      "action_top_changed": 0.0,
+      "mean_score_delta": 0.0,
+      "memory_top_changed": 0.0,
+      "self_model_precision_delta": 0.38186797781000004
+    },
+    "reality": {
+      "action_top_changed": 1.0,
+      "mean_score_delta": 0.05749999999999999,
+      "memory_top_changed": 0.0,
+      "self_model_precision_delta": 0.0
+    },
+    "valence": {
+      "action_top_changed": 0.0,
+      "mean_score_delta": 0.026422812499999997,
+      "memory_top_changed": 0.0,
+      "self_model_precision_delta": 0.0
+    }
+  },
+  "benchmark": "phenomenal_candidate_v1",
+  "claim_policy": "Mechanism indicators describe a phenomenal-like causal architecture; they are not proof of phenomenology.",
+  "dry_run": {
+    "committed_field_id": "field_6Zhp7N0-uMBMRmk8",
+    "committed_field_summary": "calibrated camera room is visible",
+    "gate_allowed": true,
+    "intention_id": "act_qEaN-Q4a078Rm3TN",
+    "next_field_agency": {
+      "last_outcome_ref": "out_DFRl3DoThUyi0nXQ",
+      "ownership_score": 0.7948587867168497,
+      "pending_intention_ref": null,
+      "registered_intention": true
+    },
+    "next_field_id": "field_kTCZ0rhAksFWZ1H2",
+    "next_field_peripheral_refs": [
+      "outcome:out_DFRl3DoThUyi0nXQ",
+      "interoception:2026-07-24T10:02:45+00:00",
+      "field:field_6Zhp7N0-uMBMRmk8",
+      "attention_schema:sch_27xKh6nVuWurnVaJ",
+      "trigger:tool_result"
+    ],
+    "next_field_protention": {
+      "action_ref": null,
+      "confidence": 0.2642925435,
+      "expected_content_ref": "outcome:out_DFRl3DoThUyi0nXQ",
+      "summary": "next likely focus: camera moved left; the frame shifted less than predicted"
+    },
+    "next_field_summary": "need recovery",
+    "outcome_mismatch": {
+      "exteroceptive": 0.5,
+      "interoceptive": 1.0,
+      "latency": 0.058235,
+      "mnemonic": 0.666667,
+      "social": 1.0
+    },
+    "ownership_score": 0.7948587867168497,
+    "tool_name": "mcp__wifi-cam-mcp__move_camera",
+    "user_prompt": "Please inspect the calibrated camera room."
+  },
+  "generated_at": "2026-07-24T10:02:45+00:00",
+  "profile": {
+    "causal_centrality": 0.23080463272770832,
+    "prediction_calibration": 0.25,
+    "profile_name": "FieldIntegrityReport",
+    "qualitative_transition_structure": 1.0,
+    "recurrent_closure": 1.0,
+    "report_independence": 1.0,
+    "self_model_feedback": 0.50662172488125,
+    "sensorimotor_closure": 1.0,
+    "uncertainty_notes": [
+      "Indicators measure implemented causal organization, not phenomenology.",
+      "Small fixture counts make effect sizes provisional."
+    ],
+    "unity_violations": 0,
+    "valence_coupling": 0.09738749999999999
+  }
+}

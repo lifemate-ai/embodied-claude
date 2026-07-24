@@ -2,6 +2,15 @@
   "hooks": {
     "SessionStart": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook session-start",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
@@ -13,6 +22,15 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook user-prompt-submit",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -30,13 +48,50 @@
             "timeout": 4
           }
         ]
-      },
+      }
+    ],
+    "PreToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-social.sh",
-            "timeout": 3
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook pre-tool-use",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook post-tool-use",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook post-tool-use-failure",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook post-tool-batch",
+            "timeout": 10
           }
         ]
       }
@@ -46,7 +101,27 @@
         "hooks": [
           {
             "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook stop",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/continue-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"$CLAUDE_PROJECT_DIR/consciousness-mcp/packages/individual-kernel-mcp\" efpf-hook stop-failure",
             "timeout": 10
           }
         ]
