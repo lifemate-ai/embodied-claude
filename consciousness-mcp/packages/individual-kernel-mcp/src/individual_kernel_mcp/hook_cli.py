@@ -342,6 +342,10 @@ def _heartbeat_continuation(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="efpf-hook")
     parser.add_argument(
         "command",
