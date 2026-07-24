@@ -7,12 +7,46 @@ import sys
 from io import StringIO
 from pathlib import Path
 
+from scripts import setup
 from scripts.doctor import CheckResult, CheckStatus
 from scripts.onboarding import CORE_SERVER_NAMES, FeatureSelection
 from scripts.setup import execute_setup
 
 ROOT = Path(__file__).parents[1]
 SETUP = ROOT / "scripts" / "setup.py"
+
+
+def test_core_sync_command_has_no_optional_extras() -> None:
+    assert setup.build_sync_command(FeatureSelection()) == [
+        "uv",
+        "sync",
+        "--locked",
+        "--no-dev",
+    ]
+
+
+def test_sync_command_contains_each_selected_extra_once() -> None:
+    selection = FeatureSelection(
+        camera="tapo",
+        transcription="faster",
+        voice="elevenlabs",
+        x_enabled=True,
+    )
+
+    assert setup.build_sync_command(selection) == [
+        "uv",
+        "sync",
+        "--locked",
+        "--no-dev",
+        "--extra",
+        "camera-tapo",
+        "--extra",
+        "transcription-faster",
+        "--extra",
+        "voice-elevenlabs",
+        "--extra",
+        "x",
+    ]
 
 
 def _make_fixture_workspace(root: Path) -> None:
@@ -49,6 +83,7 @@ def test_setup_help_lists_stable_profile_options() -> None:
     assert result.returncode == 0
     assert "--profile" in result.stdout
     assert "--with-camera" in result.stdout
+    assert "--with-transcription" in result.stdout
     assert "--with-voice" in result.stdout
     assert "--embedding-model" in result.stdout
     assert "--dry-run" in result.stdout
@@ -182,7 +217,7 @@ def test_real_orchestration_syncs_once_writes_config_and_runs_doctor(
     )
 
     assert result == 0
-    assert commands == [["uv", "sync", "--locked"]]
+    assert commands == [["uv", "sync", "--locked", "--no-dev"]]
     config = json.loads((tmp_path / ".mcp.json").read_text())
     assert set(config["mcpServers"]) == set(CORE_SERVER_NAMES)
     assert (tmp_path / "socialPolicy.toml").read_text() == policy_source.read_text()
@@ -220,7 +255,7 @@ def test_setup_warms_the_selected_embedding_model(tmp_path: Path) -> None:
     )
 
     assert result == 0
-    assert calls[0][0] == ["uv", "sync", "--locked"]
+    assert calls[0][0] == ["uv", "sync", "--locked", "--no-dev"]
     assert calls[1][0][:5] == [
         "uv",
         "run",

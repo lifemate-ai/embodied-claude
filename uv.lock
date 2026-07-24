@@ -650,22 +650,42 @@ name = "embodied-claude-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "agent-grammar" },
-    { name = "boundary-mcp" },
     { name = "desire-system" },
     { name = "individual-kernel-mcp" },
-    { name = "interaction-orchestrator-mcp" },
-    { name = "joint-attention-mcp" },
     { name = "memory-mcp" },
-    { name = "relationship-mcp" },
-    { name = "self-narrative-mcp" },
-    { name = "social-core" },
-    { name = "social-state-mcp" },
     { name = "sociality-mcp" },
+]
+
+[package.optional-dependencies]
+all = [
     { name = "system-temperature-mcp" },
-    { name = "tts-mcp", extra = ["all"] },
+    { name = "tts-mcp", extra = ["elevenlabs"] },
     { name = "usb-webcam-mcp" },
+    { name = "wifi-cam-mcp", extra = ["transcribe", "transcribe-faster"] },
+    { name = "x-mcp" },
+]
+camera-tapo = [
+    { name = "wifi-cam-mcp" },
+]
+camera-usb = [
+    { name = "usb-webcam-mcp" },
+]
+system-temperature = [
+    { name = "system-temperature-mcp" },
+]
+transcription-faster = [
+    { name = "wifi-cam-mcp", extra = ["transcribe-faster"] },
+]
+transcription-whisper = [
     { name = "wifi-cam-mcp", extra = ["transcribe"] },
+]
+voice-elevenlabs = [
+    { name = "tts-mcp", extra = ["elevenlabs"] },
+]
+voice-voicevox = [
+    { name = "tts-mcp" },
+]
+x = [
     { name = "x-mcp" },
 ]
 
@@ -681,24 +701,25 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-grammar", editable = "sociality-mcp/packages/agent-grammar" },
-    { name = "boundary-mcp", editable = "sociality-mcp/packages/boundary-mcp" },
     { name = "desire-system", editable = "desire-system" },
     { name = "individual-kernel-mcp", editable = "consciousness-mcp/packages/individual-kernel-mcp" },
-    { name = "interaction-orchestrator-mcp", editable = "sociality-mcp/packages/interaction-orchestrator-mcp" },
-    { name = "joint-attention-mcp", editable = "sociality-mcp/packages/joint-attention-mcp" },
     { name = "memory-mcp", editable = "memory-mcp" },
-    { name = "relationship-mcp", editable = "sociality-mcp/packages/relationship-mcp" },
-    { name = "self-narrative-mcp", editable = "sociality-mcp/packages/self-narrative-mcp" },
-    { name = "social-core", editable = "sociality-mcp/packages/social-core" },
-    { name = "social-state-mcp", editable = "sociality-mcp/packages/social-state-mcp" },
     { name = "sociality-mcp", editable = "sociality-mcp" },
-    { name = "system-temperature-mcp", editable = "system-temperature-mcp" },
-    { name = "tts-mcp", extras = ["all"], editable = "tts-mcp" },
-    { name = "usb-webcam-mcp", editable = "usb-webcam-mcp" },
-    { name = "wifi-cam-mcp", extras = ["transcribe"], editable = "wifi-cam-mcp" },
-    { name = "x-mcp", editable = "x-mcp" },
+    { name = "system-temperature-mcp", marker = "extra == 'all'", editable = "system-temperature-mcp" },
+    { name = "system-temperature-mcp", marker = "extra == 'system-temperature'", editable = "system-temperature-mcp" },
+    { name = "tts-mcp", marker = "extra == 'voice-voicevox'", editable = "tts-mcp" },
+    { name = "tts-mcp", extras = ["elevenlabs"], marker = "extra == 'all'", editable = "tts-mcp" },
+    { name = "tts-mcp", extras = ["elevenlabs"], marker = "extra == 'voice-elevenlabs'", editable = "tts-mcp" },
+    { name = "usb-webcam-mcp", marker = "extra == 'all'", editable = "usb-webcam-mcp" },
+    { name = "usb-webcam-mcp", marker = "extra == 'camera-usb'", editable = "usb-webcam-mcp" },
+    { name = "wifi-cam-mcp", marker = "extra == 'camera-tapo'", editable = "wifi-cam-mcp" },
+    { name = "wifi-cam-mcp", extras = ["transcribe"], marker = "extra == 'transcription-whisper'", editable = "wifi-cam-mcp" },
+    { name = "wifi-cam-mcp", extras = ["transcribe", "transcribe-faster"], marker = "extra == 'all'", editable = "wifi-cam-mcp" },
+    { name = "wifi-cam-mcp", extras = ["transcribe-faster"], marker = "extra == 'transcription-faster'", editable = "wifi-cam-mcp" },
+    { name = "x-mcp", marker = "extra == 'all'", editable = "x-mcp" },
+    { name = "x-mcp", marker = "extra == 'x'", editable = "x-mcp" },
 ]
+provides-extras = ["camera-usb", "camera-tapo", "transcription-whisper", "transcription-faster", "voice-voicevox", "voice-elevenlabs", "x", "system-temperature", "all"]
 
 [package.metadata.requires-dev]
 dev = [

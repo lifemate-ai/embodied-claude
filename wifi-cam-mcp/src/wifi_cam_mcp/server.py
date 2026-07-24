@@ -22,6 +22,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def resolve_transcribe(arguments: dict[str, Any], *, default: bool) -> bool:
+    """Resolve an explicit listen argument against the configured default."""
+    return bool(arguments.get("transcribe", default))
+
+
 class CameraMCPServer:
     """MCP Server that gives AI eyes to see the room."""
 
@@ -173,8 +178,8 @@ class CameraMCPServer:
                             },
                             "transcribe": {
                                 "type": "boolean",
-                                "description": "If true, transcribe the audio to text using Whisper (default: true)",
-                                "default": True,
+                                "description": "If true, transcribe audio with the configured backend",
+                                "default": self._server_config.transcribe_default,
                             },
                         },
                         "required": [],
@@ -465,7 +470,10 @@ class CameraMCPServer:
 
                     case "listen":
                         duration = min(arguments.get("duration", 5), 30)
-                        transcribe = arguments.get("transcribe", True)
+                        transcribe = resolve_transcribe(
+                            arguments,
+                            default=self._server_config.transcribe_default,
+                        )
                         mic_source = get_behavior(
                             "wifi-cam", "mic_source", self._server_config.mic_source
                         )

@@ -1,11 +1,29 @@
 """Configuration for WiFi Camera MCP Server."""
 
 import os
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _environment_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false, got {value!r}")
+
+
+def _default_capture_dir() -> str:
+    return str(Path(tempfile.gettempdir()) / "wifi-cam-mcp")
 
 
 @dataclass(frozen=True)
@@ -116,9 +134,10 @@ class ServerConfig:
 
     name: str = "wifi-cam-mcp"
     version: str = "0.1.0"
-    capture_dir: str = "/tmp/wifi-cam-mcp"
+    capture_dir: str = field(default_factory=_default_capture_dir)
     mic_source: str = "camera"  # "camera" (RTSP) or "local" (PC microphone)
     mic_device: str | None = None  # DirectShow device name for Windows local mic
+    transcribe_default: bool = True
     transcribe_backend: str = "openai-whisper"  # "openai-whisper" or "faster-whisper"
     transcribe_model: str = "base"  # Whisper model size (tiny/base/small/medium/large)
 
@@ -134,12 +153,14 @@ class ServerConfig:
                 f"Invalid TRANSCRIBE_BACKEND '{transcribe_backend}'. "
                 "Must be 'openai-whisper' or 'faster-whisper'."
             )
+        capture_dir = os.getenv("CAPTURE_DIR", "").strip() or _default_capture_dir()
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "wifi-cam-mcp"),
             version=os.getenv("MCP_SERVER_VERSION", "0.1.0"),
-            capture_dir=os.getenv("CAPTURE_DIR", "/tmp/wifi-cam-mcp"),
+            capture_dir=capture_dir,
             mic_source=mic_source,
             mic_device=os.getenv("MIC_DEVICE") or None,
+            transcribe_default=_environment_bool("TRANSCRIBE_DEFAULT", True),
             transcribe_backend=transcribe_backend,
             transcribe_model=os.getenv("TRANSCRIBE_MODEL", "base"),
         )

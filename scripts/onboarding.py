@@ -25,6 +25,7 @@ class FeatureSelection:
 
     profile: str = "core"
     camera: str | None = None
+    transcription: str | None = None
     voice: str | None = None
     x_enabled: bool = False
     system_temperature: bool = False
@@ -35,10 +36,29 @@ class FeatureSelection:
             raise ValueError(f"Unsupported profile: {self.profile}")
         if self.camera not in {None, "usb", "tapo"}:
             raise ValueError(f"Unsupported camera: {self.camera}")
+        if self.transcription not in {None, "whisper", "faster"}:
+            raise ValueError(f"Unsupported transcription: {self.transcription}")
+        if self.transcription is not None and self.camera != "tapo":
+            raise ValueError("Transcription requires a Tapo camera selection")
         if self.voice not in {None, "voicevox", "elevenlabs"}:
             raise ValueError(f"Unsupported voice: {self.voice}")
         if self.embedding_model not in {"small", "base"}:
             raise ValueError(f"Unsupported embedding model: {self.embedding_model}")
+
+    def uv_extras(self) -> tuple[str, ...]:
+        """Return root extras needed by this feature selection."""
+        extras: list[str] = []
+        if self.camera is not None:
+            extras.append(f"camera-{self.camera}")
+        if self.transcription is not None:
+            extras.append(f"transcription-{self.transcription}")
+        if self.voice is not None:
+            extras.append(f"voice-{self.voice}")
+        if self.x_enabled:
+            extras.append("x")
+        if self.system_temperature:
+            extras.append("system-temperature")
+        return tuple(extras)
 
 
 @dataclass(frozen=True)
@@ -204,9 +224,20 @@ def build_mcp_config(
     if selection.camera == "usb":
         servers["usb-webcam"] = SERVER_SPECS["usb-webcam"].command()
     elif selection.camera == "tapo":
-        servers["wifi-cam"] = SERVER_SPECS["wifi-cam"].command(
-            _selected_environment(environment, TAPO_REQUIRED_ENVIRONMENT)
+        camera_environment = _selected_environment(
+            environment,
+            TAPO_REQUIRED_ENVIRONMENT,
         )
+        camera_environment["TRANSCRIBE_DEFAULT"] = (
+            "true" if selection.transcription is not None else "false"
+        )
+        if selection.transcription is not None:
+            camera_environment["TRANSCRIBE_BACKEND"] = (
+                "openai-whisper"
+                if selection.transcription == "whisper"
+                else "faster-whisper"
+            )
+        servers["wifi-cam"] = SERVER_SPECS["wifi-cam"].command(camera_environment)
 
     if selection.voice == "voicevox":
         servers["tts"] = SERVER_SPECS["tts"].command(

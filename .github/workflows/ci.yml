@@ -8,7 +8,7 @@ on:
 
 jobs:
   workspace:
-    name: Test unified uv workspace
+    name: Full workspace (Ubuntu)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
           enable-cache: true
 
       - name: Install workspace
-        run: uv sync --locked
+        run: uv sync --locked --all-extras --group dev
 
       - name: Verify lockfile
         run: uv lock --check
@@ -59,3 +59,52 @@ jobs:
           uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/self-narrative-mcp pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/social-core pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/social-state-mcp pytest -q
+
+  core-platforms:
+    name: Core runtime (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Run guided Core setup (macOS)
+        if: runner.os == 'macOS'
+        run: ./scripts/setup.sh --profile core --non-interactive --skip-model-download --force
+
+      - name: Run guided Core setup (Windows)
+        if: runner.os == 'Windows'
+        run: scripts\setup.cmd --profile core --non-interactive --skip-model-download --force
+
+      - name: Install test dependencies
+        run: uv sync --locked --group dev
+
+      - name: Verify platform, hook, and memory startup contracts
+        run: >-
+          uv run pytest
+          tests/test_uv_workspace.py
+          tests/test_platform_launchers.py
+          tests/test_doctor_cli.py
+          tests/test_mcp_probe.py
+          consciousness-mcp/packages/individual-kernel-mcp/tests/test_hook_cli.py
+          memory-mcp/tests/test_embedding_warmup.py
+          -q
+
+      - name: Run live Core doctor (macOS)
+        if: runner.os == 'macOS'
+        run: ./scripts/doctor.sh --live --json
+
+      - name: Run live Core doctor (Windows)
+        if: runner.os == 'Windows'
+        run: scripts\doctor.cmd --live --json

@@ -46,6 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=("core",), default="core")
     parser.add_argument("--with-camera", choices=("usb", "tapo"))
+    parser.add_argument(
+        "--with-transcription",
+        choices=("whisper", "faster"),
+        help="Transcribe Tapo audio; requires --with-camera tapo",
+    )
     parser.add_argument("--with-voice", choices=("voicevox", "elevenlabs"))
     parser.add_argument("--with-x", action="store_true")
     parser.add_argument("--with-system-temperature", action="store_true")
@@ -87,6 +92,15 @@ def _prompt_bool(prompt: str, *, default: bool = False) -> bool:
 def _interactive_selection() -> FeatureSelection:
     print("Choose only the capabilities available on this machine.")
     camera = _prompt_choice("Camera", ("none", "usb", "tapo"), "none")
+    transcription = (
+        _prompt_choice(
+            "Tapo audio transcription",
+            ("none", "whisper", "faster"),
+            "none",
+        )
+        if camera == "tapo"
+        else "none"
+    )
     voice = _prompt_choice(
         "Voice",
         ("none", "voicevox", "elevenlabs"),
@@ -94,6 +108,9 @@ def _interactive_selection() -> FeatureSelection:
     )
     return FeatureSelection(
         camera=None if camera == "none" else camera,
+        transcription=(
+            None if transcription == "none" else transcription
+        ),
         voice=None if voice == "none" else voice,
         x_enabled=_prompt_bool("Enable X search and posting"),
         system_temperature=_prompt_bool("Enable host temperature and time"),
@@ -192,6 +209,14 @@ def _print_doctor_results(
     return any(result.status is CheckStatus.ERROR for result in results)
 
 
+def build_sync_command(selection: FeatureSelection) -> list[str]:
+    """Build one locked uv sync for exactly the selected runtime profile."""
+    command = ["uv", "sync", "--locked", "--no-dev"]
+    for extra in selection.uv_extras():
+        command.extend(("--extra", extra))
+    return command
+
+
 def execute_setup(
     selection: FeatureSelection,
     environment: Mapping[str, str],
@@ -215,7 +240,7 @@ def execute_setup(
         return 0
 
     print("==> syncing the locked workspace", file=output)
-    runner(["uv", "sync", "--locked"], cwd=repo_root, check=True)
+    runner(build_sync_command(selection), cwd=repo_root, check=True)
 
     destination = repo_root / ".mcp.json"
     plan = plan_config_write(destination, config, force=force)
@@ -288,6 +313,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else FeatureSelection(
             profile=args.profile,
             camera=args.with_camera,
+            transcription=args.with_transcription,
             voice=args.with_voice,
             x_enabled=args.with_x,
             system_temperature=args.with_system_temperature,

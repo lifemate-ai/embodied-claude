@@ -4,22 +4,26 @@ version = "0.1.0"
 description = "Unified development and runtime environment for embodied-claude MCP servers."
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "agent-grammar",
-    "boundary-mcp",
     "desire-system",
     "individual-kernel-mcp",
-    "interaction-orchestrator-mcp",
-    "joint-attention-mcp",
     "memory-mcp",
-    "relationship-mcp",
-    "self-narrative-mcp",
-    "social-core",
-    "social-state-mcp",
     "sociality-mcp",
+]
+
+[project.optional-dependencies]
+camera-usb = ["usb-webcam-mcp"]
+camera-tapo = ["wifi-cam-mcp"]
+transcription-whisper = ["wifi-cam-mcp[transcribe]"]
+transcription-faster = ["wifi-cam-mcp[transcribe-faster]"]
+voice-voicevox = ["tts-mcp"]
+voice-elevenlabs = ["tts-mcp[elevenlabs]"]
+x = ["x-mcp"]
+system-temperature = ["system-temperature-mcp"]
+all = [
     "system-temperature-mcp",
-    "tts-mcp[all]",
+    "tts-mcp[elevenlabs]",
     "usb-webcam-mcp",
-    "wifi-cam-mcp[transcribe]",
+    "wifi-cam-mcp[transcribe,transcribe-faster]",
     "x-mcp",
 ]
 

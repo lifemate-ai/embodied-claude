@@ -8,7 +8,8 @@
 # Notes:
 #   - New users should prefer `scripts/setup.sh`, which also creates a safe
 #     Core `.mcp.json` and runs diagnostics.
-#   - The root project includes all workspace packages and required runtime extras.
+#   - This compatibility installer preserves the historical "install everything"
+#     behavior. New installations should select capabilities through setup.
 #   - `memory-mcp` pre-downloads its embedding model so the first remember() doesn't lazy-fail.
 
 set -euo pipefail
@@ -24,7 +25,7 @@ case "${1:-}" in
 esac
 
 echo "==> syncing the embodied-claude workspace"
-uv sync
+uv sync --locked --all-extras --group dev
 
 echo "==> pre-downloading embedding model (honors \$MEMORY_EMBEDDING_MODEL)"
 uv run --package memory-mcp python -c "

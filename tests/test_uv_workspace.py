@@ -40,18 +40,37 @@ def test_root_declares_every_python_project() -> None:
     assert (ROOT / ".python-version").read_text().strip() == "3.13"
 
 
-def test_root_depends_on_every_workspace_member() -> None:
+def test_root_dependencies_install_only_the_core_runtime() -> None:
     config = _root_config()
     dependency_names = {
         value.split("[", 1)[0].split("=", 1)[0]
         for value in config["project"]["dependencies"]
     }
-    assert dependency_names == set(MEMBERS.values())
+    assert dependency_names == {
+        "desire-system",
+        "individual-kernel-mcp",
+        "memory-mcp",
+        "sociality-mcp",
+    }
     assert set(config["tool"]["uv"]["sources"]) == set(MEMBERS.values())
     assert all(
         source == {"workspace": True}
         for source in config["tool"]["uv"]["sources"].values()
     )
+
+
+def test_root_extras_install_optional_capabilities_explicitly() -> None:
+    extras = _root_config()["project"]["optional-dependencies"]
+
+    assert extras["camera-usb"] == ["usb-webcam-mcp"]
+    assert extras["camera-tapo"] == ["wifi-cam-mcp"]
+    assert extras["transcription-whisper"] == ["wifi-cam-mcp[transcribe]"]
+    assert extras["transcription-faster"] == ["wifi-cam-mcp[transcribe-faster]"]
+    assert extras["voice-voicevox"] == ["tts-mcp"]
+    assert extras["voice-elevenlabs"] == ["tts-mcp[elevenlabs]"]
+    assert extras["x"] == ["x-mcp"]
+    assert extras["system-temperature"] == ["system-temperature-mcp"]
+    assert all("transcrib" not in item for item in extras["camera-tapo"])
 
 
 def test_only_root_lock_and_python_pin_remain() -> None:
@@ -76,8 +95,8 @@ def test_transcription_extra_requires_python_313_compatible_numba() -> None:
 
 def test_installer_performs_one_workspace_sync() -> None:
     script = (ROOT / "scripts" / "install-mcps.sh").read_text()
-    sync_commands = re.findall(r"^[ \t]*uv sync[ \t]*$", script, flags=re.MULTILINE)
-    assert sync_commands == ["uv sync"]
+    sync_commands = re.findall(r"^[ \t]*uv sync.*$", script, flags=re.MULTILINE)
+    assert sync_commands == ["uv sync --locked --all-extras --group dev"]
     assert "MCP_DIRS=" not in script
     assert "uv run --package memory-mcp python -c" in script
 
@@ -90,7 +109,7 @@ def test_setup_uses_one_cross_platform_workspace_entrypoint() -> None:
     assert "uv run --no-project --python 3.13" in wrapper
     assert 'python scripts/setup.py "$@"' in wrapper
     assert "https://astral.sh/uv/install.sh" in wrapper
-    assert '["uv", "sync", "--locked"]' in setup
+    assert '["uv", "sync", "--locked", "--no-dev"]' in setup
     assert "MCP_DIRS=" not in setup
     assert ".mcp.json.backup-*" in gitignore
 
@@ -121,30 +140,50 @@ def test_mcp_example_runs_python_servers_from_workspace_packages() -> None:
 
 
 def test_efpf_hooks_run_from_the_root_workspace() -> None:
-    prefix = (
-        'uv run --directory "$CLAUDE_PROJECT_DIR" '
-        "--package individual-kernel-mcp efpf-hook "
-    )
     for settings_path in (
         ROOT / ".claude" / "settings.json",
         ROOT / ".claude" / "settings.example.json",
     ):
         config = json.loads(settings_path.read_text())
-        commands = [
-            hook["command"]
+        hooks = [
+            hook
             for entries in config["hooks"].values()
             for entry in entries
             for hook in entry["hooks"]
             if "efpf-hook" in hook["command"]
+            or "efpf-hook" in hook.get("args", [])
         ]
-        assert commands
-        assert all(command.startswith(prefix) for command in commands)
+        assert hooks
+        for hook in hooks:
+            assert hook["command"] == "uv"
+            assert hook["args"][:5] == [
+                "run",
+                "--directory",
+                "${CLAUDE_PROJECT_DIR}",
+                "--package",
+                "individual-kernel-mcp",
+            ]
+            assert hook["args"][5] == "efpf-hook"
+            assert "$CLAUDE_PROJECT_DIR" not in json.dumps(hook)
+
+
+def test_core_hook_settings_do_not_require_posix_shell_scripts() -> None:
+    config = json.loads((ROOT / ".claude" / "settings.json").read_text())
+    hooks = [
+        hook
+        for entries in config["hooks"].values()
+        for entry in entries
+        for hook in entry["hooks"]
+    ]
+
+    assert all(".sh" not in json.dumps(hook) for hook in hooks)
 
 
 def test_ci_uses_the_locked_root_workspace() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert 'python-version: "3.13"' in workflow
-    assert workflow.count("run: uv sync --locked") == 1
+    assert "run: uv sync --locked --all-extras --group dev" in workflow
+    assert "run: uv sync --locked --group dev" in workflow
     assert "working-directory:" not in workflow
     assert "uv lock --check" in workflow
     assert (
@@ -158,6 +197,20 @@ def test_ci_uses_the_locked_root_workspace() -> None:
         'uv run --project "$GITHUB_WORKSPACE" --directory '
         "sociality-mcp/packages/agent-grammar pytest -q"
     ) in workflow
+
+
+def test_ci_release_gate_covers_linux_macos_and_windows() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "ubuntu-latest" in workflow
+    assert "macos-latest" in workflow
+    assert "windows-latest" in workflow
+    assert "./scripts/setup.sh" in workflow
+    assert "./scripts/doctor.sh" in workflow
+    assert r"scripts\setup.cmd" in workflow
+    assert r"scripts\doctor.cmd" in workflow
+    assert "test_embedding_warmup.py" in workflow
+    assert "--live" in workflow
 
 
 def test_primary_docs_describe_the_single_workspace() -> None:

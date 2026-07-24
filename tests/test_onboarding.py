@@ -10,6 +10,7 @@ import pytest
 
 from scripts.doctor import (
     CheckStatus,
+    _check_social_policy,
     check_optional_dependencies,
     check_state_path,
     check_workspace_packages,
@@ -38,6 +39,67 @@ CORE_SERVERS = {
     "sociality",
     "individual-kernel",
 }
+
+
+def test_core_selection_has_no_optional_uv_extras() -> None:
+    assert FeatureSelection().uv_extras() == ()
+
+
+def test_tapo_and_transcription_are_separate_uv_extras() -> None:
+    camera_only = FeatureSelection(camera="tapo")
+    with_whisper = FeatureSelection(camera="tapo", transcription="whisper")
+    with_faster = FeatureSelection(camera="tapo", transcription="faster")
+
+    assert camera_only.uv_extras() == ("camera-tapo",)
+    assert with_whisper.uv_extras() == (
+        "camera-tapo",
+        "transcription-whisper",
+    )
+    assert with_faster.uv_extras() == (
+        "camera-tapo",
+        "transcription-faster",
+    )
+
+
+def test_transcription_requires_tapo_camera() -> None:
+    with pytest.raises(ValueError, match="Tapo"):
+        FeatureSelection(transcription="whisper")
+
+
+def test_tapo_config_disables_uninstalled_transcription_by_default() -> None:
+    environment = {
+        "TAPO_CAMERA_HOST": "192.0.2.10",
+        "TAPO_USERNAME": "camera-user",
+        "TAPO_PASSWORD": "camera-password",
+    }
+
+    config = build_mcp_config(FeatureSelection(camera="tapo"), environment)
+
+    assert config["mcpServers"]["wifi-cam"]["env"]["TRANSCRIBE_DEFAULT"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("selection", "backend"),
+    (
+        (FeatureSelection(camera="tapo", transcription="whisper"), "openai-whisper"),
+        (FeatureSelection(camera="tapo", transcription="faster"), "faster-whisper"),
+    ),
+)
+def test_tapo_config_enables_the_selected_transcription_backend(
+    selection: FeatureSelection,
+    backend: str,
+) -> None:
+    environment = {
+        "TAPO_CAMERA_HOST": "192.0.2.10",
+        "TAPO_USERNAME": "camera-user",
+        "TAPO_PASSWORD": "camera-password",
+    }
+
+    config = build_mcp_config(selection, environment)
+    server_environment = config["mcpServers"]["wifi-cam"]["env"]
+
+    assert server_environment["TRANSCRIBE_DEFAULT"] == "true"
+    assert server_environment["TRANSCRIBE_BACKEND"] == backend
 
 
 def test_core_profile_has_exactly_the_hardware_free_servers() -> None:
@@ -220,6 +282,7 @@ def test_redaction_is_recursive_and_does_not_mutate_input() -> None:
         "TAPO_CAMERA_HOST": "192.0.2.10",
         "TAPO_USERNAME": "<redacted>",
         "TAPO_PASSWORD": "<redacted>",
+        "TRANSCRIBE_DEFAULT": "false",
     }
     assert redacted["mcpServers"]["tts"]["env"]["ELEVENLABS_API_KEY"] == "<redacted>"
     assert redacted["mcpServers"]["tts"]["env"]["ELEVENLABS_VOICE_ID"] == "<redacted>"
@@ -392,6 +455,18 @@ def test_doctor_warns_when_selected_voice_has_no_player() -> None:
     assert "mpv" in playback.remediation
 
 
+def test_doctor_reports_invalid_social_policy_instead_of_raising(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "socialPolicy.toml").write_text("[invalid")
+
+    result = _check_social_policy(tmp_path)
+
+    assert result.status is CheckStatus.ERROR
+    assert result.subject == "social-policy"
+    assert "invalid" in result.detail
+
+
 def test_doctor_reports_missing_core_workspace_package(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         """
@@ -410,3 +485,40 @@ dependencies = ["memory-mcp", "desire-system", "individual-kernel-mcp"]
     )
     assert sociality.status is CheckStatus.ERROR
     assert "uv sync --locked" in sociality.remediation
+
+
+def test_doctor_accepts_configured_package_declared_in_root_extra(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "fixture"
+version = "0.1.0"
+dependencies = [
+  "memory-mcp",
+  "desire-system",
+  "sociality-mcp",
+  "individual-kernel-mcp",
+]
+
+[project.optional-dependencies]
+camera-tapo = ["wifi-cam-mcp"]
+"""
+    )
+    config = build_mcp_config(
+        FeatureSelection(camera="tapo"),
+        {
+            "TAPO_CAMERA_HOST": "192.0.2.10",
+            "TAPO_USERNAME": "camera-user",
+            "TAPO_PASSWORD": "camera-password",
+        },
+    )
+
+    results = check_workspace_packages(tmp_path, config)
+    camera = next(
+        result for result in results if result.subject == "package:wifi-cam-mcp"
+    )
+
+    assert camera.status is CheckStatus.OK
+    assert "camera-tapo" in camera.detail

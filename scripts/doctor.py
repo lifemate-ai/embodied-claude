@@ -6,10 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -211,6 +213,7 @@ def check_workspace_packages(
     try:
         project = tomllib.loads(pyproject_path.read_text())
         requirements = project["project"]["dependencies"]
+        optional = project["project"].get("optional-dependencies", {})
     except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError) as error:
         return [
             CheckResult(
@@ -221,7 +224,19 @@ def check_workspace_packages(
             )
         ]
 
-    dependencies = {_dependency_name(str(item)) for item in requirements}
+    declared_by: dict[str, str] = {
+        _dependency_name(str(item)): "Core dependencies"
+        for item in requirements
+    }
+    if isinstance(optional, Mapping):
+        for extra, extra_requirements in optional.items():
+            if not isinstance(extra_requirements, list):
+                continue
+            for item in extra_requirements:
+                declared_by.setdefault(
+                    _dependency_name(str(item)),
+                    f"the {extra} extra",
+                )
     servers = config.get("mcpServers", {})
     configured = servers if isinstance(servers, Mapping) else {}
     results: list[CheckResult] = []
@@ -231,12 +246,13 @@ def check_workspace_packages(
         if spec is None or spec.package in checked_packages:
             continue
         checked_packages.add(spec.package)
-        if spec.package in dependencies:
+        declaration = declared_by.get(spec.package)
+        if declaration is not None:
             results.append(
                 CheckResult(
                     CheckStatus.OK,
                     f"package:{spec.package}",
-                    "declared in the root workspace",
+                    f"declared in {declaration}",
                 )
             )
         else:
@@ -411,6 +427,89 @@ def run_doctor(
     return results
 
 
+def run_live_checks(
+    repo_root: Path,
+    config_path: Path,
+    state_root: Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[CheckResult]:
+    """Initialize configured MCP servers in isolated state directories."""
+
+    config, config_result = _load_config(config_path)
+    if config is None:
+        return [config_result]
+    servers = config.get("mcpServers", {})
+    if not isinstance(servers, Mapping):
+        return [
+            CheckResult(
+                CheckStatus.ERROR,
+                "live:mcpServers",
+                "mcpServers must be a JSON object.",
+                "Fix the config before running doctor --live.",
+            )
+        ]
+
+    results: list[CheckResult] = []
+    probe = repo_root / "scripts" / "mcp_probe.py"
+    for raw_name in servers:
+        name = str(raw_name)
+        if name not in SERVER_SPECS:
+            continue
+        command = [
+            "uv",
+            "run",
+            "--directory",
+            str(repo_root),
+            "--package",
+            "individual-kernel-mcp",
+            "python",
+            str(probe),
+            "--config",
+            str(config_path),
+            "--server",
+            name,
+            "--cwd",
+            str(repo_root),
+            "--state-dir",
+            str(state_root / name),
+        ]
+        if name == "memory":
+            command.append("--remember-roundtrip")
+        completed = runner(
+            command,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=180,
+        )
+        try:
+            report = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            report = {
+                "ok": False,
+                "error": completed.stderr.strip() or "probe returned invalid JSON",
+            }
+        if completed.returncode == 0 and report.get("ok") is True:
+            tool_count = int(report.get("tool_count", 0))
+            detail = f"initialized and exposed {tool_count} tools"
+            if report.get("remember_roundtrip"):
+                detail += "; isolated remember round-trip passed"
+            results.append(CheckResult(CheckStatus.OK, f"live:{name}", detail))
+        else:
+            detail = str(report.get("error") or "MCP live probe failed")
+            results.append(
+                CheckResult(
+                    CheckStatus.ERROR,
+                    f"live:{name}",
+                    detail,
+                    f"Run scripts/doctor.py --live --config {config_path} for details.",
+                )
+            )
+    return results
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -418,7 +517,38 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="MCP config to inspect (default: <repo>/.mcp.json)",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a stable machine-readable report",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Start configured MCP servers against isolated temporary state",
+    )
     return parser
+
+
+def _json_report(results: Sequence[CheckResult]) -> dict[str, Any]:
+    summary = {
+        status.value: sum(result.status is status for result in results)
+        for status in CheckStatus
+    }
+    return {
+        "schema_version": 1,
+        "platform": platform.system().lower(),
+        "summary": summary,
+        "checks": [
+            {
+                "status": result.status.value,
+                "subject": result.subject,
+                "detail": result.detail,
+                "remediation": result.remediation,
+            }
+            for result in results
+        ],
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -426,10 +556,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[1]
     config_path = args.config or repo_root / ".mcp.json"
     results = run_doctor(repo_root, config_path, Path.home())
-    for result in results:
-        print(f"[{result.status}] {result.subject}: {result.detail}")
-        if result.remediation:
-            print(f"  -> {result.remediation}")
+    if args.live:
+        with tempfile.TemporaryDirectory(prefix="embodied-claude-doctor-") as temp:
+            results.extend(
+                run_live_checks(
+                    repo_root,
+                    config_path,
+                    Path(temp),
+                )
+            )
+    if args.json:
+        json.dump(_json_report(results), sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+    else:
+        for result in results:
+            print(f"[{result.status}] {result.subject}: {result.detail}")
+            if result.remediation:
+                print(f"  -> {result.remediation}")
     return int(any(result.status is CheckStatus.ERROR for result in results))
 
 
