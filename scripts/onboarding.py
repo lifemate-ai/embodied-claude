@@ -134,7 +134,9 @@ def missing_environment(
     )
 
 
-def _is_placeholder(value: str) -> bool:
+def is_placeholder_value(value: str) -> bool:
+    """Return whether a value looks like an example rather than real config."""
+
     normalized = value.strip().lower()
     return not normalized or any(marker in normalized for marker in _PLACEHOLDER_MARKERS)
 
@@ -148,7 +150,7 @@ def placeholder_environment(
     return tuple(
         key
         for key in required_environment(selection)
-        if environment.get(key) and _is_placeholder(environment[key])
+        if environment.get(key) and is_placeholder_value(environment[key])
     )
 
 

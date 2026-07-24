@@ -8,6 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from scripts.doctor import (
+    CheckStatus,
+    check_optional_dependencies,
+    check_state_path,
+    check_workspace_packages,
+    validate_mcp_config,
+)
 from scripts.onboarding import (
     BASE_EMBEDDING_MODEL,
     SMALL_EMBEDDING_MODEL,
@@ -321,3 +328,85 @@ def test_social_policy_is_copied_only_when_missing(tmp_path: Path) -> None:
     destination.write_text('version = 1\nname = "custom"\n')
     assert not copy_policy_if_missing(source, destination)
     assert 'name = "custom"' in destination.read_text()
+
+
+def test_state_path_check_uses_nearest_parent_without_creating(tmp_path: Path) -> None:
+    state_path = tmp_path / ".claude" / "memories" / "memory.db"
+
+    result = check_state_path(state_path)
+
+    assert result.status is CheckStatus.OK
+    assert not (tmp_path / ".claude").exists()
+
+
+def test_doctor_warns_for_unknown_custom_server() -> None:
+    config = build_mcp_config(FeatureSelection(), {})
+    config["mcpServers"]["custom"] = {
+        "command": "node",
+        "args": ["/path/to/custom-server.js"],
+    }
+
+    results = validate_mcp_config(config)
+
+    custom = next(result for result in results if result.subject == "server:custom")
+    assert custom.status is CheckStatus.WARN
+    assert "custom" in custom.detail.lower()
+
+
+def test_doctor_rejects_malformed_known_server_shape() -> None:
+    config = build_mcp_config(FeatureSelection(), {})
+    config["mcpServers"]["memory"]["command"] = "python"
+
+    results = validate_mcp_config(config)
+
+    memory = next(result for result in results if result.subject == "server:memory")
+    assert memory.status is CheckStatus.ERROR
+    assert "uv" in memory.detail
+
+
+def test_doctor_rejects_missing_selected_server_credentials() -> None:
+    config = build_mcp_config(
+        FeatureSelection(camera="tapo"),
+        {
+            "TAPO_CAMERA_HOST": "192.0.2.10",
+            "TAPO_USERNAME": "camera-user",
+            "TAPO_PASSWORD": "camera-password",
+        },
+    )
+    del config["mcpServers"]["wifi-cam"]["env"]["TAPO_PASSWORD"]
+
+    results = validate_mcp_config(config)
+
+    camera = next(result for result in results if result.subject == "server:wifi-cam")
+    assert camera.status is CheckStatus.ERROR
+    assert "TAPO_PASSWORD" in camera.detail
+
+
+def test_doctor_warns_when_selected_voice_has_no_player() -> None:
+    config = build_mcp_config(FeatureSelection(voice="voicevox"), {})
+
+    results = check_optional_dependencies(config, which=lambda _name: None)
+
+    playback = next(result for result in results if result.subject == "tts:playback")
+    assert playback.status is CheckStatus.WARN
+    assert "mpv" in playback.remediation
+
+
+def test_doctor_reports_missing_core_workspace_package(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "fixture"
+version = "0.1.0"
+dependencies = ["memory-mcp", "desire-system", "individual-kernel-mcp"]
+"""
+    )
+    config = build_mcp_config(FeatureSelection(), {})
+
+    results = check_workspace_packages(tmp_path, config)
+
+    sociality = next(
+        result for result in results if result.subject == "package:sociality-mcp"
+    )
+    assert sociality.status is CheckStatus.ERROR
+    assert "uv sync --locked" in sociality.remediation
