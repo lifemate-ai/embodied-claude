@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -70,3 +72,57 @@ def test_only_root_lock_and_python_pin_remain() -> None:
 def test_transcription_extra_requires_python_313_compatible_numba() -> None:
     config = tomllib.loads((ROOT / "wifi-cam-mcp" / "pyproject.toml").read_text())
     assert "numba>=0.63.1" in config["project"]["optional-dependencies"]["transcribe"]
+
+
+def test_installer_performs_one_workspace_sync() -> None:
+    script = (ROOT / "scripts" / "install-mcps.sh").read_text()
+    sync_commands = re.findall(r"^[ \t]*uv sync[ \t]*$", script, flags=re.MULTILINE)
+    assert sync_commands == ["uv sync"]
+    assert "MCP_DIRS=" not in script
+    assert "uv run --package memory-mcp python -c" in script
+
+
+def test_mcp_example_runs_python_servers_from_workspace_packages() -> None:
+    config = json.loads((ROOT / ".mcp.json.example").read_text())
+    expected = {
+        "usb-webcam": ("usb-webcam-mcp", "usb-webcam-mcp"),
+        "wifi-cam": ("wifi-cam-mcp", "wifi-cam-mcp"),
+        "desire-system": ("desire-system", "desire-system"),
+        "memory": ("memory-mcp", "memory-mcp"),
+        "system-temperature": ("system-temperature-mcp", "system-temperature-mcp"),
+        "tts": ("tts-mcp", "tts-mcp"),
+        "x-mcp": ("x-mcp", "x-mcp"),
+        "sociality": ("sociality-mcp", "sociality-mcp"),
+        "individual-kernel": ("individual-kernel-mcp", "individual-kernel-mcp"),
+    }
+
+    servers = config["mcpServers"]
+    for server_name, (package, entrypoint) in expected.items():
+        assert servers[server_name]["command"] == "uv"
+        assert servers[server_name]["args"] == [
+            "run",
+            "--package",
+            package,
+            entrypoint,
+        ]
+
+
+def test_efpf_hooks_run_from_the_root_workspace() -> None:
+    prefix = (
+        'uv run --directory "$CLAUDE_PROJECT_DIR" '
+        "--package individual-kernel-mcp efpf-hook "
+    )
+    for settings_path in (
+        ROOT / ".claude" / "settings.json",
+        ROOT / ".claude" / "settings.example.json",
+    ):
+        config = json.loads(settings_path.read_text())
+        commands = [
+            hook["command"]
+            for entries in config["hooks"].values()
+            for entry in entries
+            for hook in entry["hooks"]
+            if "efpf-hook" in hook["command"]
+        ]
+        assert commands
+        assert all(command.startswith(prefix) for command in commands)
