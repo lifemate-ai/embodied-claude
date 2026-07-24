@@ -1608,6 +1608,8 @@ Date Range:
         """Connect to memory store (Phase 4: with episode manager & sensory integration)."""
         config = MemoryConfig.from_env()
         self._memory_store = MemoryStore(config)
+        self._memory_store.warmup()
+        logger.info("Embedding model pre-warmed")
         await self._memory_store.connect()
         logger.info(f"Connected to memory store at {config.db_path}")
 

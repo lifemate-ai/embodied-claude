@@ -308,6 +308,10 @@ class MemoryStore:
         self._embedding_fn = E5EmbeddingFunction(config.embedding_model)
         self._bm25_index = BM25Index()
 
+    def warmup(self) -> None:
+        """Load embedding imports and the model on the caller's thread."""
+        self._embedding_fn.warmup()
+
     # ── Connection ──────────────────────────────
 
     async def connect(self) -> None:

@@ -27,8 +27,8 @@ class E5EmbeddingFunction:
         self._model_name = model_name
         self._model: Any = None  # lazy load; actual type is SentenceTransformer
 
-    def _load_model(self) -> None:
-        """モデルを遅延ロード。"""
+    def warmup(self) -> None:
+        """Load the embedding stack and model synchronously once."""
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
@@ -40,6 +40,10 @@ class E5EmbeddingFunction:
                     "sentence-transformers が必要です。"
                     "`uv add sentence-transformers` を実行してください。"
                 ) from e
+
+    def _load_model(self) -> None:
+        """モデルを遅延ロード。"""
+        self.warmup()
 
     def __call__(self, input: list[str]) -> list[list[float]]:
         """文書保存用埋め込み（passage: プレフィックス）。
