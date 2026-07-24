@@ -93,6 +93,18 @@ def test_transcription_extra_requires_python_313_compatible_numba() -> None:
     assert "numba>=0.63.1" in config["project"]["optional-dependencies"]["transcribe"]
 
 
+def test_social_core_installs_iana_timezone_data_on_windows() -> None:
+    config = tomllib.loads(
+        (
+            ROOT / "sociality-mcp" / "packages" / "social-core" / "pyproject.toml"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert 'tzdata>=2025.2; sys_platform == "win32"' in config["project"][
+        "dependencies"
+    ]
+
+
 def test_installer_performs_one_workspace_sync() -> None:
     script = (ROOT / "scripts" / "install-mcps.sh").read_text(encoding="utf-8")
     sync_commands = re.findall(r"^[ \t]*uv sync.*$", script, flags=re.MULTILINE)

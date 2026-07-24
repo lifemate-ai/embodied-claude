@@ -2700,6 +2700,7 @@ version = "0.3.0"
 source = { editable = "sociality-mcp/packages/social-core" }
 dependencies = [
     { name = "pydantic" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -2715,6 +2716,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
 ]
 provides-extras = ["dev"]
 

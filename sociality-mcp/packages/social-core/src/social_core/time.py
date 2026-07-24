@@ -45,7 +45,7 @@ def local_view(value: str | datetime, tz_name: str = DEFAULT_POLICY_TIMEZONE) ->
     try:
         tz = ZoneInfo(tz_name)
     except (ZoneInfoNotFoundError, ValueError):
-        tz = ZoneInfo("UTC")
+        tz = timezone.utc
     return dt.astimezone(tz)
 
 

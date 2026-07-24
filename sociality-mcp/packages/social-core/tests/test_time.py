@@ -1,5 +1,8 @@
 """Tests for timezone-aware policy time helpers."""
 
+from zoneinfo import ZoneInfoNotFoundError
+
+import social_core.time as time_module
 from social_core.time import in_quiet_hours, local_view
 
 
@@ -13,6 +16,18 @@ def test_local_view_converts_utc_to_jst():
 
 def test_local_view_falls_back_to_utc_on_bad_zone():
     local = local_view("2026-04-18T16:30:00Z", "Not/A_Zone")
+    assert local.hour == 16
+    assert local.utcoffset().total_seconds() == 0
+
+
+def test_local_view_falls_back_when_no_iana_database_is_installed(monkeypatch):
+    def missing_zone(_name: str):
+        raise ZoneInfoNotFoundError
+
+    monkeypatch.setattr(time_module, "ZoneInfo", missing_zone)
+
+    local = local_view("2026-04-18T16:30:00Z", "Asia/Tokyo")
+
     assert local.hour == 16
     assert local.utcoffset().total_seconds() == 0
 
