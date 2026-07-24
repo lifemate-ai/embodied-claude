@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
 from copy import deepcopy
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +16,13 @@ from scripts.onboarding import (
     configs_equivalent,
     missing_environment,
     redact_config,
+)
+from scripts.setup_io import (
+    ConfigAction,
+    ConfigConflictError,
+    apply_config_plan,
+    copy_policy_if_missing,
+    plan_config_write,
 )
 
 CORE_SERVERS = {
@@ -213,3 +224,100 @@ def test_config_equivalence_ignores_mapping_order() -> None:
     right = {"mcpServers": {"memory": {"args": ["run"], "command": "uv"}}}
 
     assert configs_equivalent(left, right)
+
+
+def test_new_config_is_created_atomically_with_private_mode(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    config = build_mcp_config(FeatureSelection(), {})
+    plan = plan_config_write(destination, config)
+
+    assert plan.action is ConfigAction.CREATE
+    assert plan.backup is None
+
+    apply_config_plan(plan, config)
+
+    assert json.loads(destination.read_text()) == config
+    if os.name == "posix":
+        assert destination.stat().st_mode & 0o777 == 0o600
+    assert list(tmp_path.glob(".mcp.json.*.tmp")) == []
+
+
+def test_equivalent_existing_config_is_kept_byte_for_byte(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    config = build_mcp_config(FeatureSelection(), {})
+    original = json.dumps(config, separators=(",", ":"))
+    destination.write_text(original)
+
+    plan = plan_config_write(destination, config)
+    apply_config_plan(plan, config)
+
+    assert plan.action is ConfigAction.KEEP
+    assert destination.read_text() == original
+
+
+def test_different_existing_config_is_refused_without_force(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    destination.write_text('{"mcpServers":{"custom":{"command":"custom"}}}\n')
+
+    with pytest.raises(ConfigConflictError, match="--force"):
+        plan_config_write(
+            destination,
+            build_mcp_config(FeatureSelection(), {}),
+        )
+
+
+def test_invalid_existing_config_is_refused_without_force(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    destination.write_text("{invalid json")
+
+    with pytest.raises(ConfigConflictError, match="valid JSON"):
+        plan_config_write(
+            destination,
+            build_mcp_config(FeatureSelection(), {}),
+        )
+
+
+def test_force_backs_up_before_replacing_config(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    old_content = '{"mcpServers":{"custom":{"command":"custom"}}}\n'
+    destination.write_text(old_content)
+    config = build_mcp_config(FeatureSelection(), {})
+    now = datetime(2026, 7, 24, 12, 34, 56, tzinfo=UTC)
+
+    plan = plan_config_write(destination, config, force=True, now=now)
+    apply_config_plan(plan, config)
+
+    assert plan.action is ConfigAction.REPLACE
+    assert plan.backup == tmp_path / ".mcp.json.backup-20260724-123456"
+    assert plan.backup.read_text() == old_content
+    assert json.loads(destination.read_text()) == config
+
+
+def test_force_chooses_a_unique_backup_name(tmp_path: Path) -> None:
+    destination = tmp_path / ".mcp.json"
+    destination.write_text('{"old":true}\n')
+    occupied = tmp_path / ".mcp.json.backup-20260724-123456"
+    occupied.write_text("existing backup")
+    now = datetime(2026, 7, 24, 12, 34, 56, tzinfo=UTC)
+
+    plan = plan_config_write(
+        destination,
+        build_mcp_config(FeatureSelection(), {}),
+        force=True,
+        now=now,
+    )
+
+    assert plan.backup == tmp_path / ".mcp.json.backup-20260724-123456-1"
+
+
+def test_social_policy_is_copied_only_when_missing(tmp_path: Path) -> None:
+    source = tmp_path / "socialPolicy.example.toml"
+    destination = tmp_path / "socialPolicy.toml"
+    source.write_text('version = 1\nname = "example"\n')
+
+    assert copy_policy_if_missing(source, destination)
+    assert destination.read_text() == source.read_text()
+
+    destination.write_text('version = 1\nname = "custom"\n')
+    assert not copy_policy_if_missing(source, destination)
+    assert 'name = "custom"' in destination.read_text()

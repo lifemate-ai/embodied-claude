@@ -155,6 +155,17 @@ Pure, standard-library domain logic:
 
 It has no prompts, subprocess calls, or file writes. Tests import it directly.
 
+### `scripts/setup_io.py`
+
+Explicit filesystem operations shared by setup and tests:
+
+- semantic comparison and overwrite planning
+- timestamped backup selection
+- atomic `.mcp.json` writes with private POSIX permissions
+- copy-if-absent handling for `socialPolicy.toml`
+
+It contains no prompts or subprocess calls. Dry-run paths never invoke it.
+
 ### `scripts/setup.py`
 
 CLI orchestration:

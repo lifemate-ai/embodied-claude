@@ -171,7 +171,7 @@ git commit -m "feat: add onboarding profile generation"
 
 **Files:**
 
-- Modify: `scripts/onboarding.py`
+- Create: `scripts/setup_io.py`
 - Modify: `tests/test_onboarding.py`
 - Modify: `.gitignore`
 
@@ -250,7 +250,7 @@ uv run ruff check scripts/onboarding.py tests/test_onboarding.py
 ### Step 6: Commit
 
 ```bash
-git add scripts/onboarding.py tests/test_onboarding.py .gitignore
+git add scripts/setup_io.py tests/test_onboarding.py .gitignore
 git commit -m "feat: protect generated MCP configuration"
 ```
 
