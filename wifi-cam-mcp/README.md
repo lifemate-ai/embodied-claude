@@ -68,7 +68,7 @@ TAPO_PASSWORD=your-password # Tapoカメラ（TP-Linkアカウントではない
 
 ### 5. 実行
 
-#### 依存関係のインストール
+#### workspace のインストール
 
 ```bash
 uv sync
@@ -77,7 +77,7 @@ uv sync
 #### 動作確認
 
 ```bash
-uv run wifi-cam-mcp
+uv run --package wifi-cam-mcp wifi-cam-mcp
 ```
 
 ## Claude Desktopで使う
@@ -92,9 +92,11 @@ uv run wifi-cam-mcp
     "wifi-cam": {
       "command": "uv",
       "args": [
-        "--directory",
-        "/path/to/wifi-cam-mcp",
         "run",
+        "--directory",
+        "/path/to/embodied-claude",
+        "--package",
+        "wifi-cam-mcp",
         "wifi-cam-mcp"
       ],
       "env": {
@@ -119,9 +121,11 @@ uv run wifi-cam-mcp
     "wifi-cam": {
       "command": "uv",
       "args": [
-        "--directory",
-        "/path/to/wifi-cam-mcp",
         "run",
+        "--directory",
+        "/path/to/embodied-claude",
+        "--package",
+        "wifi-cam-mcp",
         "wifi-cam-mcp"
       ],
       "env": {
@@ -143,12 +147,12 @@ Claudeに話しかける：
 - 「部屋全体を見渡して」
 - 「窓は開いてる？」
 
-## テスト
+## 検証
 
 ### Python版
 
 ```bash
-uv run pytest
+uv run ruff check wifi-cam-mcp
 ```
 
 ## トラブルシューティング

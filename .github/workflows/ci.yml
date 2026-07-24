@@ -7,68 +7,52 @@ on:
     branches: [main]
 
 jobs:
-  test-memory-mcp:
-    name: Test memory-mcp
+  workspace:
+    name: Test unified uv workspace
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: memory-mcp
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --extra dev
+      - name: Install workspace
+        run: uv sync --locked
 
-      - name: Lint
-        run: uv run ruff check .
-
-      - name: Type check
-        run: uv run mypy src/memory_mcp/ --ignore-missing-imports
-
-      - name: Run tests
-        run: uv run pytest -v
-
-  test-tts-mcp:
-    name: Test tts-mcp
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: tts-mcp
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        run: uv sync --extra dev
+      - name: Verify lockfile
+        run: uv lock --check
 
       - name: Lint
-        run: uv run ruff check .
+        run: |
+          uv run ruff check memory-mcp
+          uv run ruff check tts-mcp
+          uv run ruff check wifi-cam-mcp
+          uv run ruff check desire-system
+          uv run ruff check consciousness-mcp/packages/individual-kernel-mcp
+          uv run ruff check sociality-mcp
 
-      - name: Run tests
-        run: uv run pytest -v
+      - name: Type check memory-mcp
+        run: uv run mypy memory-mcp/src/memory_mcp/ --ignore-missing-imports
 
-  test-wifi-cam-mcp:
-    name: Test wifi-cam-mcp
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: wifi-cam-mcp
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        run: uv sync --extra dev
-
-      - name: Lint
-        run: uv run ruff check .
+      - name: Run workspace tests
+        run: |
+          uv run pytest tests -q
+          uv run pytest memory-mcp/tests -q
+          uv run pytest tts-mcp/tests -q
+          uv run pytest desire-system/tests -q
+          uv run pytest consciousness-mcp/packages/individual-kernel-mcp/tests -q
+          uv run pytest sociality-mcp/tests -q
+          uv run pytest sociality-mcp/packages/agent-grammar/tests -q
+          uv run pytest sociality-mcp/packages/boundary-mcp/tests -q
+          uv run pytest sociality-mcp/packages/interaction-orchestrator-mcp/tests -q
+          uv run pytest sociality-mcp/packages/joint-attention-mcp/tests -q
+          uv run pytest sociality-mcp/packages/relationship-mcp/tests -q
+          uv run pytest sociality-mcp/packages/self-narrative-mcp/tests -q
+          uv run pytest sociality-mcp/packages/social-core/tests -q
+          uv run pytest sociality-mcp/packages/social-state-mcp/tests -q

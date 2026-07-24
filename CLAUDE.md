@@ -63,33 +63,34 @@ embodied-claude/
 ### Python プロジェクト共通
 
 - **パッケージマネージャー**: uv
-- **Python バージョン**: 既存サーバーは 3.10+、sociality MCP 群は 3.12+
+- **Python バージョン**: 3.13（root `.python-version` で固定）
+- **workspace**: 全 Python package が root `.venv` と `uv.lock` を共有
 - **テストフレームワーク**: pytest + pytest-asyncio
 - **リンター**: ruff
 - **非同期**: asyncio ベース
 
 ```bash
-# 依存関係インストール（dev含む）
-uv sync --extra dev
+# 全 package と dev dependency を一括 install
+uv sync
 
 # リント
 uv run ruff check .
 
-# テスト実行
-uv run pytest
+# package ごとのテスト実行
+uv run pytest <package-dir>/tests
 
 # サーバー起動
-uv run <server-name>
+uv run --package <package-name> <server-name>
 ```
 
 ### コミット前のチェック（必須）
 
-各サブプロジェクトで以下を実行してからコミットすること:
+root workspace から対象 package を指定して実行すること:
 
 ```bash
-cd <project-dir>
-uv run ruff check .    # lint エラーがないこと
-uv run pytest -v       # テストが通ること
+uv lock --check
+uv run ruff check <project-dir>
+uv run pytest <project-dir>/tests -v
 ```
 
 ## MCP ツール一覧
@@ -387,8 +388,8 @@ ffplay rtsp://username:password@192.168.1.xxx:554/stream1
 ### MCP サーバーログ
 
 ```bash
-# 直接起動してログ確認
-cd wifi-cam-mcp && uv run wifi-cam-mcp
+# root workspace から直接起動してログ確認
+uv run --package wifi-cam-mcp wifi-cam-mcp
 ```
 
 ## Claude Code 音声モード（/voice）との連携

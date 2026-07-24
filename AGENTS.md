@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Overview
-This repository contains multiple Python MCP servers that give Claude “senses” (eyes, neck, ears, memory, and voice). Each server is a standalone package with its own `pyproject.toml` and can be run independently.
+This repository contains multiple Python MCP servers that give Claude “senses” (eyes, neck, ears, memory, and voice). Every Python package is a member of one root uv workspace and shares the root `.venv` and `uv.lock`.
 
 ## Project Structure & Module Organization
 - `usb-webcam-mcp/`: USB webcam capture (`src/usb_webcam_mcp/`).
@@ -14,22 +14,22 @@ This repository contains multiple Python MCP servers that give Claude “senses�
 - Docs: `README.md`, `CLAUDE.md`.
 
 ## Build, Test, and Development Commands
-Run commands from the target subproject directory.
+Run commands from the repository root.
 
-- `uv sync`: Install dependencies.
-- `uv run <server-name>`: Start a server (e.g., `uv run wifi-cam-mcp`).
-- `uv run pytest`: Run tests (currently only in `memory-mcp/`).
-- `uv run ruff check .`: Lint where configured (`memory-mcp/`, `wifi-cam-mcp/`).
+- `uv sync`: Install every workspace package and development dependency.
+- `uv run --package <package> <server-name>`: Start a server.
+- `uv run pytest <package-dir>/tests`: Run a package test suite.
+- `uv run ruff check <package-dir>`: Lint a package with its local configuration.
 
 ## Coding Style & Naming Conventions
-- Python 3.10+ baseline; `system-temperature-mcp/` requires Python 3.12+.
+- Python 3.13 is pinned at the workspace root.
 - 4‑space indentation, `snake_case` modules, `test_*.py` tests.
 - Ruff line length is 100; asyncio is the default style for async work.
 
 ## Testing Guidelines
 - Frameworks: `pytest` + `pytest-asyncio`.
-- Tests live in `memory-mcp/tests/`.
-- Example: `cd memory-mcp && uv run pytest`.
+- Tests live in each package's `tests/` directory.
+- Example: `uv run pytest memory-mcp/tests`.
 
 ## Configuration, Hardware, and WSL2 Notes
 - `.env` is not committed; pass camera credentials via environment variables.

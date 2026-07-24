@@ -52,10 +52,10 @@
 ### ソフトウェア
 
 **必須（全構成共通）:**
-- Python 3.10+
+- Python 3.13
 - uv（Python パッケージマネージャー）
 
-**MCP サーバーごと（使うものだけインストール）:**
+**外部ソフトウェアとサービス:**
 
 | ソフトウェア | 必要とする MCP | 備考 |
 |------------|--------------|------|
@@ -79,30 +79,33 @@ git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
-### 2. 依存関係の一括インストール
+### 2. workspace のインストール
 
-リポジトリ内すべての MCP サーバーをまとめて動かしたい場合は、同梱のスクリプトを使ってください：
+17 個の Python project は、root の lockfile と単一の root `.venv` を共有します。
+リポジトリ root で次の一コマンドを実行すると、全 MCP server、開発ツール、
+ElevenLabs/VOICEVOX 統合、Whisper 音声認識がまとめて入ります。
 
 ```bash
-./scripts/install-mcps.sh          # ランタイム依存 + 各 MCP が必要とする extras
-./scripts/install-mcps.sh --dev    # テスト／開発用に `dev` extra も含める
+uv sync
 ```
 
-スクリプトは各 MCP ディレクトリで `uv sync` を実行し、必要な extras を自動で渡します：
+installer wrapper を使うと、同じ sync のあと memory embedding model も
+事前 download します。
 
-- `tts-mcp` → `--extra all`（ElevenLabs と VOICEVOX 両方の統合を取り込む）
-- `wifi-cam-mcp` → `--extra transcribe`（Whisper による音声認識を追加）
-- `sociality-mcp` は uv workspace なので、`packages/*` 配下のサブ MCP は自動で解決されます
+```bash
+./scripts/install-mcps.sh
+```
 
-一部の身体パーツだけを使いたい場合は、このスクリプトをスキップして下記の個別セットアップ手順に従ってください。
+repository 内なら、server は
+`uv run --package <package> <entrypoint>` で直接起動できます。以下は
+動作確認用の例で、通常は Claude Code が `.mcp.json` から起動します。
 
-### 3. 各 MCP サーバーのセットアップ
+### 3. 各 MCP サーバーの設定
 
 #### usb-webcam-mcp（USB カメラ）
 
 ```bash
-cd usb-webcam-mcp
-uv sync
+uv run --package usb-webcam-mcp usb-webcam-mcp
 ```
 
 WSL2 の場合、USB カメラを転送する必要がある：
@@ -116,11 +119,10 @@ usbipd attach --wsl --busid <BUSID>
 #### wifi-cam-mcp（Wi-Fi カメラ）
 
 ```bash
-cd wifi-cam-mcp
-uv sync
+uv run --package wifi-cam-mcp wifi-cam-mcp
 
 # 環境変数を設定
-cp .env.example .env
+cp wifi-cam-mcp/.env.example wifi-cam-mcp/.env
 # .env を編集してカメラのIP、ユーザー名、パスワードを設定（後述）
 ```
 
@@ -172,18 +174,16 @@ cp .env.example .env
 #### memory-mcp（長期記憶）
 
 ```bash
-cd memory-mcp
-uv sync
+uv run --package memory-mcp memory-mcp
 ```
 
 #### tts-mcp（声）
 
 ```bash
-cd tts-mcp
-uv sync
+uv run --package tts-mcp tts-mcp
 
 # ElevenLabs を使う場合:
-cp .env.example .env
+cp tts-mcp/.env.example tts-mcp/.env
 # .env に ELEVENLABS_API_KEY を設定
 
 # VOICEVOX を使う場合（無料・ローカル）:
@@ -210,8 +210,7 @@ cp .env.example .env
 #### system-temperature-mcp（体温感覚）
 
 ```bash
-cd system-temperature-mcp
-uv sync
+uv run --package system-temperature-mcp system-temperature-mcp
 ```
 
 > **注意**: WSL2 環境では温度センサーにアクセスできないため動作しません。
@@ -221,8 +220,7 @@ uv sync
 Claude が X（Twitter）をリアルタイム検索し、ツイートを投稿できるようにします。
 
 ```bash
-cd x-mcp
-uv sync
+uv run --package x-mcp x-mcp
 ```
 
 **必要な API キー：**
@@ -245,13 +243,12 @@ uv sync
 
 ```bash
 cp examples/configs/socialPolicy.example.toml socialPolicy.toml
-
-(cd sociality-mcp && uv sync)
+uv run --package sociality-mcp sociality-mcp
 ```
 
 `sociality-mcp` は boundary 判定のためにデフォルトで `socialPolicy.toml` を読む。
-別ファイルを使う場合は `SOCIAL_POLICY_PATH` を設定する。内部モジュールを個別開発
-するときだけ、各 social subproject でも `uv sync` する。
+別ファイルを使う場合は `SOCIAL_POLICY_PATH` を設定する。内部 package も同じ root
+workspace の member なので、個別 install は不要です。
 
 ### 3. Claude Code 設定
 
@@ -523,6 +520,7 @@ cp autonomous-mcp.json.example autonomous-mcp.json
 cd desire-system
 cp .env.example .env
 # .env を編集して COMPANION_NAME などを設定
+cd ..
 uv sync
 ```
 
@@ -537,7 +535,7 @@ chmod +x autonomous-action.sh
 ```bash
 crontab -e
 # 以下を追加
-*/5  * * * * cd /path/to/embodied-claude/desire-system && uv run python desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
+*/5  * * * * cd /path/to/embodied-claude && uv run --package desire-system python desire-system/desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
 */10 * * * * /path/to/embodied-claude/autonomous-action.sh
 ```
 

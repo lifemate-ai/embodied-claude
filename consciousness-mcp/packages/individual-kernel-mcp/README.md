@@ -47,22 +47,22 @@ outward action.
 ## Setup And Verification
 
 ```bash
-uv sync --extra dev
-uv run pytest
-uv run ruff check .
+uv sync
+uv run pytest consciousness-mcp/packages/individual-kernel-mcp/tests
+uv run ruff check consciousness-mcp/packages/individual-kernel-mcp
 ```
 
 Start the MCP server:
 
 ```bash
-uv run individual-kernel-mcp
+uv run --package individual-kernel-mcp individual-kernel-mcp
 ```
 
 Run hook diagnostics:
 
 ```bash
 printf '%s\n' '{"session_id":"smoke","hook_event_name":"SessionStart"}' |
-  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook session-start | jq .
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run --package individual-kernel-mcp efpf-hook session-start | jq .
 ```
 
 ## Hook Smoke Tests
@@ -72,7 +72,7 @@ Create a field from a real `UserPromptSubmit` payload:
 ```bash
 printf '%s\n' \
   '{"session_id":"smoke","cwd":"/tmp","permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":"Inspect the room."}' |
-  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook user-prompt-submit | jq .
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run --package individual-kernel-mcp efpf-hook user-prompt-submit | jq .
 ```
 
 Verify that an outward tool without an intention is denied:
@@ -80,7 +80,7 @@ Verify that an outward tool without an intention is denied:
 ```bash
 printf '%s\n' \
   '{"session_id":"smoke","hook_event_name":"PreToolUse","tool_name":"mcp__tts__say","tool_input":{"text":"hello"},"tool_use_id":"tool-1"}' |
-  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook pre-tool-use | jq .
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run --package individual-kernel-mcp efpf-hook pre-tool-use | jq .
 ```
 
 Use the `get_current_subjective_field` and `propose_field_action` MCP tools,
@@ -93,7 +93,7 @@ Close the loop with a real `PostToolUse` payload:
 ```bash
 printf '%s\n' \
   '{"session_id":"smoke","hook_event_name":"PostToolUse","tool_name":"mcp__tts__say","tool_input":{"text":"hello"},"tool_use_id":"tool-1","tool_response":{"ok":true,"summary":"audio played"},"duration_ms":120}' |
-  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run efpf-hook post-tool-use | jq .
+  SOCIAL_DB_PATH=/tmp/efpf-smoke.db uv run --package individual-kernel-mcp efpf-hook post-tool-use | jq .
 ```
 
 ## Ablation

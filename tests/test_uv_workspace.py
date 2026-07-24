@@ -126,3 +126,29 @@ def test_efpf_hooks_run_from_the_root_workspace() -> None:
         ]
         assert commands
         assert all(command.startswith(prefix) for command in commands)
+
+
+def test_ci_uses_the_locked_root_workspace() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert 'python-version: "3.13"' in workflow
+    assert workflow.count("run: uv sync --locked") == 1
+    assert "working-directory:" not in workflow
+    assert "uv lock --check" in workflow
+
+
+def test_primary_docs_describe_the_single_workspace() -> None:
+    readme = (ROOT / "README.md").read_text()
+    readme_ja = (ROOT / "README-ja.md").read_text()
+    claude = (ROOT / "CLAUDE.md").read_text()
+    consciousness = (ROOT / "consciousness-mcp" / "README.md").read_text()
+    kernel = (
+        ROOT / "consciousness-mcp" / "packages" / "individual-kernel-mcp" / "README.md"
+    ).read_text()
+
+    assert "Python 3.13" in readme
+    assert "Python 3.13" in readme_ja
+    assert "single root `.venv`" in readme
+    assert "単一の root `.venv`" in readme_ja
+    assert "uv sync --extra dev" not in claude
+    assert "--package individual-kernel-mcp" in consciousness
+    assert "--package individual-kernel-mcp" in kernel

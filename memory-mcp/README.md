@@ -26,9 +26,8 @@ This MCP server provides long-term memory capabilities for AI assistants using *
 ## Installation
 
 ```bash
-cd memory-mcp
 uv sync
-uv run memory-mcp
+uv run --package memory-mcp memory-mcp
 ```
 
 ## Configuration
@@ -42,18 +41,10 @@ uv run memory-mcp
 If you have existing memories in ChromaDB (older versions used `~/.claude/memories/chroma`), run the migration script:
 
 ```bash
-cd memory-mcp
-
-# Install chromadb temporarily (only needed for migration)
-uv add --dev chromadb
-
-# Run migration
-uv run python scripts/migrate_chroma_to_sqlite.py \
+# Run from the repository root
+uv run --package memory-mcp python memory-mcp/scripts/migrate_chroma_to_sqlite.py \
     --source ~/.claude/memories/chroma \
     --dest ~/.claude/memories/memory.db
-
-# Remove chromadb after migration
-uv remove --dev chromadb
 ```
 
 The script migrates:
@@ -61,7 +52,8 @@ The script migrates:
 - Coactivation weights
 - Episodes
 
-> **Note**: The migration script temporarily installs `chromadb` as a dev dependency. It is not needed for normal operation and should be removed after migration.
+`chromadb` is already present in the unified workspace through the desire
+system, so the migration does not require a second environment.
 
 ## Tools
 
@@ -296,7 +288,7 @@ Add to your `~/.claude/settings.json`:
   "mcpServers": {
     "memory": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/memory-mcp", "memory-mcp"]
+      "args": ["run", "--package", "memory-mcp", "memory-mcp"]
     }
   }
 }
@@ -305,17 +297,17 @@ Add to your `~/.claude/settings.json`:
 ## Development
 
 ```bash
-# Install dev dependencies
-uv sync --all-extras
+# Install the root workspace and dev dependencies
+uv sync
 
 # Run tests
-uv run pytest
+uv run pytest memory-mcp/tests
 
 # Lint
-uv run ruff check .
+uv run ruff check memory-mcp
 
 # Type check
-uv run mypy src/memory_mcp/ --ignore-missing-imports
+uv run mypy memory-mcp/src/memory_mcp/ --ignore-missing-imports
 ```
 
 ## Architecture

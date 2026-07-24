@@ -9,10 +9,10 @@ input, and privacy-bounded autonomous ticks.
 
 ```bash
 # One-shot runner with a human-readable per-dimension report.
-uv run --directory sociality-mcp python ../benchmarks/human_response/run_suite.py
+uv run --package sociality-mcp python benchmarks/human_response/run_suite.py
 
 # Same thing, but as a pytest assertion against the §17 floors.
-uv run --directory sociality-mcp pytest ../benchmarks/human_response/test_suite.py -v
+uv run --package sociality-mcp pytest benchmarks/human_response/test_suite.py -v
 ```
 
 ## Scoring floors (§17 / §15.2)

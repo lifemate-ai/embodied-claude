@@ -52,10 +52,10 @@ Traditional LLMs were passive — they could only see what was shown to them. Wi
 ### Software
 
 **Required (all setups):**
-- Python 3.10+
+- Python 3.13
 - uv (Python package manager)
 
-**Per MCP server (install only what you use):**
+**External software and services:**
 
 | Software | Required by | Notes |
 |----------|------------|-------|
@@ -107,30 +107,33 @@ git clone https://github.com/kmizu/embodied-claude.git
 cd embodied-claude
 ```
 
-### 2. Install dependencies (one-shot)
+### 2. Install the workspace
 
-If you want every MCP server in this repo ready to run, use the bundled script:
+All 17 Python projects share one root lockfile and a single root `.venv`.
+From the repository root, one command installs every MCP server, development
+tool, ElevenLabs/VOICEVOX integration, and Whisper transcription support:
 
 ```bash
-./scripts/install-mcps.sh          # runtime deps + the extras each MCP requires
-./scripts/install-mcps.sh --dev    # also include the `dev` extra for testing / contributing
+uv sync
 ```
 
-The script runs `uv sync` in each MCP directory and passes the right extras:
+The installer wrapper performs the same sync and then pre-downloads the memory
+embedding model:
 
-- `tts-mcp` → `--extra all` (pulls in both the ElevenLabs and VOICEVOX integrations)
-- `wifi-cam-mcp` → `--extra transcribe` (adds Whisper-based speech recognition)
-- `sociality-mcp` is a uv workspace; its `packages/*` sub-MCPs are resolved automatically
+```bash
+./scripts/install-mcps.sh
+```
 
-If you only want a subset of body parts, skip the script and follow the per-server steps below instead.
+Run a server from anywhere inside the repository with
+`uv run --package <package> <entrypoint>`. The commands below are optional
+direct-start examples; Claude Code normally starts them from `.mcp.json`.
 
-### 3. Set up each MCP server
+### 3. Configure each MCP server
 
 #### usb-webcam-mcp (USB Camera)
 
 ```bash
-cd usb-webcam-mcp
-uv sync
+uv run --package usb-webcam-mcp usb-webcam-mcp
 ```
 
 On WSL2, you need to forward the USB camera:
@@ -144,11 +147,10 @@ usbipd attach --wsl --busid <BUSID>
 #### wifi-cam-mcp (Wi-Fi Camera)
 
 ```bash
-cd wifi-cam-mcp
-uv sync
+uv run --package wifi-cam-mcp wifi-cam-mcp
 
 # Set environment variables
-cp .env.example .env
+cp wifi-cam-mcp/.env.example wifi-cam-mcp/.env
 # Edit .env to set camera IP, username, and password (see below)
 ```
 
@@ -175,18 +177,16 @@ This is the tricky part. You need to create a **camera local account**, NOT a TP
 #### memory-mcp (Long-term Memory)
 
 ```bash
-cd memory-mcp
-uv sync
+uv run --package memory-mcp memory-mcp
 ```
 
 #### tts-mcp (Voice)
 
 ```bash
-cd tts-mcp
-uv sync
+uv run --package tts-mcp tts-mcp
 
 # For ElevenLabs:
-cp .env.example .env
+cp tts-mcp/.env.example tts-mcp/.env
 # Set ELEVENLABS_API_KEY in .env
 
 # For VOICEVOX (free & local):
@@ -213,8 +213,7 @@ cp .env.example .env
 #### system-temperature-mcp (Body Temperature)
 
 ```bash
-cd system-temperature-mcp
-uv sync
+uv run --package system-temperature-mcp system-temperature-mcp
 ```
 
 > **Note**: Does not work on WSL2 as temperature sensors are not accessible.
@@ -224,8 +223,7 @@ uv sync
 Lets Claude search X (Twitter) in real-time via Grok and post tweets.
 
 ```bash
-cd x-mcp
-uv sync
+uv run --package x-mcp x-mcp
 ```
 
 **Required API keys:**
@@ -248,13 +246,12 @@ one MCP process while reusing the split packages (`social-state-mcp`, `relations
 
 ```bash
 cp examples/configs/socialPolicy.example.toml socialPolicy.toml
-
-(cd sociality-mcp && uv sync)
+uv run --package sociality-mcp sociality-mcp
 ```
 
 `sociality-mcp` reads `socialPolicy.toml` for boundary evaluation by default. Override with
-`SOCIAL_POLICY_PATH` if you want a different policy file. If you want to develop the internal
-modules separately, run `uv sync` inside the individual social subprojects too.
+`SOCIAL_POLICY_PATH` if you want a different policy file. Its internal packages
+are members of the same root workspace and need no separate installation.
 
 ### 3. Claude Code Configuration
 
@@ -521,6 +518,7 @@ cp autonomous-mcp.json.example autonomous-mcp.json
 cd desire-system
 cp .env.example .env
 # Edit .env to set COMPANION_NAME etc.
+cd ..
 uv sync
 ```
 
@@ -535,7 +533,7 @@ chmod +x autonomous-action.sh
 ```bash
 crontab -e
 # Add the following
-*/5  * * * * cd /path/to/embodied-claude/desire-system && uv run python desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
+*/5  * * * * cd /path/to/embodied-claude && uv run --package desire-system python desire-system/desire_updater.py >> ~/.claude/autonomous-logs/desire-updater.log 2>&1
 */10 * * * * /path/to/embodied-claude/autonomous-action.sh
 ```
 

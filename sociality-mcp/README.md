@@ -10,7 +10,7 @@ testing.
 ## Setup
 
 ```bash
-cp ../examples/configs/socialPolicy.example.toml ../socialPolicy.toml
+cp examples/configs/socialPolicy.example.toml socialPolicy.toml
 uv sync
 ```
 
@@ -21,7 +21,7 @@ directory unless `SOCIAL_POLICY_PATH` is set.
 ## Run
 
 ```bash
-uv run sociality-mcp
+uv run --package sociality-mcp sociality-mcp
 ```
 
 ## Exposed Tools
