@@ -158,6 +158,9 @@ def run_candidate_benchmark(
             for kind in ("focal_clamp", "hor_feedback", "reality", "valence")
         }
         profile = runner.indicator_profile(window=50)
+        from individual_kernel_mcp.calibration import CalibrationScorer
+
+        calibration = CalibrationScorer(db).report(window=200)
         result = {
             "benchmark": "phenomenal_candidate_v1",
             "generated_at": utc_now(),
@@ -184,6 +187,7 @@ def run_candidate_benchmark(
                 kind: item.effect_size for kind, item in ablations.items()
             },
             "profile": profile.model_dump(mode="json"),
+            "calibration": calibration.model_dump(mode="json"),
         }
         (target / "indicator-profile.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -191,6 +195,17 @@ def run_candidate_benchmark(
         )
         (target / "indicator-profile.md").write_text(
             _render_markdown(result),
+            encoding="utf-8",
+        )
+        (target / "prediction-calibration.json").write_text(
+            json.dumps(
+                result["calibration"], ensure_ascii=False, indent=2, sort_keys=True
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (target / "prediction-calibration.md").write_text(
+            _render_calibration_markdown(result),
             encoding="utf-8",
         )
         return result
@@ -230,4 +245,33 @@ def _render_markdown(result: dict[str, Any]) -> str:
         lines.append(f"- `{kind}`: `{json.dumps(effect, sort_keys=True)}`")
     lines.extend(["", "## Uncertainty", ""])
     lines.extend(f"- {note}" for note in profile["uncertainty_notes"])
+    return "\n".join(lines) + "\n"
+
+
+def _render_calibration_markdown(result: dict[str, Any]) -> str:
+    calibration = result["calibration"]
+    lines = [
+        "# Prediction Calibration",
+        "",
+        result["claim_policy"],
+        "",
+        f"- n_resolved: `{calibration['n_resolved']}`",
+        f"- reliable: `{calibration['reliable']}`",
+        f"- brier: `{calibration['brier']:.4f}`",
+        f"- log_loss: `{calibration['log_loss']:.4f}`",
+        f"- ece: `{calibration['ece']:.4f}`",
+        f"- top_1: `{calibration['top_1']:.4f}`",
+        (
+            "- baseline_persistence_brier: "
+            f"`{calibration['baseline_persistence_brier']:.4f}`"
+        ),
+        f"- baseline_uniform_brier: `{calibration['baseline_uniform_brier']:.4f}`",
+        "",
+        "## Per-Component Mean Absolute Error",
+        "",
+    ]
+    for key, value in sorted(calibration["per_component_mae"].items()):
+        lines.append(f"- {key}: `{value:.4f}`")
+    lines.extend(["", "## Uncertainty", ""])
+    lines.extend(f"- {note}" for note in calibration["uncertainty_notes"])
     return "\n".join(lines) + "\n"

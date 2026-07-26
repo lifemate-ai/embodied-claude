@@ -52,6 +52,7 @@ class IndicatorProfile(BaseModel):
     report_independence: float = Field(ge=0.0, le=1.0)
     unity_violations: int = Field(ge=0)
     prediction_calibration: float = Field(ge=0.0, le=1.0)
+    prediction_calibration_detail: dict[str, Any] = Field(default_factory=dict)
     uncertainty_notes: list[str] = Field(default_factory=list)
 
 
@@ -245,6 +246,24 @@ class AblationRunner:
             """,
             (owner_id, limit),
         )
+        legacy_binary = _clamp01(
+            _mean([float(row["prediction_match"]) for row in transition_rows])
+        )
+        calibration_detail: dict[str, Any] = {
+            "source": "legacy_binary",
+            "legacy_binary": legacy_binary,
+        }
+        prediction_calibration = legacy_binary
+        try:
+            from individual_kernel_mcp.calibration import CalibrationScorer
+
+            detail = CalibrationScorer(self._db).detail(owner_id=owner_id, window=limit)
+            calibration_detail.update(detail)
+            if detail.get("reliable"):
+                prediction_calibration = _clamp01(1.0 - float(detail["brier"]))
+                calibration_detail["source"] = "generative"
+        except Exception:
+            calibration_detail["source"] = "legacy_binary_fallback"
         return IndicatorProfile(
             causal_centrality=_clamp01(causal),
             recurrent_closure=_clamp01(recurrent),
@@ -254,9 +273,8 @@ class AblationRunner:
             qualitative_transition_structure=_clamp01(qualitative),
             report_independence=_clamp01(report_independence),
             unity_violations=max(0, active - 1),
-            prediction_calibration=_clamp01(
-                _mean([float(row["prediction_match"]) for row in transition_rows])
-            ),
+            prediction_calibration=prediction_calibration,
+            prediction_calibration_detail=calibration_detail,
             uncertainty_notes=[
                 "Indicators measure implemented causal organization, not phenomenology.",
                 "Small fixture counts make effect sizes provisional.",
