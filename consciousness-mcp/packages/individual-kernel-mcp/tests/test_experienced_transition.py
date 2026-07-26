@@ -26,6 +26,14 @@ from individual_kernel_mcp.workspace import (
 _SIGNATURE = "desire|user_prompt|identity_coherence|neu|mid|no_action"
 
 
+@pytest.fixture(autouse=True)
+def _generative_flag_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate store/model unit tests from the automatic commit-time loop."""
+    toml = tmp_path / "behavior-off.toml"
+    toml.write_text("[individual-kernel]\ngenerative_field_model = false\n")
+    monkeypatch.setenv("MCP_BEHAVIOR_TOML", str(toml))
+
+
 def _producer(social_db: SocialDB, tmp_path: Path) -> TickProducer:
     interoception = tmp_path / "interoception.json"
     interoception.write_text(json.dumps({"now": {"arousal": 50.0}}))

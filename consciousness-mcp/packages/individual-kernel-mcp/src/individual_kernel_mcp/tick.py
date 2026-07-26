@@ -44,6 +44,7 @@ from individual_kernel_mcp.enacted_field import (
 )
 from individual_kernel_mcp.frame import ConsciousFrameInput, TickFrameStore
 from individual_kernel_mcp.hor import HORInput, HORRecord, HORStore
+from individual_kernel_mcp.prediction_loop import FieldPredictionLoop, generative_enabled
 from individual_kernel_mcp.quality_geometry import QualityGeometry, QualitySignature
 from individual_kernel_mcp.workspace import (
     CandidateKind,
@@ -120,6 +121,7 @@ class TickProducer:
         hors: HORStore | None = None,
         agency: AgencyStore | None = None,
         quality: QualityGeometry | None = None,
+        prediction: FieldPredictionLoop | None = None,
         interoception_path: str | Path | None = None,
         desires_path: str | Path | None = None,
     ) -> None:
@@ -131,6 +133,7 @@ class TickProducer:
         self.hors = hors or HORStore(db)
         self.agency = agency or AgencyStore(db)
         self.quality = quality or QualityGeometry(db)
+        self.prediction = prediction or FieldPredictionLoop(db, agency=self.agency)
         self.events = EventStore(db=db)
         self.interoception_path = (
             Path(interoception_path)
@@ -539,18 +542,30 @@ class TickProducer:
                 }
             )
             final = self.fields.update(final)
+            transition_action_id = self._transition_action_id(previous)
             self.quality.record_transition(
                 owner_id=final.owner_id,
                 from_field_id=previous.field_id if previous else None,
                 to_field_id=final.field_id,
                 from_content_ref=previous.focal_content_ref if previous else None,
                 to_content_ref=final.focal_content_ref,
-                action_id=self._transition_action_id(previous),
+                action_id=transition_action_id,
                 continuity_score=self._continuity_score(previous, final),
                 prediction_match=self._prediction_match(previous, final),
                 temporal_order=self._next_temporal_order(final.owner_id),
                 metadata={"trigger": final.trigger_kind.value},
             )
+            if generative_enabled():
+                try:
+                    self.prediction.record_transition_and_update(
+                        previous=previous,
+                        committed=final,
+                        action_id=transition_action_id,
+                    )
+                except Exception:
+                    # A prediction-layer fault must never abort a field commit
+                    # (same tolerance as the memory HTTP ingest).
+                    pass
         return TickCommit(
             field=final,
             competition=result,
@@ -1117,6 +1132,17 @@ class FieldRuntime:
         intention = self.agency.propose(proposal, owner_id=owner_id)
         field = self.fields.get(intention.field_id)
         if field is not None:
+            if generative_enabled():
+                try:
+                    distribution = self.producer.prediction.imagine_for_intention(
+                        field, intention
+                    )
+                except Exception:
+                    distribution = None
+                if distribution is not None:
+                    trace = dict(field.epistemic_trace)
+                    trace["protention_distribution_ref"] = distribution.distribution_id
+                    field = field.model_copy(update={"epistemic_trace": trace})
             self.fields.update(field)
         return intention
 
@@ -1189,6 +1215,13 @@ class FieldRuntime:
             )
             if not allowed:
                 self.agency.mark_denied(intention.action_id)
+                if generative_enabled():
+                    try:
+                        self.producer.prediction.mark_denied_trajectory(
+                            intention.action_id
+                        )
+                    except Exception:
+                        pass
                 return ToolGateDecision(
                     allow=False,
                     reason=f"boundary policy denied action: {boundary_reason}",
@@ -1212,6 +1245,11 @@ class FieldRuntime:
                 deferred=True,
             )
         self.agency.mark_allowed(intention.action_id)
+        if generative_enabled():
+            try:
+                self.producer.prediction.mark_enacted(intention.action_id)
+            except Exception:
+                pass
         return ToolGateDecision(
             allow=True,
             reason="field, intention, input hash, boundary, and bottleneck checks passed",
@@ -1292,6 +1330,14 @@ class FieldRuntime:
             source=CandidateSource.TOOL_RESULT,
         )
         commit = self.producer.compete_and_commit(micro.tick_id)
+        if outcome is not None and generative_enabled():
+            try:
+                self.producer.prediction.reconcile_trajectories(
+                    action_id=outcome.action_id,
+                    next_field_id=commit.field.field_id,
+                )
+            except Exception:
+                pass
         return outcome, assessment, commit.field
 
     def close_action(
@@ -1348,6 +1394,14 @@ class FieldRuntime:
             source=CandidateSource.TOOL_RESULT,
         )
         commit = self.producer.compete_and_commit(micro.tick_id)
+        if generative_enabled():
+            try:
+                self.producer.prediction.reconcile_trajectories(
+                    action_id=action_id,
+                    next_field_id=commit.field.field_id,
+                )
+            except Exception:
+                pass
         return outcome, assessment, commit.field
 
 
