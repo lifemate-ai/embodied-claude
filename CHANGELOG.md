@@ -32,6 +32,12 @@ All notable changes to embodied-claude are documented here.
 - docs: `phenomenal-architecture-current-state.md` and
   `generative-field-model-design.md`.
 
+### Fixed
+
+- individual-kernel: the mismatch-vector tokenizer now compares non-ASCII
+  runs as character bigrams, so Japanese result summaries no longer inflate
+  prediction error and deflate ownership scores. ASCII behavior is unchanged.
+
 ## [0.3.0] - 2026-07-24
 
 ### Added

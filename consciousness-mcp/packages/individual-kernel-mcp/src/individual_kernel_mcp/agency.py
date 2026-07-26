@@ -718,7 +718,24 @@ def _git_is_read_only(arguments: list[str]) -> bool:
 
 
 def _tokens(text: str) -> set[str]:
-    return {token for token in re.findall(r"[\w-]+", text.lower()) if len(token) > 2}
+    """Tokenize for mismatch overlap; ASCII words plus non-ASCII bigrams.
+
+    Whole-word matching collapses Japanese summaries into one giant token, so
+    non-ASCII runs are compared as character bigrams instead. ASCII behavior
+    is unchanged.
+    """
+    lowered = text.lower()
+    tokens = {
+        token
+        for token in re.findall(r"[a-z0-9_-]+", lowered)
+        if len(token) > 2
+    }
+    for run in re.findall(r"[^\x00-\x7f]+", lowered):
+        if len(run) == 1:
+            tokens.add(run)
+        else:
+            tokens.update(run[i : i + 2] for i in range(len(run) - 1))
+    return tokens
 
 
 def _temporal_contiguity(
