@@ -51,6 +51,7 @@ from individual_kernel_mcp.attention_schema import (
     Modality,
 )
 from individual_kernel_mcp.boundary_adapter import BoundaryPolicyAdapter
+from individual_kernel_mcp.calibration import CalibrationScorer
 from individual_kernel_mcp.counterfactual import (
     CounterfactualInput,
     CounterfactualSource,
@@ -65,6 +66,7 @@ from individual_kernel_mcp.frame import (
     ConsciousFrameInput,
     TickFrameStore,
 )
+from individual_kernel_mcp.generative_model import action_kind_of
 from individual_kernel_mcp.hor import (
     AssertedMode,
     HORInput,
@@ -72,6 +74,7 @@ from individual_kernel_mcp.hor import (
     TargetKind,
 )
 from individual_kernel_mcp.introspect import introspect
+from individual_kernel_mcp.prediction_loop import FieldPredictionLoop
 from individual_kernel_mcp.quality_geometry import QualityGeometry
 from individual_kernel_mcp.reflect import reflect_attention_schema
 from individual_kernel_mcp.sleep import SleepConsolidator
@@ -113,6 +116,7 @@ def _stores() -> IndividualKernelStores:
     enacted_fields = EnactedFieldStore(db)
     agency = AgencyStore(db)
     quality = QualityGeometry(db)
+    prediction = FieldPredictionLoop(db, agency=agency)
     tick_producer = TickProducer(
         db,
         workspace=workspace,
@@ -122,6 +126,7 @@ def _stores() -> IndividualKernelStores:
         hors=hor_store,
         agency=agency,
         quality=quality,
+        prediction=prediction,
     )
     field_runtime = FieldRuntime(
         db,
@@ -151,6 +156,91 @@ def reset_store_cache() -> None:
     if _stores.cache_info().currsize:
         _stores().db.close()
         _stores.cache_clear()
+
+
+# -----------------------------------------------------------------------------
+# Generative field model surface
+# -----------------------------------------------------------------------------
+
+
+@mcp.tool()
+def rollout_protention(
+    tool_name: str | None = None,
+    horizon: int = 2,
+    owner_id: str = "self",
+) -> dict[str, Any]:
+    """Roll the count-based transition model forward from the committed field.
+
+    Returns action-conditioned outcome predictions with probabilities and
+    per-step uncertainty. Read-only: nothing is persisted.
+    """
+    stores = _stores()
+    field = stores.enacted_fields.get_current(owner_id)
+    if field is None:
+        return {"error": "no committed field for owner"}
+    action_kind = action_kind_of(tool_name)
+    model = stores.tick_producer.prediction.model
+    signature = model.infer(field, action_kind=action_kind)
+    forecast = model.forecast(signature)
+    steps = model.rollout(field, action_kind=action_kind, horizon=horizon)
+    return {
+        "field_id": field.field_id,
+        "action_kind": action_kind,
+        "context_signature": signature.key(),
+        "forecast": forecast.model_dump(mode="json"),
+        "steps": [step.model_dump(mode="json") for step in steps],
+    }
+
+
+@mcp.tool()
+def query_imagined_trajectories(
+    field_id: str | None = None,
+    action_ref: str | None = None,
+    status: str | None = None,
+    owner_id: str = "self",
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """List persisted imagined trajectories, newest first."""
+    stores = _stores()
+    rows = stores.tick_producer.prediction.trajectories.query(
+        field_id=field_id,
+        action_ref=action_ref,
+        status=status,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [row.model_dump(mode="json") for row in rows]
+
+
+@mcp.tool()
+def query_experienced_transitions(
+    since: str | None = None,
+    action_kind: str | None = None,
+    context_signature: str | None = None,
+    owner_id: str = "self",
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """List experienced transitions, newest first."""
+    stores = _stores()
+    rows = stores.tick_producer.prediction.transitions.query(
+        since=since,
+        action_kind=action_kind,
+        context_signature=context_signature,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [row.model_dump(mode="json") for row in rows]
+
+
+@mcp.tool()
+def get_generative_model_calibration(
+    owner_id: str = "self",
+    window: int = 200,
+) -> dict[str, Any]:
+    """Score stored predictions against observed outcomes (Brier, log loss, ECE)."""
+    stores = _stores()
+    report = CalibrationScorer(stores.db).report(owner_id=owner_id, window=window)
+    return report.model_dump(mode="json")
 
 
 # -----------------------------------------------------------------------------
