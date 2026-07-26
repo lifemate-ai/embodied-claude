@@ -406,6 +406,150 @@ CREATE INDEX IF NOT EXISTS idx_field_transitions_action
     ON field_transitions(action_id, created_at DESC);
 """
 
+_MIGRATION_009_SQL = """
+CREATE TABLE IF NOT EXISTS protention_distributions (
+    distribution_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    field_id TEXT NOT NULL REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    action_ref TEXT REFERENCES field_intentions(action_id) ON DELETE SET NULL,
+    entropy REAL NOT NULL,
+    model_version TEXT NOT NULL,
+    trajectory_count INTEGER NOT NULL,
+    fork_id TEXT,
+    created_at TEXT NOT NULL,
+    CHECK(entropy >= 0.0 AND entropy <= 1.0)
+);
+CREATE INDEX IF NOT EXISTS idx_protention_distributions_field
+    ON protention_distributions(field_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_protention_distributions_action
+    ON protention_distributions(action_ref);
+
+CREATE TABLE IF NOT EXISTS imagined_trajectories (
+    trajectory_id TEXT PRIMARY KEY,
+    distribution_id TEXT NOT NULL
+        REFERENCES protention_distributions(distribution_id) ON DELETE CASCADE,
+    owner_id TEXT NOT NULL,
+    field_id TEXT NOT NULL REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    action_ref TEXT REFERENCES field_intentions(action_id) ON DELETE SET NULL,
+    action_kind TEXT NOT NULL,
+    context_signature TEXT NOT NULL,
+    horizon INTEGER NOT NULL,
+    steps_json TEXT NOT NULL,
+    probability REAL NOT NULL,
+    uncertainty REAL NOT NULL,
+    source_mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    status_history_json TEXT NOT NULL DEFAULT '[]',
+    expires_at TEXT,
+    fork_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK(status IN ('imagined','intended','enacted','observed',
+                     'contradicted','partially_observed','expired')),
+    CHECK(source_mode IN ('imagined')),
+    CHECK(probability >= 0.0 AND probability <= 1.0),
+    CHECK(horizon >= 1 AND horizon <= 5)
+);
+CREATE INDEX IF NOT EXISTS idx_imagined_trajectories_distribution
+    ON imagined_trajectories(distribution_id);
+CREATE INDEX IF NOT EXISTS idx_imagined_trajectories_action
+    ON imagined_trajectories(action_ref, status);
+CREATE INDEX IF NOT EXISTS idx_imagined_trajectories_field
+    ON imagined_trajectories(field_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS experienced_transitions (
+    transition_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    previous_field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE SET NULL,
+    next_field_id TEXT NOT NULL UNIQUE REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    previous_tick_id TEXT,
+    next_tick_id TEXT NOT NULL,
+    action_ref TEXT REFERENCES field_intentions(action_id) ON DELETE SET NULL,
+    outcome_ref TEXT,
+    intended_trajectory_id TEXT
+        REFERENCES imagined_trajectories(trajectory_id) ON DELETE SET NULL,
+    distribution_id TEXT,
+    context_signature TEXT NOT NULL,
+    action_kind TEXT NOT NULL,
+    outcome_bucket TEXT NOT NULL,
+    observed_external_json TEXT NOT NULL DEFAULT '{}',
+    observed_internal_json TEXT NOT NULL DEFAULT '{}',
+    observed_social_json TEXT NOT NULL DEFAULT '{}',
+    prediction_errors_json TEXT NOT NULL DEFAULT '{}',
+    mean_prediction_error REAL NOT NULL,
+    valence_before REAL NOT NULL,
+    valence_after REAL NOT NULL,
+    valence_change REAL NOT NULL,
+    arousal_before REAL NOT NULL,
+    arousal_after REAL NOT NULL,
+    controllability_delta REAL NOT NULL DEFAULT 0.0,
+    agency_confidence REAL NOT NULL,
+    ownership_confidence REAL NOT NULL,
+    success INTEGER,
+    latency_ms INTEGER,
+    expected_latency_ms INTEGER,
+    source_mode TEXT NOT NULL,
+    knowledge_source TEXT NOT NULL DEFAULT 'experienced',
+    info_content_hash TEXT,
+    pose_before_ref TEXT,
+    pose_after_ref TEXT,
+    body_delta_json TEXT NOT NULL DEFAULT '{}',
+    process_meta_ref TEXT,
+    allostatic_snapshot_json TEXT NOT NULL DEFAULT '{}',
+    hor_ref TEXT,
+    fork_id TEXT,
+    applied_at TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    CHECK(source_mode IN ('live','inferred','mixed')),
+    CHECK(knowledge_source IN ('experienced','told','imagined','replayed'))
+);
+CREATE INDEX IF NOT EXISTS idx_experienced_transitions_owner
+    ON experienced_transitions(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_experienced_transitions_context
+    ON experienced_transitions(context_signature, action_kind);
+CREATE INDEX IF NOT EXISTS idx_experienced_transitions_action
+    ON experienced_transitions(action_ref);
+
+CREATE TABLE IF NOT EXISTS generative_transition_stats (
+    owner_id TEXT NOT NULL,
+    focus_kind TEXT NOT NULL,
+    trigger_kind TEXT NOT NULL,
+    dominant_desire TEXT NOT NULL DEFAULT '',
+    valence_bucket TEXT NOT NULL,
+    arousal_bucket TEXT NOT NULL,
+    action_kind TEXT NOT NULL,
+    outcome_bucket TEXT NOT NULL,
+    observation_count REAL NOT NULL DEFAULT 0,
+    sum_valence_delta REAL NOT NULL DEFAULT 0.0,
+    sum_latency_ms REAL NOT NULL DEFAULT 0.0,
+    sum_prediction_error REAL NOT NULL DEFAULT 0.0,
+    last_transition_id TEXT,
+    model_version TEXT NOT NULL DEFAULT 'count_v1',
+    first_observed_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_id, focus_kind, trigger_kind, dominant_desire,
+                 valence_bucket, arousal_bucket, action_kind, outcome_bucket)
+);
+CREATE INDEX IF NOT EXISTS idx_generative_stats_action
+    ON generative_transition_stats(owner_id, action_kind, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS prediction_resolutions (
+    resolution_id TEXT PRIMARY KEY,
+    trajectory_id TEXT NOT NULL
+        REFERENCES imagined_trajectories(trajectory_id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL,
+    transition_id TEXT NOT NULL
+        REFERENCES experienced_transitions(transition_id) ON DELETE CASCADE,
+    hit INTEGER NOT NULL,
+    component_errors_json TEXT NOT NULL DEFAULT '{}',
+    resolved_at TEXT NOT NULL,
+    UNIQUE(trajectory_id, step_index)
+);
+"""
+
 
 MIGRATIONS = [
     Migration(
@@ -629,6 +773,10 @@ MIGRATIONS = [
     Migration(
         name="008_enacted_field_indexes",
         sql=_MIGRATION_008_SQL,
+    ),
+    Migration(
+        name="009_generative_field_model",
+        sql=_MIGRATION_009_SQL,
     ),
 ]
 

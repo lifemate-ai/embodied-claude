@@ -46,3 +46,7 @@ language = "ja"
 
 [ip-webcam]
 port = 8080
+
+[individual-kernel]
+generative_field_model = true      # 予測・学習ループ（追加テーブルへの書き込みのみ、行為選択は不変）
+generative_rollout_horizon = 2     # propose 時の rollout 深さ (1-5)
