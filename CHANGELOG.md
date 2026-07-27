@@ -6,6 +6,21 @@ All notable changes to embodied-claude are documented here.
 
 ### Added
 
+- individual-kernel: allostatic body state, behind `allostatic_valence` in
+  `[individual-kernel]` (default off). Desire levels are re-derived from the
+  recorded snapshot plus elapsed time, so the kernel owns the clock and an
+  external writer that stops running costs accuracy rather than motion.
+  Valence becomes an appetitive term (expected improvement from the count
+  model, scaled by measured control) minus an aversive one (unmet needs,
+  uncertainty, unresolved prediction error), and can now be positive; the
+  previous rule was bounded above by zero. `controllability` follows the
+  measured `ownership_score` instead of restating discomfort. No migration is
+  needed: every input already existed. With the flag off the legacy arithmetic
+  is reproduced exactly.
+- individual-kernel: `CountBasedGenerativeFieldModel.expected_valence_delta`,
+  the bucket-probability-weighted estimate of how affect will move in a
+  context.
+- docs: `allostatic-valence-design.md`.
 - individual-kernel: generative field model (count_v1). Registering an
   intention now persists a ProtentionDistribution (action branch plus a
   no-action branch, probabilities summing to 1); every arrived-at field
@@ -34,6 +49,11 @@ All notable changes to embodied-claude are documented here.
 
 ### Fixed
 
+- docs: `phenomenal-architecture-current-state.md` said the `desire-updater`
+  cron was not installed. It was installed, and had been failing silently
+  since 2026-05-13: first because `uv` was missing from cron's PATH, then
+  because the repository moved out of the working directory the crontab entry
+  changes into.
 - individual-kernel: the mismatch-vector tokenizer now compares non-ASCII
   runs as character bigrams, so Japanese result summaries no longer inflate
   prediction error and deflate ownership scores. ASCII behavior is unchanged.

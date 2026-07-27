@@ -79,9 +79,18 @@ flowchart TD
 - Valence was causally inert on the live path: computed only from the desire
   file as an EMA of `-0.6 * max(discomforts)` (structurally never positive),
   absent from competition weights and memory recall. The live
-  `~/.claude/desires.json` had been stale since 2026-05-18 with the
-  `desire-updater` cron not installed, pinning live valence at -0.30. The
-  allostatic rework owns the durable fix.
+  `~/.claude/desires.json` had been stale since 2026-05-18, pinning live
+  valence at -0.30.
+
+  Correction (2026-07-27, found while starting the allostatic rework): an
+  earlier revision of this document said the `desire-updater` cron was not
+  installed. It was installed, and had failed silently in two stages: `uv`
+  was not on cron's PATH (18k log lines, last written 2026-05-13), and later
+  the repository moved out of `~/repo/`, so the `cd` in the crontab entry
+  began failing before anything could be logged at all. A timer that is
+  present but dead is the worse failure, because nothing reports its absence.
+  The durable fix moves the clock into the kernel, so a stalled writer costs
+  corrections rather than motion.
 - `InteroceptionState.controllability` was derived from discomfort and not
   wired to the measured `ownership_score`.
 - `SleepConsolidator` was constructed without a quiet-hours predicate, so its
