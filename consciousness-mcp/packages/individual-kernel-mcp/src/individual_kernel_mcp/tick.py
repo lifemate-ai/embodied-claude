@@ -49,6 +49,7 @@ from individual_kernel_mcp.generative_model import NO_ACTION, ContextSignature
 from individual_kernel_mcp.hor import HORInput, HORRecord, HORStore
 from individual_kernel_mcp.prediction_loop import FieldPredictionLoop, generative_enabled
 from individual_kernel_mcp.quality_geometry import QualityGeometry, QualitySignature
+from individual_kernel_mcp.valence_coupling import AffectState
 from individual_kernel_mcp.workspace import (
     CandidateKind,
     CandidateSource,
@@ -109,6 +110,17 @@ UNRESOLVED_ERROR_WHEN_UNKNOWN = 0.5
 
 def allostatic_enabled() -> bool:
     return bool(get_behavior("individual-kernel", "allostatic_valence", False))
+
+
+def valence_coupling_enabled() -> bool:
+    """Whether affect may bias workspace competition.
+
+    Separate from `allostatic_valence`: one decides how the body state is
+    computed, this one decides whether that state is allowed to influence
+    what reaches the field. Either can be enabled without the other.
+    """
+
+    return bool(get_behavior("individual-kernel", "valence_coupling", False))
 
 
 def default_interoception_path() -> Path:
@@ -192,6 +204,9 @@ class TickProducer:
             else f"cont_{secrets.token_urlsafe(16)}"
         )
         interoception = self._read_interoception(previous)
+        # Candidate scores are frozen at insert, so affect has to be in force
+        # before any candidate is added for this tick.
+        self.workspace.affect = self._tick_affect(interoception)
         desire_snapshot = self._read_json(self.desires_path)
         dominant_desire = str(desire_snapshot.get("dominant") or "") or None
 
@@ -895,6 +910,22 @@ class TickProducer:
                 # than block a tick on a prediction or storage fault.
                 pass
         return self._legacy_interoception(previous)
+
+    def _tick_affect(self, interoception: InteroceptionState) -> AffectState:
+        """The affect in force for this tick's competition.
+
+        Returns neutral unless the coupling is enabled, and neutral affect
+        leaves every weight at its base value, so the default path scores
+        candidates exactly as it did before this feature existed.
+        """
+
+        if not valence_coupling_enabled():
+            return AffectState.neutral()
+        # InteroceptionState already validates both into range.
+        return AffectState(
+            valence=interoception.valence,
+            arousal=interoception.arousal,
+        )
 
     def _measured_controllability(self, previous: EnactedField | None) -> float:
         """Control as actually measured, not as inferred from discomfort.
