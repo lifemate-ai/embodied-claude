@@ -120,12 +120,36 @@ class WorkspaceEngine:
         db: SocialDB,
         *,
         weights: CompetitionWeights | None = None,
+        affect: "AffectState | None" = None,
     ) -> None:
+        # valence_coupling imports CompetitionWeights from this module, so the
+        # dependency is deferred into the methods that need it to avoid a cycle.
+        from individual_kernel_mcp.valence_coupling import AffectState
+
         self._db = db
         self.weights = weights or CompetitionWeights()
+        # Neutral affect leaves every weight at its base value, so an engine
+        # constructed without one behaves exactly as it did before coupling.
+        self.affect = affect or AffectState.neutral()
+
+    def effective_weights(self) -> CompetitionWeights:
+        """The weights actually in force for this tick, after affect."""
+        from individual_kernel_mcp.valence_coupling import modulate_weights
+
+        return modulate_weights(self.weights, self.affect)
+
+    def affect_trace(self) -> dict[str, float]:
+        """Applied weights, for the tick's epistemic trace.
+
+        Scores are frozen into each candidate at insert time, so a past
+        competition can only be audited against the weights that produced it.
+        """
+        from individual_kernel_mcp.valence_coupling import modulation_trace
+
+        return modulation_trace(self.weights, self.affect)
 
     def score_candidate(self, candidate: WorkspaceCandidate) -> float:
-        w = self.weights
+        w = self.effective_weights()
         score = (
             w.surprise * candidate.precision * abs(candidate.prediction_error)
             + w.need * candidate.need_relevance
