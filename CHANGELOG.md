@@ -60,6 +60,10 @@ All notable changes to embodied-claude are documented here.
 
 ### Fixed
 
+- interaction-orchestrator: the autonomous-planning test resolved quiet hours
+  against the wall clock, so it asserted the daytime branch and failed whenever
+  it ran between 22:00 and 07:00 JST. Quiet hours are now pinned explicitly and
+  both regimes are covered.
 - docs: `phenomenal-architecture-current-state.md` said the `desire-updater`
   cron was not installed. It was installed, and had been failing silently
   since 2026-05-13: first because `uv` was missing from cron's PATH, then
