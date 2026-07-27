@@ -432,6 +432,24 @@ class CountBasedGenerativeFieldModel:
                 return prediction.probability, forecast.basis, forecast.uncertainty
         return forecast.novel_probability, forecast.basis, forecast.uncertainty
 
+    def expected_valence_delta(self, signature: ContextSignature) -> float:
+        """How much affect this context is expected to move, in [-1, 1].
+
+        Each reachable outcome bucket contributes its learned mean valence
+        change, weighted by how likely that bucket is. With no history the
+        forecast falls back to the uniform prior, whose buckets carry small
+        symmetric deltas, so the estimate sits near zero rather than inventing
+        an expectation.
+        """
+
+        forecast = self.forecast(signature)
+        expected = sum(
+            prediction.probability
+            * self._mean_valence_delta(signature, prediction.bucket)
+            for prediction in forecast.predictions
+        )
+        return max(-1.0, min(1.0, expected))
+
     def _mean_valence_delta(self, signature: ContextSignature, bucket: str) -> float:
         for filters in signature.backoff_chain():
             clauses = ["owner_id = ?", "outcome_bucket = ?"]

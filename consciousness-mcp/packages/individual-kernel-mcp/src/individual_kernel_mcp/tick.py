@@ -10,7 +10,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ from social_core.events import EventStore
 from social_core.models import SocialEventCreate
 from social_core.time import utc_now
 
+from individual_kernel_mcp._behavior import get_behavior
 from individual_kernel_mcp.agency import (
     ActionOutcome,
     ActionProposal,
@@ -28,6 +29,7 @@ from individual_kernel_mcp.agency import (
     IntentionRecord,
     is_external_tool,
 )
+from individual_kernel_mcp.allostasis import compose_valence, project_desires
 from individual_kernel_mcp.attention_schema import AttentionSchema, AttentionSchemaTracker
 from individual_kernel_mcp.bottleneck import ActionBottleneck
 from individual_kernel_mcp.counterfactual import CounterfactualStore
@@ -43,6 +45,7 @@ from individual_kernel_mcp.enacted_field import (
     TriggerKind,
 )
 from individual_kernel_mcp.frame import ConsciousFrameInput, TickFrameStore
+from individual_kernel_mcp.generative_model import NO_ACTION, ContextSignature
 from individual_kernel_mcp.hor import HORInput, HORRecord, HORStore
 from individual_kernel_mcp.prediction_loop import FieldPredictionLoop, generative_enabled
 from individual_kernel_mcp.quality_geometry import QualityGeometry, QualitySignature
@@ -97,6 +100,15 @@ class TemporalSequenceMetrics(BaseModel):
 
 
 BoundaryEvaluator = Callable[[str, dict[str, Any], EnactedField], tuple[bool, str]]
+
+# Control and surprise both default to the midpoint when nothing has been
+# measured yet, so an unmeasured body state is neither confident nor alarmed.
+UNMEASURED_CONTROLLABILITY = 0.5
+UNRESOLVED_ERROR_WHEN_UNKNOWN = 0.5
+
+
+def allostatic_enabled() -> bool:
+    return bool(get_behavior("individual-kernel", "allostatic_valence", False))
 
 
 def default_interoception_path() -> Path:
@@ -872,6 +884,87 @@ class TickProducer:
             )
 
     def _read_interoception(
+        self,
+        previous: EnactedField | None,
+    ) -> InteroceptionState:
+        if allostatic_enabled():
+            try:
+                return self._allostatic_interoception(previous)
+            except Exception:
+                # The body state must always be producible; fall back rather
+                # than block a tick on a prediction or storage fault.
+                pass
+        return self._legacy_interoception(previous)
+
+    def _measured_controllability(self, previous: EnactedField | None) -> float:
+        """Control as actually measured, not as inferred from discomfort.
+
+        Ownership is only meaningful once an intention has been registered and
+        closed; before that there is nothing measured to report, so the neutral
+        midpoint stands in.
+        """
+
+        if previous is None:
+            return UNMEASURED_CONTROLLABILITY
+        agency = previous.agency_state
+        if agency is None or not agency.registered_intention:
+            return UNMEASURED_CONTROLLABILITY
+        return _clamp01(agency.ownership_score)
+
+    def _expected_valence_delta(self, previous: EnactedField | None) -> float:
+        if previous is None:
+            return 0.0
+        signature = ContextSignature.from_field(previous, action_kind=NO_ACTION)
+        return self.prediction.model.expected_valence_delta(signature)
+
+    def _unresolved_prediction_error(self) -> float:
+        recent = self.prediction.transitions.query(limit=1)
+        if not recent:
+            return UNRESOLVED_ERROR_WHEN_UNKNOWN
+        return _clamp01(recent[0].mean_prediction_error)
+
+    def _allostatic_interoception(
+        self,
+        previous: EnactedField | None,
+    ) -> InteroceptionState:
+        """Body state composed from projected needs and the learned model."""
+
+        raw = self._read_json(self.interoception_path)
+        now_readings = raw.get("now") or {}
+        # utc_now() yields an ISO string for storage; the projection needs a
+        # real instant to subtract from.
+        projection = project_desires(
+            self._read_json(self.desires_path), now=datetime.now(timezone.utc)
+        )
+        control = self._measured_controllability(previous)
+        uncertainty = 0.35 if raw else 0.6
+        state = compose_valence(
+            expected_valence_delta=self._expected_valence_delta(previous),
+            mean_discomfort=projection.mean_discomfort,
+            controllability=control,
+            uncertainty=uncertainty,
+            unresolved_error=self._unresolved_prediction_error(),
+        )
+        valence = state.valence
+        arousal = _clamp01(float(now_readings.get("arousal", 0.0)) / 100.0)
+        exposure = 0.0
+        if previous and valence < -0.2:
+            exposure = min(
+                86400.0,
+                previous.interoception.negative_exposure_seconds
+                + max(0.0, _seconds_between(previous.updated_at, utc_now())),
+            )
+        return InteroceptionState(
+            valence=valence,
+            arousal=arousal,
+            uncertainty=uncertainty,
+            controllability=control,
+            need_vector=projection.discomforts or projection.desires,
+            resource_refs=([str(self.interoception_path)] if raw else []),
+            negative_exposure_seconds=exposure,
+        )
+
+    def _legacy_interoception(
         self,
         previous: EnactedField | None,
     ) -> InteroceptionState:
