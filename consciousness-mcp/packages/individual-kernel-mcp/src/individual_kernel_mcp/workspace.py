@@ -11,10 +11,15 @@ import json
 import math
 import secrets
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 from social_core.db import SocialDB
 from social_core.time import utc_now
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime cycle
+    from individual_kernel_mcp.valence_coupling import AffectState
 
 
 class CandidateKind(StrEnum):
