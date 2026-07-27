@@ -6,6 +6,17 @@ All notable changes to embodied-claude are documented here.
 
 ### Added
 
+- individual-kernel: affective modulation of workspace competition, behind
+  `valence_coupling` in `[individual-kernel]` (default off). Negative affect
+  raises the weight on need relevance and lowers expected information gain;
+  positive affect raises information gain alone. The same two bids can now
+  resolve differently depending only on the body state, which is the first
+  time valence changes any decision. Neutral valence reproduces the base
+  weights exactly. The boundary gate reads none of it, and a test asserts an
+  identical `ToolGateDecision` under the best and worst representable affect;
+  ignition and conflict thresholds are likewise untouched. Arousal is accepted
+  and recorded but modulates nothing yet.
+- docs: `valence-coupling-design.md`.
 - individual-kernel: allostatic body state, behind `allostatic_valence` in
   `[individual-kernel]` (default off). Desire levels are re-derived from the
   recorded snapshot plus elapsed time, so the kernel owns the clock and an
