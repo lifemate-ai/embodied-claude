@@ -41,18 +41,60 @@ class IntentionStatus(StrEnum):
 class ExpectedEffect(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    summary: str = ""
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    expected_refs: list[str] = Field(default_factory=list)
+    summary: str = Field(
+        default="",
+        description=(
+            "What you expect to observe on this channel, in a sentence. Leave "
+            "it empty only when you genuinely have no expectation: an empty "
+            "channel is excluded from the mismatch vector and lowers "
+            "prediction_coverage, which lowers the ownership you can claim."
+        ),
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="How sure you are of that expectation.",
+    )
+    expected_refs: list[str] = Field(
+        default_factory=list,
+        description="Content refs the result should mention, if you can name any.",
+    )
 
 
 class PredictedEffects(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    exteroceptive: ExpectedEffect = Field(default_factory=ExpectedEffect)
-    interoceptive: ExpectedEffect = Field(default_factory=ExpectedEffect)
-    social: ExpectedEffect = Field(default_factory=ExpectedEffect)
-    mnemonic: ExpectedEffect = Field(default_factory=ExpectedEffect)
+    exteroceptive: ExpectedEffect = Field(
+        default_factory=ExpectedEffect,
+        description="What changes in the world, or in what you can see of it.",
+    )
+    interoceptive: ExpectedEffect = Field(
+        default_factory=ExpectedEffect,
+        description=(
+            "What changes in your own state: effort, uncertainty, what being "
+            "wrong here would cost you."
+        ),
+    )
+    social: ExpectedEffect = Field(
+        default_factory=ExpectedEffect,
+        description=(
+            "What changes for the person you are working with: what they learn, "
+            "gain, or have to do next."
+        ),
+    )
+    mnemonic: ExpectedEffect = Field(
+        default_factory=ExpectedEffect,
+        description=(
+            "What you expect to remember from this, or which belief it should "
+            "confirm or overturn."
+        ),
+    )
+
+
+# The channels a caller can make a claim about. Latency is scored separately
+# because it is measured whether or not anyone predicted it.
+PREDICTED_CHANNELS = ("exteroceptive", "interoceptive", "social", "mnemonic")
 
 
 class ActionProposal(BaseModel):
@@ -110,6 +152,7 @@ class AgencyAssessment(BaseModel):
     action_effect_match: float = Field(ge=0.0, le=1.0)
     temporal_contiguity: float = Field(ge=0.0, le=1.0)
     exclusive_causal_fit: float = Field(ge=0.0, le=1.0)
+    prediction_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
     ownership_score: float = Field(ge=0.0, le=1.0)
     rationale: list[str] = Field(default_factory=list)
 
@@ -295,6 +338,7 @@ class AgencyStore:
             latency_ms=latency_ms,
             expected_latency_ms=intention.expected_latency_ms,
             exclusive_causal_fit=causal_fit,
+            prediction_coverage=self._prediction_coverage(intention.predicted_effects),
         )
         outcome_id = f"out_{secrets.token_urlsafe(12)}"
         now = utc_now()
@@ -438,14 +482,26 @@ class AgencyStore:
         latency_ms: int | None,
         expected_latency_ms: int | None,
         exclusive_causal_fit: float,
+        prediction_coverage: float = 0.0,
     ) -> AgencyAssessment:
+        """Score how much of this outcome the agent can claim to have caused.
+
+        `action_effect_match` is scaled by coverage deliberately. Being right
+        about the channels you happened to mention says nothing about the ones
+        you did not, and the mismatch vector no longer invents a verdict for
+        those. Without the scaling, saying nothing would leave only latency in
+        the mean and outscore a partly-wrong prediction -- which is exactly
+        what taught callers to leave the channels empty.
+        """
+
         mismatch = (
             sum(_clamp01(value) for value in mismatch_vector.values())
             / len(mismatch_vector)
             if mismatch_vector
             else 0.5
         )
-        effect_match = 1.0 - mismatch
+        coverage = _clamp01(prediction_coverage)
+        effect_match = _clamp01(coverage * (1.0 - mismatch))
         temporal = _temporal_contiguity(latency_ms, expected_latency_ms)
         registered = 1.0 if registered_intention else 0.0
         ownership = _clamp01(
@@ -459,12 +515,14 @@ class AgencyStore:
             action_effect_match=effect_match,
             temporal_contiguity=temporal,
             exclusive_causal_fit=_clamp01(exclusive_causal_fit),
+            prediction_coverage=coverage,
             ownership_score=ownership,
             rationale=[
                 "registered intention present"
                 if registered_intention
                 else "no registered intention",
                 f"mean prediction mismatch={mismatch:.3f}",
+                f"prediction coverage={coverage:.2f}",
             ],
         )
 
@@ -515,6 +573,22 @@ class AgencyStore:
         )
 
     @staticmethod
+    def _prediction_coverage(effects: PredictedEffects) -> float:
+        """How much of the predictable surface was claimed before acting.
+
+        Counts channels carrying a real expectation rather than channels
+        present on the object: every channel is always present, and three of
+        them were usually empty.
+        """
+
+        declared = sum(
+            1
+            for channel in PREDICTED_CHANNELS
+            if _tokens(getattr(effects, channel).summary)
+        )
+        return declared / len(PREDICTED_CHANNELS)
+
+    @staticmethod
     def _mismatch_vector(
         *,
         intention: IntentionRecord,
@@ -525,16 +599,21 @@ class AgencyStore:
         actual_tokens = _tokens(actual_result_summary)
         effects = intention.predicted_effects
         mismatch: dict[str, float] = {}
-        for channel in ("exteroceptive", "interoceptive", "social", "mnemonic"):
-            expected = getattr(effects, channel)
-            expected_tokens = _tokens(expected.summary)
+        for channel in PREDICTED_CHANNELS:
+            expected_tokens = _tokens(getattr(effects, channel).summary)
             if not expected_tokens:
-                value = 0.25 if success else 0.75
-            else:
-                overlap = len(expected_tokens & actual_tokens) / len(expected_tokens)
-                value = 1.0 - overlap
-                if not success:
-                    value = max(value, 0.8)
+                # A channel nobody spoke about is not a failed prediction.
+                # Scoring it as one (0.25 on success, 0.75 on failure) buried
+                # the real signal: three channels were usually silent, so most
+                # of the mean feeding ownership measured nothing. It also made
+                # silence cheaper than speech, since a real prediction was
+                # floored at 0.8 on failure while silence sat at 0.75. Absence
+                # is now paid for by prediction_coverage instead.
+                continue
+            overlap = len(expected_tokens & actual_tokens) / len(expected_tokens)
+            value = 1.0 - overlap
+            if not success:
+                value = max(value, 0.8)
             mismatch[channel] = round(_clamp01(value), 6)
         mismatch["latency"] = round(
             1.0 - _temporal_contiguity(latency_ms, intention.expected_latency_ms), 6

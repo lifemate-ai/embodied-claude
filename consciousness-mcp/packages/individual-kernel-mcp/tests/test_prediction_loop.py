@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 from social_core.db import SocialDB
 
-from individual_kernel_mcp.agency import ActionProposal, PredictedEffects
+from individual_kernel_mcp.agency import (
+    ActionProposal,
+    ExpectedEffect,
+    PredictedEffects,
+)
 from individual_kernel_mcp.enacted_field import TriggerKind
 from individual_kernel_mcp.experienced_transition import ExperiencedTransitionStore
 from individual_kernel_mcp.generative_model import CountBasedGenerativeFieldModel
@@ -99,7 +103,21 @@ def _proposal(field, confidence: float = 0.6) -> ActionProposal:
         field_id=field.field_id,
         tool_name="Write",
         tool_input=dict(_TOOL_INPUT),
-        predicted_effects=PredictedEffects(),
+        # A cycle with nothing predicted is not a full cycle. Channels left
+        # empty are no longer scored, so an empty PredictedEffects would give
+        # the loop nothing to compare and the assertions below would be
+        # asserting the absence of work.
+        #
+        # Mismatch is token overlap against the result summary, so a fixture
+        # standing for "predicted this well" has to share the vocabulary of
+        # "fixture file written successfully". The phrasing is terse for that
+        # reason, not because a real prediction would be.
+        predicted_effects=PredictedEffects(
+            exteroceptive=ExpectedEffect(summary="fixture file written"),
+            interoceptive=ExpectedEffect(summary="written successfully"),
+            social=ExpectedEffect(summary="fixture written"),
+            mnemonic=ExpectedEffect(summary="file written successfully"),
+        ),
         goal="write the fixture file",
         confidence=confidence,
     )
