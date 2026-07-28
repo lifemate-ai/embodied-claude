@@ -15,7 +15,7 @@ from mcp.types import (
 )
 
 from ._behavior import get_behavior
-from .camera import TapoCamera
+from .camera import TapoCamera, describe_pose
 from .config import CameraConfig, ServerConfig
 
 logging.basicConfig(level=logging.INFO)
@@ -397,7 +397,11 @@ class CameraMCPServer:
                             ),
                             TextContent(
                                 type="text",
-                                text=f"Captured image at {result.timestamp} ({result.width}x{result.height})",
+                                text=(
+                                    f"Captured image at {result.timestamp}"
+                                    f" ({result.width}x{result.height}),"
+                                    f" {describe_pose(result.pose)}"
+                                ),
                             ),
                         ]
 

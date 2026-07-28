@@ -39,6 +39,11 @@ class CaptureResult:
     timestamp: str
     width: int
     height: int
+    # Where the camera was pointing when this was taken, in the user's frame.
+    # None when the device would not report it: a picture with no coordinates
+    # is better than a picture with guessed ones, because a guess accumulates
+    # into a map you then trust.
+    pose: "CameraPosition | None" = None
 
 
 @dataclass(frozen=True)
@@ -74,12 +79,75 @@ class CameraPosition:
     tilt: float = 0.0  # normalized -1.0 to +1.0 (ONVIF) or degrees (software)
 
 
+def to_user_frame(x: float, y: float, mount_mode: str) -> CameraPosition:
+    """Put a raw ONVIF position into the frame of the person in the room.
+
+    Positive pan is to their right, positive tilt is up. Both axes, not one.
+
+    The device disagrees on both counts: on a Tapo C220 positive x is
+    physically left (which is why `_move_impl` sends +x for Direction.LEFT)
+    and positive y is physically down. Tilt was already being flipped here;
+    pan was not, so the returned pose was half in the user's frame and half in
+    the device's. Read as a coordinate, its sign said the opposite of where the
+    camera was pointing -- and `body_contingency` maps look_left to pan -1.0
+    and look_right to +1.0, so connecting the two would have inverted every
+    camera agency verdict.
+
+    Ceiling mounting turns the camera upside-down, mirroring both axes again.
+    """
+
+    pan = -x
+    tilt = -y
+    if mount_mode == "ceiling":
+        pan = -pan
+        tilt = -tilt
+    return CameraPosition(pan=pan, tilt=tilt)
+
+
+def describe_pose(pose: "CameraPosition | None") -> str:
+    """Say where the camera is aimed, in degrees and in words.
+
+    Degrees rather than the raw normalized value because -0.40 does not
+    accumulate into a sense of the room, and 72 degrees left does. The words
+    are there so a sign error is visible as a contradiction rather than hiding
+    in a minus.
+
+    Said as an offset from centre, because that is what it is: the zero of the
+    normalized range is the middle of the camera's travel, not anything about
+    the room. Reading it as "the right-hand side of the room" would put every
+    remembered heading in a frame the camera does not have.
+    """
+
+    if pose is None:
+        return "aim unknown (the camera did not report its position)"
+
+    pan_deg = pose.pan * PAN_RANGE_DEGREES
+    tilt_deg = pose.tilt * TILT_RANGE_DEGREES
+
+    parts = []
+    if abs(pan_deg) >= 3:
+        parts.append(f"{abs(pan_deg):.0f} deg {'right' if pan_deg > 0 else 'left'}")
+    if abs(tilt_deg) >= 3:
+        parts.append(f"{abs(tilt_deg):.0f} deg {'up' if tilt_deg > 0 else 'down'}")
+    if not parts:
+        return "aimed at centre"
+    return "aimed " + " and ".join(parts) + " from centre"
+
+
 # ---------------------------------------------------------------------------
 # Degree <-> ONVIF normalized conversion helpers
 # ---------------------------------------------------------------------------
 # Tapo PTZ cameras typically report pan in [-1.0, 1.0] mapping to [-180, 180]
 # and tilt in [-1.0, 1.0] mapping to roughly [-45, 90] (varies by model).
-# We use 180 and 90 as conservative defaults.
+#
+# The pan figure is measured, not assumed: commanding a 30 degree turn on the
+# camera in this room moved the reported position by 0.165, which is 29.7
+# degrees at this scale, and the reading returned to its exact prior value on
+# the way back. So a heading in degrees means the same thing as a movement in
+# degrees, and the two can be reasoned about together.
+#
+# The tilt figure is still the conservative default -- the same check has not
+# been run on that axis, so tilt degrees may be off by a scale factor.
 
 PAN_RANGE_DEGREES = 180.0
 TILT_RANGE_DEGREES = 90.0
@@ -439,6 +507,11 @@ class TapoCamera:
             timestamp=timestamp,
             width=width,
             height=height,
+            # Asked for here rather than left to the caller: an image and the
+            # angle it was taken at are two facts that have to be stapled
+            # together by whoever wants a map, and a caller under pressure
+            # forgets. Arriving together, they cannot come apart.
+            pose=await self.get_hw_position(),
         )
 
     async def _try_onvif_snapshot(self) -> bytes | None:
@@ -660,22 +733,19 @@ class TapoCamera:
 
         Returns:
             CameraPosition with hardware-reported values, or None if unavailable.
-            Values are normalized so that positive tilt = UP from the
-            user's perspective regardless of mount mode.
+            Both axes are in the user's frame: positive pan is to their right,
+            positive tilt is up, whatever the mount mode. See `to_user_frame`.
         """
         try:
             await self._ensure_connected()
             status = await self._ptz_service.GetStatus({"ProfileToken": self._profile_token})
             if status.Position and status.Position.PanTilt:
-                pan = status.Position.PanTilt.x
-                # Tapo ONVIF: y+ = physical DOWN (desk mount), flip for user
-                tilt = -status.Position.PanTilt.y
                 mount_mode = get_behavior("wifi-cam", "mount_mode", self._config.mount_mode)
-                if mount_mode == "ceiling":
-                    # Ceiling: camera upside-down, both axes mirror
-                    pan = -pan
-                    tilt = -tilt
-                return CameraPosition(pan=pan, tilt=tilt)
+                return to_user_frame(
+                    status.Position.PanTilt.x,
+                    status.Position.PanTilt.y,
+                    mount_mode,
+                )
         except Exception as e:
             logger.debug("Failed to get hardware position: %s", e)
         return None
