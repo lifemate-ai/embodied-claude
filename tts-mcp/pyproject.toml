@@ -1,6 +1,6 @@
 [project]
 name = "tts-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "MCP server for text-to-speech (ElevenLabs + VOICEVOX)"
 requires-python = ">=3.10"
 dependencies = [

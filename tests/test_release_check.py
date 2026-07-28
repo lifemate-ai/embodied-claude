@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-RELEASE_VERSION = "0.4.0"
+RELEASE_VERSION = "0.4.1"
 RELEASE_TAG = f"v{RELEASE_VERSION}"
 
 

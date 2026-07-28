@@ -4,6 +4,13 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-28
+
+A patch for one defect found immediately after 0.4.0 shipped: the gate that
+decides whether a shell command is inspection or a side effect was parsing the
+command as a string, so ordinary reads were refused. Nothing in the
+architecture changed.
+
 ### Fixed
 
 - individual-kernel: the bash gate read the command as a string rather than as

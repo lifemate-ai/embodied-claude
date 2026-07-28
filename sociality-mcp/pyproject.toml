@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sociality-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "Unified MCP facade for Kokone's social middle layer"
 readme = "README.md"
 requires-python = ">=3.12"
