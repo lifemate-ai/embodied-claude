@@ -1165,7 +1165,7 @@ class TickProducer:
 
     @staticmethod
     def _build_protention(result: CompetitionResult) -> Protention:
-        predicted = result.top_rejected[0] if result.top_rejected else result.winner
+        predicted = result.next_focus_candidate
         confidence = _clamp01(
             0.45 * result.attention_intensity
             + 0.35 * (1.0 - result.entropy)

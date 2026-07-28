@@ -115,6 +115,18 @@ class CompetitionResult(BaseModel):
     attention_intensity: float = Field(ge=0.0, le=1.0)
     deterministic_order: list[str] = Field(default_factory=list)
 
+    @property
+    def next_focus_candidate(self) -> WorkspaceCandidate:
+        """The candidate expected to take focus next.
+
+        The runner-up when the competition rejected anything, otherwise the
+        winner: with nothing contesting it, focus stays where it is. Both the
+        protention and the attention schema answer this question, and a tick
+        that answered it twice could answer it two ways, so it is answered
+        here once.
+        """
+        return self.top_rejected[0] if self.top_rejected else self.winner
+
 
 class WorkspaceEngine:
     """SQLite-backed candidate market with deterministic tie breaking."""

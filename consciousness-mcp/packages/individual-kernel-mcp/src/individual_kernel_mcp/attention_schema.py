@@ -193,9 +193,7 @@ class AttentionSchemaTracker:
         modality = self._infer_modality_from_candidate(
             result.winner.modality, focal
         )
-        predicted_next = (
-            result.top_rejected[0].content_ref if result.top_rejected else focal
-        )
+        predicted_next = result.next_focus_candidate.content_ref
         control_handle = (
             f"shift:{result.top_rejected[0].candidate_id}"
             if result.conflicted and result.top_rejected
