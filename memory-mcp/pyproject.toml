@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "memory-mcp"
-version = "0.4.3"
+version = "0.4.4"
 description = "MCP server for AI long-term memory - Let AI remember across sessions!"
 readme = "README.md"
 requires-python = ">=3.10"

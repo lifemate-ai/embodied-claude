@@ -4,6 +4,41 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-28
+
+Feedback from a session run against the 0.4.3 gate: predictions were being
+filled in on one channel and left empty on the other three, so the mismatch
+signal the whole loop is built on was mostly noise. That looked like a
+reporting habit. It was the scoring rule.
+
+### Fixed
+
+- individual-kernel: a channel with no declared prediction was scored anyway --
+  0.25 when the action succeeded, 0.75 when it failed -- while a channel that
+  did carry a prediction was floored at 0.8 on failure. Declaring an
+  expectation could therefore only lower the score, and since three channels
+  were usually silent, three quarters of the mean feeding `ownership_score`
+  measured nothing. Unpredicted channels are now absent from the mismatch
+  vector, which holds only real comparisons.
+- individual-kernel: absence is paid for by `prediction_coverage` instead, a
+  new term on `AgencyAssessment` that scales `action_effect_match`. Being right
+  about the channels you mentioned says nothing about the ones you did not, so
+  predicting nothing now contributes zero there rather than collecting a free
+  0.25 per silent channel. The ordering is the intended one again: an accurate
+  prediction beats a partial one, which beats silence.
+- individual-kernel: `ExpectedEffect` and `PredictedEffects` carry field
+  descriptions, so the tool schema says what belongs on each channel instead of
+  leaving a caller to infer it from the field name.
+
+### Changed
+
+- individual-kernel: the prediction-loop fixture declares expectations on all
+  four channels. It previously passed an empty `PredictedEffects` and asserted
+  that every channel key appeared in `prediction_errors`, which held only
+  because silent channels were being scored -- and reconciled as `observed`
+  only because those free 0.25s dragged the mean down. A test named for a full
+  cycle now runs one.
+
 ## [0.4.3] - 2026-07-28
 
 Two flags were waiting on evidence rather than on work. One now has it and

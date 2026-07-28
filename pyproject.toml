@@ -1,6 +1,6 @@
 [project]
 name = "embodied-claude-workspace"
-version = "0.4.3"
+version = "0.4.4"
 description = "Unified development and runtime environment for embodied-claude MCP servers."
 requires-python = ">=3.13,<3.14"
 dependencies = [

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-grammar"
-version = "0.4.3"
+version = "0.4.4"
 description = "PEG-based agent grammar for embodied Kokone — observation/inference flow control"
 readme = "README.md"
 requires-python = ">=3.12"
