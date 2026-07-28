@@ -6,6 +6,18 @@ All notable changes to embodied-claude are documented here.
 
 ### Added
 
+- individual-kernel: body contingency. `exclusive_causal_fit` is now the
+  reafference between the commanded pose change and the observed one --
+  direction, magnitude, and timing -- instead of a restatement of whether the
+  tool call returned successfully. A camera that moves with nothing commanded
+  scores `externally_caused`, one that moves the wrong way `inverted`, and one
+  that does not move at all `unresponsive`; each caps the score well below a
+  matched movement. Actions with no body channel resolve to `unverified` and
+  keep the previous 1.0/0.65 heuristic exactly, so nothing outside the camera
+  tools is re-scored. Verdicts land in a new `body_contingencies` ledger, one
+  row per action.
+- social-core: migration `010_body_contingency`.
+- docs: `body-agency.md`.
 - individual-kernel: affective modulation of workspace competition, behind
   `valence_coupling` in `[individual-kernel]` (default off). Negative affect
   raises the weight on need relevance and lowers expected information gain;

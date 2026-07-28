@@ -15,6 +15,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from social_core.db import SocialDB
 from social_core.time import utc_now
 
+from individual_kernel_mcp.body_contingency import (
+    BodyContingencyStore,
+    BodyObservation,
+    ContingencyVerdict,
+    commanded_delta_from_tool,
+    evaluate_reafference,
+)
+
+# Fallback causal fit when no body observation exists. This is the pre-PR-4
+# heuristic, kept so actions with no body channel score exactly as before.
+UNVERIFIED_CAUSAL_FIT_SUCCESS = 1.0
+UNVERIFIED_CAUSAL_FIT_FAILURE = 0.65
+
 
 class IntentionStatus(StrEnum):
     PENDING = "PENDING"
@@ -254,6 +267,7 @@ class AgencyStore:
         success: bool,
         actual_result_ref: str | None = None,
         latency_ms: int | None = None,
+        body_observation: BodyObservation | None = None,
     ) -> tuple[ActionOutcome, AgencyAssessment]:
         intention = self.get(action_id)
         if intention is None:
@@ -269,12 +283,18 @@ class AgencyStore:
             success=success,
             latency_ms=latency_ms,
         )
+        causal_fit, reafference = self._causal_fit(
+            intention=intention,
+            success=success,
+            body_observation=body_observation,
+            latency_ms=latency_ms,
+        )
         assessment = self.assess(
             registered_intention=True,
             mismatch_vector=mismatch,
             latency_ms=latency_ms,
             expected_latency_ms=intention.expected_latency_ms,
-            exclusive_causal_fit=1.0 if success else 0.65,
+            exclusive_causal_fit=causal_fit,
         )
         outcome_id = f"out_{secrets.token_urlsafe(12)}"
         now = utc_now()
@@ -338,6 +358,55 @@ class AgencyStore:
         outcome = self.outcome_for_action(action_id)
         assert outcome is not None
         return outcome, assessment
+
+    def _causal_fit(
+        self,
+        *,
+        intention: IntentionRecord,
+        success: bool,
+        body_observation: BodyObservation | None,
+        latency_ms: int | None,
+    ) -> tuple[float, Any]:
+        """Derive exclusive causal fit from the reafference when one exists.
+
+        Without a body observation there is nothing to compare, so the old
+        success heuristic stands and the verdict is recorded as UNVERIFIED
+        rather than dressed up as evidence.
+        """
+        commanded = commanded_delta_from_tool(
+            intention.tool_name, intention.normalized_tool_input
+        )
+        observation = body_observation
+        if observation is not None and observation.observed_latency_ms is None:
+            observation = observation.model_copy(
+                update={"observed_latency_ms": latency_ms}
+            )
+        verdict = evaluate_reafference(
+            commanded_delta=commanded,
+            observation=observation,
+            expected_latency_ms=intention.expected_latency_ms,
+        )
+        try:
+            BodyContingencyStore(self._db).record(
+                verdict=verdict,
+                observation=observation,
+                action_id=intention.action_id,
+                field_id=intention.field_id,
+                tick_id=intention.tick_id,
+                expected_latency_ms=intention.expected_latency_ms,
+            )
+        except Exception:
+            # The ledger is an audit trail, not a precondition for closing an
+            # action. A storage fault must not strand a pending intention.
+            pass
+        if verdict.verdict is ContingencyVerdict.UNVERIFIED:
+            fallback = (
+                UNVERIFIED_CAUSAL_FIT_SUCCESS
+                if success
+                else UNVERIFIED_CAUSAL_FIT_FAILURE
+            )
+            return fallback, verdict
+        return verdict.score, verdict
 
     def assess_uncommanded_outcome(
         self,

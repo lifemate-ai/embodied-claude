@@ -406,6 +406,48 @@ CREATE INDEX IF NOT EXISTS idx_field_transitions_action
     ON field_transitions(action_id, created_at DESC);
 """
 
+_MIGRATION_010_SQL = """
+CREATE TABLE IF NOT EXISTS body_contingencies (
+    contingency_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    action_id TEXT REFERENCES field_intentions(action_id) ON DELETE SET NULL,
+    outcome_ref TEXT REFERENCES field_action_outcomes(outcome_id) ON DELETE SET NULL,
+    field_id TEXT REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    tick_id TEXT REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    channel TEXT NOT NULL DEFAULT 'camera_pose',
+    commanded_delta_json TEXT NOT NULL DEFAULT '{}',
+    observed_before_json TEXT NOT NULL DEFAULT '{}',
+    observed_after_json TEXT NOT NULL DEFAULT '{}',
+    observed_delta_json TEXT NOT NULL DEFAULT '{}',
+    verdict TEXT NOT NULL,
+    reafference_score REAL NOT NULL,
+    direction_score REAL NOT NULL,
+    magnitude_score REAL NOT NULL,
+    timing_score REAL NOT NULL,
+    magnitude_ratio REAL,
+    observed_latency_ms INTEGER,
+    expected_latency_ms INTEGER,
+    observation_source TEXT NOT NULL DEFAULT 'measured',
+    rationale_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    CHECK(reafference_score >= 0.0 AND reafference_score <= 1.0),
+    CHECK(direction_score >= 0.0 AND direction_score <= 1.0),
+    CHECK(magnitude_score >= 0.0 AND magnitude_score <= 1.0),
+    CHECK(timing_score >= 0.0 AND timing_score <= 1.0),
+    CHECK(observation_source IN ('measured', 'declared')),
+    CHECK(verdict IN (
+        'self_caused', 'inverted', 'unresponsive',
+        'externally_caused', 'no_change', 'unverified'
+    ))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_body_contingencies_action
+    ON body_contingencies(action_id) WHERE action_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_body_contingencies_owner_created
+    ON body_contingencies(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_body_contingencies_verdict
+    ON body_contingencies(verdict, created_at DESC);
+"""
+
 _MIGRATION_009_SQL = """
 CREATE TABLE IF NOT EXISTS protention_distributions (
     distribution_id TEXT PRIMARY KEY,
@@ -777,6 +819,10 @@ MIGRATIONS = [
     Migration(
         name="009_generative_field_model",
         sql=_MIGRATION_009_SQL,
+    ),
+    Migration(
+        name="010_body_contingency",
+        sql=_MIGRATION_010_SQL,
     ),
 ]
 
