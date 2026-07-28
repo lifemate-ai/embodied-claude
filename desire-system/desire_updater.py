@@ -37,7 +37,15 @@ from backend import (
 load_dotenv()
 
 # 欲求レベル出力先
-DESIRES_PATH = Path(os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json")))
+# expanduser() is required. The default is built from Path.home() and is fine,
+# but .env carries DESIRES_PATH=~/.claude/desires.json as a plain string, and an
+# unexpanded tilde is a relative path: the updater created a directory literally
+# named `~` under its working directory and wrote there. It had been doing so
+# since at least 2026-04-08, which is why the file the kernel reads stopped
+# changing on 2026-05-18 while the updater reported success every five minutes.
+DESIRES_PATH = Path(
+    os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json"))
+).expanduser()
 
 # 一緒にいる人の名前（miss_companion 欲求で使う）
 COMPANION_NAME = os.getenv("COMPANION_NAME", "あなた")

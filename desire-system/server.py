@@ -22,7 +22,11 @@ from backend import make_default_adapter
 from desire_updater import DESIRE_CONFIGS, compute_desires, save_desires
 
 # 欲求レベル読み込み元
-DESIRES_PATH = Path(os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json")))
+# expanduser() for the same reason as in desire_updater.py: .env supplies the
+# tilde as a plain string, and an unexpanded tilde is a relative path.
+DESIRES_PATH = Path(
+    os.getenv("DESIRES_PATH", str(Path.home() / ".claude" / "desires.json"))
+).expanduser()
 
 server = Server("desire-system")
 
