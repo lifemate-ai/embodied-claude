@@ -84,7 +84,31 @@ because until now nothing could.
 
 The fork ended with one `autonomous` field. The live database still has zero.
 
-## Why the flag ships off
+## Running it without a conversation
+
+Until 0.4.3 the daemon was reachable only through the `organism_step` MCP tool,
+which means a language model had to call it. A clock whose entire purpose is to
+move when nobody is talking could therefore only be wound by the one thing it
+was supposed to be independent of. `efpf-hook organism-step` is the same step,
+callable by a scheduler:
+
+```
+*/15 * * * * /path/to/uv run --directory /path/to/embodied-claude \
+  efpf-hook organism-step < /dev/null >> ~/.claude/autonomous-logs/organism.log 2>&1
+```
+
+Two details that a crontab entry gets wrong easily, both learned from the
+`desire-updater` entry that sat broken for months: give `uv` an absolute path,
+because cron's PATH does not include `~/.local/bin`, and use `--directory`
+rather than `cd`, because a `cd` to a path that stops existing makes the whole
+line fail silently -- `&&` short-circuits before the redirect, so not even the
+log records that nothing ran.
+
+The command respects the flag: with `organism_daemon = false` it returns
+`{"ran": false}` and touches nothing, so the entry can be installed before the
+flag is flipped and will simply idle until it is.
+
+## Why the flag still ships off
 
 Unlike the flags in #111, the blocker here is not evidence -- the measurement
 above is the evidence. It is that the first real run against live history will

@@ -17,6 +17,7 @@ from social_core import SocialDB
 
 from individual_kernel_mcp.agency import is_external_tool
 from individual_kernel_mcp.boundary_adapter import BoundaryPolicyAdapter
+from individual_kernel_mcp.organism import OrganismDaemon, organism_enabled
 from individual_kernel_mcp.tick import (
     FieldRuntime,
     TickProducer,
@@ -341,26 +342,49 @@ def _heartbeat_continuation(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+COMMANDS = (
+    "session-start",
+    "user-prompt-submit",
+    "pre-tool-use",
+    "post-tool-use",
+    "post-tool-use-failure",
+    "post-tool-batch",
+    "stop",
+    "stop-failure",
+    "diagnostics",
+    "organism-step",
+)
+
+
+def organism_step(
+    db: SocialDB,
+    producer: TickProducer,
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Turn the internal clock once, for a scheduler rather than a caller.
+
+    The daemon is what makes an autonomous tick possible, and its point is to
+    move when nobody is talking to the agent. Reaching it only through an MCP
+    tool meant the non-verbal clock could be wound only by a language model,
+    which is the one thing it was supposed to be independent of. This is the
+    same step that tool takes, callable from cron.
+    """
+
+    if not organism_enabled():
+        return {"ran": False, "reason": "organism_daemon is off in mcpBehavior.toml"}
+    step = OrganismDaemon(db, producer).step(force=force, dry_run=dry_run)
+    return {"ran": True, **step.model_dump(mode="json")}
+
+
 def main() -> None:
     if hasattr(sys.stdin, "reconfigure"):
         sys.stdin.reconfigure(encoding="utf-8")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="efpf-hook")
-    parser.add_argument(
-        "command",
-        choices=(
-            "session-start",
-            "user-prompt-submit",
-            "pre-tool-use",
-            "post-tool-use",
-            "post-tool-use-failure",
-            "post-tool-batch",
-            "stop",
-            "stop-failure",
-            "diagnostics",
-        ),
-    )
+    parser.add_argument("command", choices=COMMANDS)
     args = parser.parse_args()
     payload = _read_input()
     db = SocialDB()
@@ -381,6 +405,7 @@ def main() -> None:
         "stop": lambda: stop(payload, producer),
         "stop-failure": lambda: stop_failure(payload, producer),
         "diagnostics": lambda: diagnostics(payload, producer),
+        "organism-step": lambda: organism_step(db, producer),
     }
     try:
         _emit(handlers[args.command]())
