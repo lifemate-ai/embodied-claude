@@ -4,6 +4,48 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-28
+
+Two flags were waiting on evidence rather than on work. One now has it and
+ships on; the other has everything except a decision that is not the code's to
+make.
+
+### Changed
+
+- individual-kernel: `hor_precision_feedback` ships **on**. It was held back
+  pending a live before-and-after, which ran on 2026-07-28 against two forks of
+  the real history differing only in the flag: `self_model` precision moved
+  0.538 to 0.668, the other four channels were bit-identical, and the winning
+  candidate was the same in both arms. The 0.130 bump sits below the 0.20 cap,
+  so it is what the records say rather than a saturated constant, and the
+  channel feeds only the indicator profile and its own carry-forward -- the
+  boundary gate reads none of it. A flag that ships off indefinitely is dead
+  code; this one now has the same standard of evidence the previous two were
+  held to.
+
+### Added
+
+- individual-kernel: `efpf-hook organism-step`. The organism daemon is the only
+  producer of an autonomous tick and exists to move when nobody is talking, but
+  it was reachable only through an MCP tool -- so the non-verbal clock could be
+  wound only by a language model. The command is the same step, callable by a
+  scheduler, and it honours the flag: with `organism_daemon = false` it returns
+  `{"ran": false}` and touches nothing, so a crontab entry can be installed
+  before the flag is flipped. `docs/organism-daemon.md` carries the entry and
+  the two mistakes that make such an entry fail silently.
+
+### Docs
+
+- `phenomenal-architecture-current-state.md`: the frozen candidate score is
+  recorded as a deliberate decision rather than an open hazard. A score is the
+  record of a decision taken under the weights in force at the time;
+  re-deriving it would make the audit trail describe a competition that never
+  happened. The cost is one tick of latency.
+- `phenomenal-architecture-current-state.md`: the desire-staleness entry
+  carried a root cause that turned out to be wrong twice over. It now records
+  the measured one, and the general lesson: a component reporting success
+  proves it ran, not that its output arrived.
+
 ## [0.4.2] - 2026-07-28
 
 The body state had been reporting every need maximal since May. The composition
