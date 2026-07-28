@@ -62,3 +62,8 @@ valence_coupling = true            # affect で競合重みを変調する。既
                                    # 2026-07-28 のライブ確認でスコア差が設計式と一致した。
                                    # boundary gate は一切読まない
                                    # （docs/valence-coupling-design.md）
+organism_daemon = false            # 非LLM の内的時計。stats の減衰、protention の期限切れ、
+                                   # 需要と沈黙からの ignition（AUTONOMOUS tick の初の生成者）。
+                                   # 既定 off: tick を新たに作る唯一のフラグなので、
+                                   # ライブで前後を測ってから on にする
+                                   # （docs/organism-daemon.md）

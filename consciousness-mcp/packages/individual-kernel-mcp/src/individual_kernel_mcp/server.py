@@ -74,10 +74,11 @@ from individual_kernel_mcp.hor import (
     TargetKind,
 )
 from individual_kernel_mcp.introspect import introspect
+from individual_kernel_mcp.organism import OrganismDaemon, organism_enabled
 from individual_kernel_mcp.prediction_loop import FieldPredictionLoop
 from individual_kernel_mcp.quality_geometry import QualityGeometry
 from individual_kernel_mcp.reflect import reflect_attention_schema
-from individual_kernel_mcp.sleep import SleepConsolidator
+from individual_kernel_mcp.sleep import SleepConsolidator, quiet_hours_from_policy
 from individual_kernel_mcp.tick import FieldRuntime, TickProducer
 from individual_kernel_mcp.workspace import WorkspaceCandidate, WorkspaceEngine
 
@@ -89,6 +90,7 @@ class IndividualKernelStores:
     db: SocialDB
     counterfactual: CounterfactualStore
     sleep: SleepConsolidator
+    organism: OrganismDaemon
     tick_frames: TickFrameStore
     attention_tracker: AttentionSchemaTracker
     hor_store: HORStore
@@ -104,10 +106,12 @@ class IndividualKernelStores:
 @lru_cache(maxsize=1)
 def _stores() -> IndividualKernelStores:
     db = SocialDB()
+    boundary = BoundaryStore(db=db)
     counterfactual_store = CounterfactualStore(db)
     sleep_consolidator = SleepConsolidator(
         db=db,
         counterfactual_store=counterfactual_store,
+        is_quiet_hours=quiet_hours_from_policy(boundary),
     )
     tick_frames = TickFrameStore(db)
     attention_tracker = AttentionSchemaTracker(db=db, owner_id="self")
@@ -131,13 +135,15 @@ def _stores() -> IndividualKernelStores:
     field_runtime = FieldRuntime(
         db,
         producer=tick_producer,
-        boundary_evaluator=BoundaryPolicyAdapter(BoundaryStore(db=db)),
+        boundary_evaluator=BoundaryPolicyAdapter(boundary),
     )
     ablation = AblationRunner(db, fields=enacted_fields)
+    organism = OrganismDaemon(db, tick_producer)
     return IndividualKernelStores(
         db=db,
         counterfactual=counterfactual_store,
         sleep=sleep_consolidator,
+        organism=organism,
         tick_frames=tick_frames,
         attention_tracker=attention_tracker,
         hor_store=hor_store,
@@ -282,6 +288,27 @@ def sleep_consolidate(
     """Run the quiet-hours-gated sleep-consolidation glue."""
     result = _stores().sleep.run(force=force, dry_run=dry_run)
     return result.model_dump(mode="json")
+
+
+@mcp.tool()
+def organism_step(force: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    """Advance internal time once: decay stats, expire protentions, maybe ignite.
+
+    Gated by `[individual-kernel] organism_daemon` in mcpBehavior.toml, which
+    is re-read here on every call. With the flag off nothing is written and the
+    reason says so. `force` overrides only the ignition decision; `dry_run`
+    computes the step and writes nothing.
+    """
+    if not organism_enabled():
+        return {"ran": False, "reason": "organism_daemon is off in mcpBehavior.toml"}
+    step = _stores().organism.step(force=force, dry_run=dry_run)
+    return {"ran": True, **step.model_dump(mode="json")}
+
+
+@mcp.tool()
+def query_organism_runs(limit: int = 20) -> list[dict[str, Any]]:
+    """Recent turns of the internal clock, newest first."""
+    return _stores().organism.runs.recent(limit=limit)
 
 
 # -----------------------------------------------------------------------------

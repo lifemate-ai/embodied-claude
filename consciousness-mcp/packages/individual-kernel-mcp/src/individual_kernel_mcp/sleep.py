@@ -21,6 +21,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from boundary_mcp.store import BoundaryStore
 from pydantic import BaseModel, ConfigDict, Field
 from social_core.db import SocialDB
 from social_core.time import utc_now
@@ -70,7 +71,29 @@ class SleepConsolidationResult(BaseModel):
     briefing_path: str | None = None
 
 
+def quiet_hours_from_policy(store: BoundaryStore) -> QuietPredicate:
+    """Ask the configured policy whether an instant is inside quiet hours.
+
+    The default used to be a predicate that returned True unconditionally, so
+    the gate was open at every hour and the consolidator ran whenever anything
+    called it. Reusing `BoundaryStore` keeps one definition of quiet hours: the
+    `[global] quiet_hours` and `timezone` in socialPolicy.toml that already
+    govern speaking and posting.
+    """
+
+    def predicate(ts: str) -> bool:
+        return store.get_quiet_mode_state(ts=ts).active
+
+    return predicate
+
+
 def _always_quiet(_ts: str) -> bool:
+    """Fallback for a caller that supplies no policy.
+
+    Kept permissive on purpose: a consolidator constructed without a boundary
+    store has no way to know the hour, and refusing every run would be a silent
+    failure rather than a safe one. Callers that can supply a store should.
+    """
     return True
 
 

@@ -406,6 +406,31 @@ CREATE INDEX IF NOT EXISTS idx_field_transitions_action
     ON field_transitions(action_id, created_at DESC);
 """
 
+_MIGRATION_012_SQL = """
+CREATE TABLE IF NOT EXISTS organism_runs (
+    run_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    ran_at TEXT NOT NULL,
+    elapsed_seconds REAL NOT NULL DEFAULT 0.0,
+    stats_decayed INTEGER NOT NULL DEFAULT 0,
+    decay_factor REAL NOT NULL DEFAULT 1.0,
+    protentions_expired INTEGER NOT NULL DEFAULT 0,
+    max_discomfort REAL NOT NULL DEFAULT 0.0,
+    dominant_desire TEXT,
+    seconds_since_last_field REAL NOT NULL DEFAULT 0.0,
+    ignition_score REAL NOT NULL DEFAULT 0.0,
+    ignited INTEGER NOT NULL DEFAULT 0,
+    tick_id TEXT REFERENCES tick_frames(tick_id) ON DELETE SET NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    CHECK(elapsed_seconds >= 0.0),
+    CHECK(decay_factor > 0.0 AND decay_factor <= 1.0),
+    CHECK(ignition_score >= 0.0 AND ignition_score <= 1.0)
+);
+CREATE INDEX IF NOT EXISTS idx_organism_runs_owner_ran
+    ON organism_runs(owner_id, ran_at DESC);
+"""
+
 _MIGRATION_011_SQL = """
 CREATE TABLE IF NOT EXISTS process_meta_representations (
     process_meta_id TEXT PRIMARY KEY,
@@ -856,6 +881,10 @@ MIGRATIONS = [
     Migration(
         name="011_process_meta_representations",
         sql=_MIGRATION_011_SQL,
+    ),
+    Migration(
+        name="012_organism_runs",
+        sql=_MIGRATION_012_SQL,
     ),
 ]
 

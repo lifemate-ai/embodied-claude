@@ -15,8 +15,30 @@ All notable changes to embodied-claude are documented here.
   still written by nothing, so every projected need saturates; that is a
   known limit of the input, not of the composition.
 
+### Fixed
+
+- individual-kernel: the sleep consolidator's quiet-hours gate. Its default
+  predicate returned `True` at every hour, so the gate it advertised was open
+  all the time. The served consolidator now asks `BoundaryStore`, which is the
+  same `[global] quiet_hours` and `timezone` that already govern speaking and
+  posting.
+
 ### Added
 
+- individual-kernel: internal time, behind `organism_daemon` in
+  `[individual-kernel]` (default off). `TriggerKind.AUTONOMOUS` had been in the
+  enum since the beginning with nothing producing it, so with no input nothing
+  in the runtime moved. One turn of the clock decays transition counts on a
+  one-week half-life, retires imagined trajectories nobody took up, and opens a
+  tick when unmet need and elapsed silence are both high enough -- the first
+  producer of an autonomous tick. Measured against a fork of the live history:
+  counts halved exactly across a week, 571 pending trajectories that nothing
+  had ever been able to retire were retired, and a tick opened with no input.
+  The flag ships off because the first live run rewrites recorded history and
+  because nothing schedules it yet, not for want of evidence.
+- social-core: migration `012_organism_runs`, one row per turn of the clock
+  recording its inputs, its score, and the reason it did or did not fire.
+- docs: `organism-daemon.md`.
 - individual-kernel: provenance routes. `knowledge_source` now accepts all four
   routes information can arrive by -- experienced, told, imagined, replayed --
   and the generative model refuses to learn from any of them but `experienced`,
