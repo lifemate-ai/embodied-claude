@@ -5,7 +5,10 @@ Two problems in the previous body state are addressed here.
 The desire file is written by an external updater on a timer. When that timer
 stops, every level freezes at whatever was last written. `project_desires`
 re-derives current levels from the recorded snapshot plus elapsed time, so the
-writer only supplies corrections and the kernel owns the clock.
+writer only supplies corrections and the kernel owns the clock. Owning the clock
+is not the same as owning the input: levels ramp to 1.0 within hours, so a
+snapshot the writer abandoned reports every need maxed out forever. Past
+`MAX_SNAPSHOT_AGE_HOURS` the projection says so instead of extrapolating.
 
 Valence was `-0.6 * max_discomfort`, whose upper bound is zero: no outcome could
 produce a positive state. `compose_valence` builds it from an appetitive term
@@ -55,6 +58,14 @@ DEFAULT_DESIRE_SPECS: dict[str, DesireSpec] = {
 
 FALLBACK_SPEC = DesireSpec(satisfaction_hours=2.0, set_point=0.3)
 
+# Beyond this, a snapshot is an artifact rather than a record. The longest
+# satisfaction window is three hours, so everything saturates well inside a day
+# and a further extrapolation adds no information -- it only makes an absent
+# writer look identical to a genuinely neglected agent. A day is far longer than
+# any gap a running writer produces and far shorter than the 71 days the live
+# snapshot actually sat unwritten.
+MAX_SNAPSHOT_AGE_HOURS = 24.0
+
 
 @dataclass(frozen=True)
 class DesireProjection:
@@ -64,6 +75,7 @@ class DesireProjection:
     discomforts: dict[str, float]
     dominant: str | None
     stale_seconds: float
+    usable: bool = True
 
     @property
     def mean_discomfort(self) -> float:
@@ -171,6 +183,13 @@ def project_desires(
 
     An unreadable or absent timestamp is treated as "just written": the recorded
     levels are used as-is rather than extrapolated from a guessed instant.
+
+    Past ``MAX_SNAPSHOT_AGE_HOURS`` the snapshot no longer describes anyone, and
+    extrapolating it would report every need maxed out however long the writer
+    has been gone. Such a projection is marked unusable and reports the resting
+    state: levels at their set points, no discomfort, no dominant need. The age
+    is still returned, because refusing to extrapolate is not the same as
+    claiming the snapshot is current.
     """
 
     specs = specs or DEFAULT_DESIRE_SPECS
@@ -182,6 +201,7 @@ def project_desires(
     stale_seconds = (
         max(0.0, (now - recorded_at).total_seconds()) if recorded_at else 0.0
     )
+    usable = stale_seconds <= MAX_SNAPSHOT_AGE_HOURS * 3600.0
 
     desires: dict[str, float] = {}
     discomforts: dict[str, float] = {}
@@ -191,22 +211,25 @@ def project_desires(
         except (TypeError, ValueError):
             continue
         spec = specs.get(str(name), FALLBACK_SPEC)
+        set_point = allostatic_set_point(str(name), spec, now)
+        if not usable:
+            desires[str(name)] = set_point
+            discomforts[str(name)] = 0.0
+            continue
         projected = (
             extrapolate_desire_level(level, recorded_at, spec.satisfaction_hours, now)
             if recorded_at
             else _clamp01(level)
         )
         desires[str(name)] = projected
-        discomforts[str(name)] = abs(
-            projected - allostatic_set_point(str(name), spec, now)
-        )
+        discomforts[str(name)] = abs(projected - set_point)
 
     dominant = (
         max(sorted(discomforts), key=lambda name: discomforts[name])
-        if discomforts
+        if discomforts and usable
         else None
     )
-    return DesireProjection(desires, discomforts, dominant, stale_seconds)
+    return DesireProjection(desires, discomforts, dominant, stale_seconds, usable)
 
 
 def compose_valence(
