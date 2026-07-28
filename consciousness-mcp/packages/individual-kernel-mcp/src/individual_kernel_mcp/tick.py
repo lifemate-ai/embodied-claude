@@ -48,6 +48,12 @@ from individual_kernel_mcp.frame import ConsciousFrameInput, TickFrameStore
 from individual_kernel_mcp.generative_model import NO_ACTION, ContextSignature
 from individual_kernel_mcp.hor import HORInput, HORRecord, HORStore
 from individual_kernel_mcp.prediction_loop import FieldPredictionLoop, generative_enabled
+from individual_kernel_mcp.process_meta import (
+    PrecisionBias,
+    ProcessMetaStore,
+    apply_precision_bias,
+    precision_bias_from_hors,
+)
 from individual_kernel_mcp.quality_geometry import QualityGeometry, QualitySignature
 from individual_kernel_mcp.valence_coupling import AffectState
 from individual_kernel_mcp.workspace import (
@@ -107,9 +113,24 @@ BoundaryEvaluator = Callable[[str, dict[str, Any], EnactedField], tuple[bool, st
 UNMEASURED_CONTROLLABILITY = 0.5
 UNRESOLVED_ERROR_WHEN_UNKNOWN = 0.5
 
+# How many recent higher-order records can bias precision. Small on purpose:
+# the point is that the last thing represented matters, not that a long history
+# of self-description accumulates into confidence.
+HOR_FEEDBACK_WINDOW = 3
+
 
 def allostatic_enabled() -> bool:
     return bool(get_behavior("individual-kernel", "allostatic_valence", False))
+
+
+def hor_feedback_enabled() -> bool:
+    """Whether higher-order records may raise the precision of their channel.
+
+    Without this the runtime records what it is attending to and nothing reads
+    it back, so the record is inert by construction. With it, representing that
+    you are attending changes how much the next tick trusts that channel.
+    """
+    return bool(get_behavior("individual-kernel", "hor_precision_feedback", False))
 
 
 def valence_coupling_enabled() -> bool:
@@ -158,6 +179,10 @@ class TickProducer:
         self.agency = agency or AgencyStore(db)
         self.quality = quality or QualityGeometry(db)
         self.prediction = prediction or FieldPredictionLoop(db, agency=self.agency)
+        self.process_meta = ProcessMetaStore(db)
+        # Carried from precision seeding to the process record so the two
+        # cannot disagree about what the feedback actually contributed.
+        self._last_precision_bias = PrecisionBias()
         self.events = EventStore(db=db)
         self.interoception_path = (
             Path(interoception_path)
@@ -249,7 +274,7 @@ class TickProducer:
                     ),
                     retention_refs=self._retention_refs(previous),
                     interoception=interoception,
-                    precision=self._initial_precision(previous),
+                    precision=self._seed_precision(previous),
                     agency_state=previous.agency_state if previous else AgencyState(),
                     epistemic_trace={
                         "producer": "deterministic",
@@ -582,6 +607,23 @@ class TickProducer:
                 temporal_order=self._next_temporal_order(final.owner_id),
                 metadata={"trigger": final.trigger_kind.value},
             )
+            try:
+                self.process_meta.record(
+                    tick_id=final.tick_id,
+                    field_id=final.field_id,
+                    trigger_kind=final.trigger_kind.value,
+                    competition=final.epistemic_trace.get("competition", {}),
+                    winner_kind=str(final.focal_content_ref or "").split(":", 1)[0],
+                    registered_intention=bool(
+                        final.agency_state.registered_intention
+                    ),
+                    hor_channel_bias=self._last_precision_bias.as_dict(),
+                    owner_id=final.owner_id,
+                )
+            except Exception:
+                # The process record is an audit trail. A storage fault must not
+                # roll back a field that has already been committed.
+                pass
             if generative_enabled():
                 try:
                     self.prediction.record_transition_and_update(
@@ -1054,6 +1096,25 @@ class TickProducer:
             refs.append(previous.focal_content_ref)
         refs.extend(previous.retention_refs[:3])
         return list(dict.fromkeys(refs))
+
+    def _seed_precision(self, previous: EnactedField | None) -> PrecisionState:
+        """Decay the previous precision, then let recent HORs raise a channel.
+
+        The decay is the pre-existing behaviour and stays exactly as it was.
+        The bias is what makes a higher-order record consequential: asserting
+        "I am attending" raises self_model precision on the tick that follows.
+        """
+        base = self._initial_precision(previous)
+        if not hor_feedback_enabled():
+            return base
+        try:
+            records = self.hors.query(owner_id="self", limit=HOR_FEEDBACK_WINDOW)
+        except Exception:
+            # Precision must always be producible; a query fault falls back to
+            # the decayed value rather than blocking the tick.
+            return base
+        self._last_precision_bias = precision_bias_from_hors(records)
+        return apply_precision_bias(base, self._last_precision_bias)
 
     @staticmethod
     def _initial_precision(previous: EnactedField | None) -> PrecisionState:

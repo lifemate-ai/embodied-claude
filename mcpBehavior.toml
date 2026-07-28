@@ -54,6 +54,10 @@ allostatic_valence = true          # valence/needs/controllability の再定義�
                                    # 2026-07-28 のライブ確認で control が実測 ownership に
                                    # 追従し valence が tick ごとに動くことを確認した
                                    # （docs/allostatic-valence-design.md）
+hor_precision_feedback = false     # HOR がそのチャネルの precision を上げる。既定 off:
+                                   # 全 tick の初期 precision を変えるので、他の2つと
+                                   # 同じようにライブで前後を測ってから on にする
+                                   # （docs/hor-ablation.md）
 valence_coupling = true            # affect で競合重みを変調する。既定 on:
                                    # 2026-07-28 のライブ確認でスコア差が設計式と一致した。
                                    # boundary gate は一切読まない
