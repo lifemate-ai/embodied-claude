@@ -4,6 +4,20 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- individual-kernel: the bash gate read the command as a string rather than as
+  a command. It split the raw text on `|` and `;`, so an operator inside quotes
+  ended the command and left an unbalanced quote -- `grep "alpha\|beta"` parsed
+  as a write and was refused. The same applied to `>` inside quotes. Commands
+  are now tokenized with `shlex(punctuation_chars=True)`, which yields
+  operators as their own tokens and leaves quoted text alone. Detection of real
+  writes is unchanged: redirection, `tee`, a writing command after a separator,
+  and command substitution are all still refused, and a test pins each one.
+- individual-kernel: `git -C <path> status` was refused because the scan for
+  the subcommand returned the first non-flag token, which is the path. Global
+  options that take a value are now skipped before the subcommand is read.
+
 ## [0.4.0] - 2026-07-28
 
 The enacted first-person field stops being a record of the current state and

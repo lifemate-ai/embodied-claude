@@ -676,14 +676,68 @@ def is_external_tool(tool_name: str, tool_input: dict[str, Any] | None = None) -
     return False
 
 
+_SHELL_SEPARATORS = frozenset({"|", "||", "&&", ";", ";;", "&"})
+_DISCARD_TARGETS = frozenset({"/dev/null"})
+
+
+def _is_redirection(token: str) -> bool:
+    return bool(token) and set(token) <= {"<", ">", "&"} and ">" in token
+
+
+def _shell_segments(command: str) -> list[list[str]] | None:
+    """Split into command segments at unquoted operators, or None if unsafe.
+
+    `shlex` with `punctuation_chars` yields operators as their own tokens and
+    leaves quoted text alone. Splitting the raw string could not tell the two
+    apart: a pipe inside a regex ended the command and left an unbalanced
+    quote, so an ordinary `grep` read as a write and was refused.
+
+    Returns None when the command redirects anywhere but /dev/null, which is
+    the write this whole function exists to catch.
+    """
+
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return None
+
+    segments: list[list[str]] = []
+    current: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if token in _SHELL_SEPARATORS:
+            segments.append(current)
+            current = []
+            continue
+        if _is_redirection(token):
+            if current and re.fullmatch(r"\d+", current[-1]):
+                current.pop()  # the file descriptor, e.g. the 2 of `2>`
+            if token.endswith("&"):
+                # Duplicating onto another descriptor writes nowhere new.
+                if index < len(tokens) and re.fullmatch(r"\d+", tokens[index]):
+                    index += 1
+                    continue
+                return None
+            if index < len(tokens) and tokens[index] in _DISCARD_TARGETS:
+                index += 1
+                continue
+            return None
+        current.append(token)
+    segments.append(current)
+    return segments
+
+
 def _bash_is_read_only(command: str) -> bool:
     """Conservatively recognize terminal-only inspection commands."""
 
     if not command.strip() or "$(" in command or "`" in command:
         return False
-    sanitized = re.sub(r"\d*>\s*/dev/null", "", command)
-    sanitized = re.sub(r"\d*>&\d+", "", sanitized)
-    if re.search(r"(^|[^<])>{1,2}", sanitized):
+    segments = _shell_segments(command)
+    if segments is None:
         return False
     read_only = {
         "[",
@@ -732,11 +786,7 @@ def _bash_is_read_only(command: str) -> bool:
         "which",
         "whoami",
     }
-    for segment in re.split(r"\|\||&&|[;|]", sanitized):
-        try:
-            tokens = shlex.split(segment)
-        except ValueError:
-            return False
+    for tokens in segments:
         while tokens and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0]):
             tokens.pop(0)
         if not tokens:
@@ -760,10 +810,35 @@ def _bash_is_read_only(command: str) -> bool:
     return True
 
 
+# Global git options that consume the token after them. Without this the scan
+# for the first non-flag token returns the option's value -- `git -C <path>
+# status` read as the unknown subcommand `<path>` and was refused.
+_GIT_VALUE_OPTIONS = frozenset(
+    {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--super-prefix"}
+)
+
+
+def _git_from_subcommand(arguments: list[str]) -> list[str]:
+    """Drop leading global options and return the subcommand with its own arguments."""
+
+    index = 0
+    while index < len(arguments):
+        token = arguments[index]
+        if token in _GIT_VALUE_OPTIONS:
+            index += 2  # the option and the value it takes
+            continue
+        if token.startswith("-"):
+            index += 1  # a flag, or --option=value carrying its own value
+            continue
+        return arguments[index:]
+    return []
+
+
 def _git_is_read_only(arguments: list[str]) -> bool:
     if not arguments:
         return True
-    command = next((item for item in arguments if not item.startswith("-")), "")
+    arguments = _git_from_subcommand(arguments)
+    command = arguments[0] if arguments else ""
     if command in {
         "diff",
         "grep",
