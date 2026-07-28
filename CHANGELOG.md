@@ -17,6 +17,20 @@ All notable changes to embodied-claude are documented here.
 
 ### Added
 
+- individual-kernel: higher-order feedback, behind `hor_precision_feedback` in
+  `[individual-kernel]` (default off). Recent HOR records now raise the
+  precision of the channel their asserted mode speaks to, capped so repeating
+  an assertion cannot substitute for evidence. Until now nothing read those
+  records back, so a HOR could be present, absent or wrong and every other
+  quantity came out identical. Ablating the feedback lowers
+  `IndicatorProfile.self_model_feedback`, which is a mean over precision values
+  and reads no self-report; a test asserts the drop.
+- individual-kernel: `ProcessMetaRepresentation` and migration
+  `011_process_meta_representations`. One row per committed tick recording how
+  the field was produced -- candidate count, margin, entropy, ignition,
+  conflict, registered intention, and the HOR bias -- with a canonical
+  statement stored beside the numbers it summarises.
+- docs: `hor-ablation.md`.
 - individual-kernel: body contingency. `exclusive_causal_fit` is now the
   reafference between the commanded pose change and the observed one --
   direction, magnitude, and timing -- instead of a restatement of whether the

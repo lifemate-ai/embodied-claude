@@ -406,6 +406,35 @@ CREATE INDEX IF NOT EXISTS idx_field_transitions_action
     ON field_transitions(action_id, created_at DESC);
 """
 
+_MIGRATION_011_SQL = """
+CREATE TABLE IF NOT EXISTS process_meta_representations (
+    process_meta_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    tick_id TEXT NOT NULL REFERENCES tick_frames(tick_id) ON DELETE CASCADE,
+    field_id TEXT NOT NULL REFERENCES enacted_fields(field_id) ON DELETE CASCADE,
+    producer TEXT NOT NULL DEFAULT 'deterministic',
+    trigger_kind TEXT NOT NULL,
+    candidate_count INTEGER NOT NULL,
+    winner_kind TEXT NOT NULL DEFAULT '',
+    competition_margin REAL NOT NULL,
+    competition_entropy REAL NOT NULL,
+    ignited INTEGER NOT NULL,
+    conflicted INTEGER NOT NULL,
+    attention_intensity REAL NOT NULL,
+    registered_intention INTEGER NOT NULL DEFAULT 0,
+    hor_channel_bias_json TEXT NOT NULL DEFAULT '{}',
+    canonical_statement TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    CHECK(competition_entropy >= 0.0 AND competition_entropy <= 1.0),
+    CHECK(attention_intensity >= 0.0 AND attention_intensity <= 1.0),
+    CHECK(candidate_count >= 0)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_process_meta_tick
+    ON process_meta_representations(tick_id);
+CREATE INDEX IF NOT EXISTS idx_process_meta_owner_created
+    ON process_meta_representations(owner_id, created_at DESC);
+"""
+
 _MIGRATION_010_SQL = """
 CREATE TABLE IF NOT EXISTS body_contingencies (
     contingency_id TEXT PRIMARY KEY,
@@ -823,6 +852,10 @@ MIGRATIONS = [
     Migration(
         name="010_body_contingency",
         sql=_MIGRATION_010_SQL,
+    ),
+    Migration(
+        name="011_process_meta_representations",
+        sql=_MIGRATION_011_SQL,
     ),
 ]
 
