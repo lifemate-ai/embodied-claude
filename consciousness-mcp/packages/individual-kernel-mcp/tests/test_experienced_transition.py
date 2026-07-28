@@ -112,14 +112,23 @@ class TestSourceDiscipline:
             with pytest.raises(ValidationError):
                 _transition(None, field, source_mode=mode)
 
-    def test_knowledge_source_is_experienced_only_in_v1(
-        self, social_db, tmp_path
-    ) -> None:
+    def test_every_declared_route_may_be_recorded(self, social_db, tmp_path) -> None:
+        # Recording the route is permissive; learning from it is not. The gate
+        # lives in the generative model, which refuses anything but
+        # `experienced` -- see test_experienced_told_imagined.
         producer = _producer(social_db, tmp_path)
         field = _commit(producer)
         for value in ("told", "imagined", "replayed"):
-            with pytest.raises(ValidationError):
-                _transition(None, field, knowledge_source=value)
+            assert (
+                _transition(None, field, knowledge_source=value).knowledge_source
+                == value
+            )
+
+    def test_an_undeclared_route_is_rejected(self, social_db, tmp_path) -> None:
+        producer = _producer(social_db, tmp_path)
+        field = _commit(producer)
+        with pytest.raises(ValidationError):
+            _transition(None, field, knowledge_source="dreamt")
 
 
 class TestIdempotentRecording:

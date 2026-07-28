@@ -19,6 +19,7 @@ from social_core.db import SocialDB
 from social_core.time import utc_now
 
 from .enacted_field import EnactedField
+from .fork import LEARNABLE_KNOWLEDGE_SOURCE
 from .workspace import SourceMode
 
 if TYPE_CHECKING:
@@ -570,8 +571,13 @@ class CountBasedGenerativeFieldModel:
         """Count one experienced transition into the stats, exactly once.
 
         Returns False when the transition was already applied (idempotent
-        across processes via the `applied_at` row guard).
+        across processes via the `applied_at` row guard), and False for any
+        route other than `experienced`: being told a contingency, or imagining
+        one, must not train it. This is the gate that makes the route recorded
+        on a transition consequential rather than cosmetic.
         """
+        if transition.knowledge_source != LEARNABLE_KNOWLEDGE_SOURCE:
+            return False
         signature = ContextSignature.from_key(transition.context_signature)
         now = utc_now()
         with self._db.transaction() as connection:

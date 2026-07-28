@@ -6,9 +6,10 @@ UNIQUE, so recording is idempotent; learning consumption is guarded by
 `applied_at` (see `CountBasedGenerativeFieldModel.update`).
 
 Source discipline: a transition row never carries imagined or remembered
-source modes, and `knowledge_source` is fixed to 'experienced' in this
-version (told/imagined/replayed ingestion arrives with the fork experiments;
-the schema already reserves the values).
+source modes. `knowledge_source` records which of the four routes the
+information arrived by and is deliberately permissive -- the gate is in
+`CountBasedGenerativeFieldModel.update`, which trains on `experienced` alone,
+so hearsay and imagination can be remembered without being learned from.
 """
 
 from __future__ import annotations
@@ -22,10 +23,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from social_core.db import SocialDB
 from social_core.time import utc_now
 
+from .fork import KNOWLEDGE_SOURCES
 from .workspace import SourceMode
 
 _ALLOWED_SOURCE_MODES = {SourceMode.LIVE, SourceMode.INFERRED, SourceMode.MIXED}
-_KNOWLEDGE_SOURCES_V1 = {"experienced"}
+# Routes by which information can reach the runtime are defined in `fork`, the
+# module that has no dependency on either this schema or the model that gates
+# on them. Recording the route is permissive; learning from it is not.
 
 
 class ExperiencedTransition(BaseModel):
@@ -86,10 +90,17 @@ class ExperiencedTransition(BaseModel):
 
     @field_validator("knowledge_source")
     @classmethod
-    def _knowledge_source_v1(cls, value: str) -> str:
-        if value not in _KNOWLEDGE_SOURCES_V1:
+    def _known_route(cls, value: str) -> str:
+        """Accept any of the four routes information can arrive by.
+
+        The route is recorded here and gated where it matters: the generative
+        model refuses to learn from anything that is not `experienced`, so
+        hearsay and imagination cannot train a sensorimotor contingency.
+        """
+        if value not in KNOWLEDGE_SOURCES:
             raise ValueError(
-                "knowledge_source is fixed to 'experienced' in this version"
+                f"unknown knowledge_source {value!r}; "
+                f"expected one of {', '.join(KNOWLEDGE_SOURCES)}"
             )
         return value
 

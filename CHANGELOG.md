@@ -17,6 +17,18 @@ All notable changes to embodied-claude are documented here.
 
 ### Added
 
+- individual-kernel: provenance routes. `knowledge_source` now accepts all four
+  routes information can arrive by -- experienced, told, imagined, replayed --
+  and the generative model refuses to learn from any of them but `experienced`,
+  so hearsay and imagination can be remembered in full without training a
+  sensorimotor contingency. Content is identified by `info_content_hash`
+  independently of its route, so a divergence between two arms is attributable
+  to the route rather than the payload.
+- individual-kernel: `fork_history`, an isolated snapshot of the history for
+  running two arms from one starting point. Namespacing by `owner_id` was
+  rejected because several readers query without an owner filter and would have
+  leaked across arms quietly.
+- docs: `experienced-told-imagined.md`, `fork-divergence.md`.
 - individual-kernel: higher-order feedback, behind `hor_precision_feedback` in
   `[individual-kernel]` (default off). Recent HOR records now raise the
   precision of the channel their asserted mode speaks to, capped so repeating
