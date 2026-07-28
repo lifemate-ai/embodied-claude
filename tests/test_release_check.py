@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-RELEASE_VERSION = "0.3.0"
+RELEASE_VERSION = "0.4.0"
 RELEASE_TAG = f"v{RELEASE_VERSION}"
 
 
@@ -48,7 +48,7 @@ def test_changelog_contains_the_dated_release() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text()
 
     assert "## [Unreleased]" in changelog
-    assert f"## [{RELEASE_VERSION}] - 2026-07-24" in changelog
+    assert f"## [{RELEASE_VERSION}] - 2026-07-28" in changelog
     assert "phenomenal-consciousness candidate architecture" in changelog
     assert "proof of phenomenal consciousness" not in changelog
 

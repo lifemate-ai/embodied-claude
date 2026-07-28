@@ -4,6 +4,16 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-28
+
+The enacted first-person field stops being a record of the current state and
+starts being a state that changes: it predicts, learns from the mismatch,
+distinguishes what it underwent from what it was told, and -- with a flag and a
+scheduler -- moves when nobody is talking to it.
+
+This is a phenomenal-consciousness candidate architecture. Nothing in this
+release is evidence that the candidate is conscious.
+
 ### Changed
 
 - individual-kernel: `allostatic_valence` and `valence_coupling` now ship

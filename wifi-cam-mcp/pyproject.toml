@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wifi-cam-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server for controlling WiFi cameras (Tapo C210/C220) via ONVIF - Let AI look around your room!"
 readme = "README.md"
 requires-python = ">=3.10"
