@@ -169,6 +169,26 @@ repository root:
 uv sync --locked
 ```
 
+`tts-mcp[elevenlabs]`, `wifi-cam-mcp[transcribe...]`, `usb-webcam-mcp`,
+`system-temperature-mcp`, and `x-mcp` are declared as optional extras in the
+root `pyproject.toml`, not base dependencies. A plain `uv sync` only installs
+the base workspace packages (`desire-system`, `individual-kernel-mcp`,
+`memory-mcp`, `sociality-mcp`) and will **uninstall** any of those optional
+packages that were previously installed outside the requested extras — for
+example, `python -c "import elevenlabs"` starts failing with
+`No module named 'elevenlabs'` inside a running `tts-mcp` server even though
+nothing about `tts-mcp` itself changed. If a live MCP server still holds one
+of the removed console-script `.exe` files open, `uv sync` also fails outright
+with an `os error 32` file-lock message, which looks like a process problem
+but is really this same partial-removal in progress. Sync with the extras you
+actually use instead:
+
+```bash
+uv sync --locked --extra all           # everything, including elevenlabs
+uv sync --locked --extra voice-elevenlabs
+uv sync --locked --extra camera-tapo
+```
+
 To run a package directly:
 
 ```bash
