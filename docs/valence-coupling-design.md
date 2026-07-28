@@ -1,7 +1,7 @@
 # Valence Coupling Design
 
 Status: shipped 2026-07-27 on the `feat/valence-coupling` branch, behind
-`[individual-kernel] valence_coupling`, which defaults to **off**. Scope: which
+`[individual-kernel] valence_coupling`, which defaults to **on** (verified live 2026-07-28). Scope: which
 candidate wins workspace competition. Ignition thresholds, the `<current_field>`
 surface, and the boundary gate are unchanged.
 

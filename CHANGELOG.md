@@ -4,6 +4,17 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- individual-kernel: `allostatic_valence` and `valence_coupling` now ship
+  **on**. Both were held off pending a live check, which ran on 2026-07-28:
+  `controllability` tracked the measured `ownership_score` tick by tick instead
+  of sitting at 0.575, and the competition scores moved by exactly the amount
+  the coupling formula predicts. A flag that ships off indefinitely is dead
+  code, so they are on and the arithmetic is documented. The desire snapshot is
+  still written by nothing, so every projected need saturates; that is a
+  known limit of the input, not of the composition.
+
 ### Added
 
 - individual-kernel: body contingency. `exclusive_causal_fit` is now the

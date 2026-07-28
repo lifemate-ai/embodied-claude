@@ -1,7 +1,7 @@
 # Allostatic Valence Design
 
 Status: shipped 2026-07-27 on the `feat/allostatic-valence` branch, behind
-`[individual-kernel] allostatic_valence`, which defaults to **off**. Scope: the
+`[individual-kernel] allostatic_valence`, which defaults to **on** (verified live 2026-07-28). Scope: the
 body state only. Action selection, workspace competition, the `<current_field>`
 surface, and the boundary gate are unchanged.
 
@@ -101,7 +101,7 @@ No migration is required. Every input already existed:
 measured control, `experienced_transitions` for unresolved error, and the desire
 file for needs.
 
-## Why the flag defaults to off
+## Why the flag shipped off first
 
 The generative layer in PR #108 shipped enabled because it only *added* rows.
 This change rewrites a value the whole runtime reads, including workspace
