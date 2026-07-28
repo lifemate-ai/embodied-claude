@@ -4,6 +4,39 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-28
+
+The body state had been reporting every need maximal since May. The composition
+was not at fault; its input was. The desire snapshot the kernel reads had not
+been written for 71 days, and nothing downstream could tell that apart from an
+agent that genuinely had not looked outside since then.
+
+### Fixed
+
+- desire-system: `DESIRES_PATH` was read from the environment without
+  `expanduser()`. The default is built from `Path.home()` and was fine, but
+  `.env` supplies `~/.claude/desires.json` as a plain string, and an unexpanded
+  tilde is a relative path: the updater created a directory literally named `~`
+  under its working directory and wrote there. It had been doing so since at
+  least 2026-04-08 while reporting success every five minutes, and the same
+  stray tree exists in each sibling checkout. `server.py` read the variable the
+  same way. With the path expanded, the snapshot the kernel reads updated for
+  the first time since 2026-05-18, and the committed field's focus moved from
+  `identity_coherence` to `observe_room` on the next tick.
+- individual-kernel: `project_desires` extrapolated without bound. Levels ramp
+  to 1.0 over `satisfaction_hours`, the longest of which is three, so a snapshot
+  nobody has written reports every need maxed out however long it has been
+  abandoned -- and the organism daemon's ignition term reads exactly that. Past
+  `MAX_SNAPSHOT_AGE_HOURS` (24) the projection reports the resting state, no
+  discomfort and no dominant need, and marks itself unusable. The age is still
+  returned, because refusing to extrapolate is not the same as claiming the
+  snapshot is current. Hours of genuine neglect still saturate as before.
+- individual-kernel: the rule deciding what takes focus next was written twice,
+  once for the protention and once for the attention schema. Both derived it
+  from the same competition in the same way, so nothing disagreed; a change to
+  either would have diverged from the other silently. It now lives on
+  `CompetitionResult.next_focus_candidate` and both read it.
+
 ## [0.4.1] - 2026-07-28
 
 A patch for one defect found immediately after 0.4.0 shipped: the gate that

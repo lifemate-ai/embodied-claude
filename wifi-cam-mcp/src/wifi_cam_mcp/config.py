@@ -133,7 +133,7 @@ class ServerConfig:
     """MCP Server configuration."""
 
     name: str = "wifi-cam-mcp"
-    version: str = "0.4.1"
+    version: str = "0.4.2"
     capture_dir: str = field(default_factory=_default_capture_dir)
     mic_source: str = "camera"  # "camera" (RTSP) or "local" (PC microphone)
     mic_device: str | None = None  # DirectShow device name for Windows local mic
@@ -156,7 +156,7 @@ class ServerConfig:
         capture_dir = os.getenv("CAPTURE_DIR", "").strip() or _default_capture_dir()
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "wifi-cam-mcp"),
-            version=os.getenv("MCP_SERVER_VERSION", "0.4.1"),
+            version=os.getenv("MCP_SERVER_VERSION", "0.4.2"),
             capture_dir=capture_dir,
             mic_source=mic_source,
             mic_device=os.getenv("MIC_DEVICE") or None,
