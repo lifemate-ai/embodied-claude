@@ -71,7 +71,39 @@ without it, such a report has no referent inside the system.
 The write is wrapped: a storage fault must not roll back a field that has
 already been committed.
 
-## Why the flag ships off
+## The live measurement, and why the flag now ships on
+
+Run 2026-07-28 against the live history. Two arms, each a fresh copy of
+`~/.claude/sociality/social.db` taken through the sqlite backup API, differing
+only in `hor_precision_feedback`. Same candidate, same interoception and desire
+inputs, one committed tick each.
+
+| channel | off | on | delta |
+| --- | --- | --- | --- |
+| extero | 0.307692 | 0.307692 | +0.000000 |
+| intero | 0.307692 | 0.307692 | +0.000000 |
+| mnemonic | 0.307692 | 0.307692 | +0.000000 |
+| self_model | 0.538208 | 0.668208 | **+0.130000** |
+| social | 0.307692 | 0.307692 | +0.000000 |
+
+The winner was `desire:identity_coherence` in both arms.
+
+Three things make this the measurement the flag was waiting for. The live
+history's higher-order records all assert modes that map to `self_model`, so
+exactly one channel moves and the other four are bit-identical. The bump is
+0.130, below the 0.20 cap, so the value is what the records actually say rather
+than a saturated constant. And the selection is unchanged, which is expected
+rather than lucky: competition scores read the candidate's own precision, not
+the field's `PrecisionState`.
+
+The blast radius is therefore the `self_model` channel, its own carry-forward
+(`0.65 * previous + 0.25 * attention_intensity`, so a per-tick bias of 0.130
+settles around +0.24 rather than accumulating), and `IndicatorProfile`
+`self_model_feedback`, which is a mean over that channel. The boundary gate
+reads none of it. In short, the flag changes a measured quantity and nothing
+that acts, which is exactly what it was designed to do.
+
+## Why the flag shipped off until then
 
 The two flags shipped in the previous PR were switched on only after a live
 check showed what they did to the running system. The same standard applies

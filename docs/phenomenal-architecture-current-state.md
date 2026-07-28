@@ -70,12 +70,21 @@ flowchart TD
 
 ## Known hazards recorded at survey time
 
-- `predicted_next_focus` is written twice per commit from two different
-  predictors (protention at tick.py commit, then the attention schema).
-  Unchanged in this work; canonicalization is scheduled with the fork
-  experiments.
+- ~~`predicted_next_focus` is written twice per commit from two different
+  predictors~~ Resolved 2026-07-28 (0.4.2), and the original entry overstated
+  it: the two predictors applied the same rule to the same `CompetitionResult`,
+  so they could not disagree. It was duplication, not divergence. The rule now
+  lives on `CompetitionResult.next_focus_candidate`. Note that `enacted_fields`
+  has no column of that name; the value round-trips through the epistemic trace.
 - Workspace candidate scores are frozen at insert time, so learned weight
-  changes can only affect future ticks.
+  changes can only affect future ticks. **Kept deliberately.** A score is the
+  record of a decision that was actually taken under the weights in force at
+  the time; re-deriving it later would make the audit trail describe a
+  competition that never happened, and `deterministic_order` would no longer
+  reproduce the commit it belongs to. The cost is only latency -- a weight
+  change reaches the next tick rather than the current one -- and a tick is
+  short. Revisit only if within-tick reweighting becomes necessary, and then by
+  storing both scores rather than replacing one.
 - Valence was causally inert on the live path: computed only from the desire
   file as an EMA of `-0.6 * max(discomforts)` (structurally never positive),
   absent from competition weights and memory recall. The live
@@ -91,6 +100,20 @@ flowchart TD
   present but dead is the worse failure, because nothing reports its absence.
   The durable fix moves the clock into the kernel, so a stalled writer costs
   corrections rather than motion.
+
+  Second correction (2026-07-28, 0.4.2): the account above was still wrong
+  about the cause. Both crontab faults were real, but the snapshot had already
+  stopped reaching the kernel before either could matter. `DESIRES_PATH` was
+  read from the environment without `expanduser()`, and `.env` supplies
+  `~/.claude/desires.json` as a plain string, so the updater created a
+  directory literally named `~` under its working directory and wrote there --
+  since at least 2026-04-08, printing a success line each run. `.gitignore`
+  covers `desires.json`, so the stray tree was invisible; the same tree exists
+  in each sibling checkout. The lesson generalises past this bug: a component
+  that reports success proves it ran, not that its output arrived. Moving the
+  clock into the kernel does not help when the clock is reading a file nobody
+  writes, which is why `project_desires` now also bounds how far it will
+  extrapolate.
 - `InteroceptionState.controllability` was derived from discomfort and not
   wired to the measured `ownership_score`.
 - `SleepConsolidator` was constructed without a quiet-hours predicate, so its
