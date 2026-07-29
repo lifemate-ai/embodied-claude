@@ -171,12 +171,12 @@ class ServerConfig:
     """MCP Server configuration."""
 
     name: str = "tts"
-    version: str = "0.4.4"
+    version: str = "0.4.5"
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
         """Create config from environment variables."""
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "tts"),
-            version=os.getenv("MCP_SERVER_VERSION", "0.4.4"),
+            version=os.getenv("MCP_SERVER_VERSION", "0.4.5"),
         )
