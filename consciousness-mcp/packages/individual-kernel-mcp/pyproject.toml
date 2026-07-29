@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "individual-kernel-mcp"
-version = "0.4.4"
+version = "0.4.5"
 description = "Enacted first-person field runtime and phenomenal-like causal architecture research tools."
 readme = "README.md"
 requires-python = ">=3.12"

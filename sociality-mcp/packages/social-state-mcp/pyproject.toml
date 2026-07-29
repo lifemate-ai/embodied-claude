@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "social-state-mcp"
-version = "0.4.4"
+version = "0.4.5"
 description = "MCP server for present-moment social state inference"
 readme = "README.md"
 requires-python = ">=3.12"

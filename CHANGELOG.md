@@ -4,6 +4,36 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-07-29
+
+A session spent several minutes sweeping the room for someone and could not
+find them without hints. The search strategy was not the problem. The camera
+never said where it was pointing, and the angles that did reach long-term
+memory meant something different in every session.
+
+### Changed
+
+- wifi-cam: `see` reports the heading the camera itself gives over ONVIF
+  alongside the image, so a capture and an aim are one fact rather than two the
+  caller has to join. It is stated as an offset from centre, naming its own
+  reference point, because a number whose zero is unstated cannot be compared
+  across sessions.
+
+### Fixed
+
+- wifi-cam: `get_hw_position` passed ONVIF pan through untouched -- `+x` is
+  physically left on Tapo -- while flipping tilt, so the value was half in the
+  device's frame and half in the user's. Nothing read it yet, but
+  `body_contingency` declares the opposite convention (`look_left` is pan
+  -1.0), so connecting the two would have inverted every camera agency verdict
+  at once. Both axes now read in one frame, checked against the hardware:
+  turning left lowers pan, and a commanded 30 degrees moves it 29.7.
+- memory: `recall_by_camera_position` now documents what its coordinate has to
+  be. The angles stored before this release were session-relative dead
+  reckoning -- 113 of them sit at exactly (0,0) and the rest are round
+  multiples of five -- so the index is sound but its older contents are not
+  comparable with a measured heading.
+
 ## [0.4.4] - 2026-07-28
 
 Feedback from a session run against the 0.4.3 gate: predictions were being
