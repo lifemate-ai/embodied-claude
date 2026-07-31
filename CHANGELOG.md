@@ -4,6 +4,27 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-07-31
+
+Setting up for a hands-on meant a room full of laptops with no cameras and no
+API keys, and a setup script that quite reasonably declined to configure
+servers it had no credentials for. Every participant would have seen a
+different, mostly empty tool list.
+
+### Added
+
+- setup: `--all` writes a configuration containing every server in the
+  catalogue, filling absent credentials with stand-in values. Because `camera`
+  and `voice` each name one option, the flag rides alongside them as an
+  additive overlay: both camera backends and both TTS engines are installed,
+  and both camera servers are emitted, without widening either field.
+- setup: the generated stand-ins keep a `changeme-` marker, which is exactly
+  what the placeholder guard rejects. Skipping that guard is confined to
+  `--all` and is the intent rather than a workaround -- a demo config should
+  announce itself rather than pass for a working one. Credentials already in
+  the environment are left alone, so running `--all` on a configured machine
+  adds servers instead of overwriting what already works.
+
 ## [0.4.5] - 2026-07-29
 
 A session spent several minutes sweeping the room for someone and could not
