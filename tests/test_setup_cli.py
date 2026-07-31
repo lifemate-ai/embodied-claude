@@ -7,9 +7,14 @@ import sys
 from io import StringIO
 from pathlib import Path
 
-from scripts import setup
+from scripts import onboarding, setup
 from scripts.doctor import CheckResult, CheckStatus
-from scripts.onboarding import CORE_SERVER_NAMES, FeatureSelection
+from scripts.onboarding import (
+    CORE_SERVER_NAMES,
+    SERVER_SPECS,
+    TAPO_REQUIRED_ENVIRONMENT,
+    FeatureSelection,
+)
 from scripts.setup import execute_setup
 
 ROOT = Path(__file__).parents[1]
@@ -156,6 +161,63 @@ def test_noninteractive_selection_names_every_missing_variable() -> None:
         "X_ACCESS_TOKEN_SECRET",
     ):
         assert key in result.stderr
+
+
+def _all_environment(**overrides: str) -> dict[str, str]:
+    environment = os.environ.copy()
+    for key in TAPO_REQUIRED_ENVIRONMENT:
+        environment.pop(key, None)
+    environment.update(overrides)
+    return environment
+
+
+def test_all_dry_run_lists_every_supported_server() -> None:
+    # The hands-on needs every tool visible in /mcp, so --all has to cover the
+    # whole catalogue rather than a curated subset that drifts out of date.
+    result = _run_setup_cli("--all", "--dry-run", environment=_all_environment())
+
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    assert set(config["mcpServers"]) == set(SERVER_SPECS)
+
+
+def test_all_generates_values_that_are_visibly_fake() -> None:
+    # A demo config that reads as real is worse than one announcing itself.
+    # The placeholder guard exists to stop example values reaching production,
+    # and --all is the one path allowed to write values it would reject.
+    result = _run_setup_cli("--all", "--dry-run", environment=_all_environment())
+
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    assert "changeme" in config["mcpServers"]["wifi-cam"]["env"]["TAPO_CAMERA_HOST"]
+
+
+def test_all_keeps_credentials_that_are_already_real() -> None:
+    # --all is for making every server appear, not for overwriting a machine
+    # that is already configured.
+    environment = _all_environment(TAPO_CAMERA_HOST="192.0.2.10")
+
+    result = _run_setup_cli("--all", "--dry-run", environment=environment)
+
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    host = config["mcpServers"]["wifi-cam"]["env"]["TAPO_CAMERA_HOST"]
+    assert host == "192.0.2.10"
+
+
+def test_all_sync_command_installs_every_extra() -> None:
+    command = setup.build_sync_command(onboarding.all_tools_selection())
+
+    assert command[:4] == ["uv", "sync", "--locked", "--no-dev"]
+    assert set(command[5::2]) == {
+        "camera-usb",
+        "camera-tapo",
+        "transcription-whisper",
+        "voice-voicevox",
+        "voice-elevenlabs",
+        "x",
+        "system-temperature",
+    }
 
 
 def test_dry_run_calls_no_side_effects(tmp_path: Path) -> None:

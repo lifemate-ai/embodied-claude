@@ -30,6 +30,7 @@ class FeatureSelection:
     x_enabled: bool = False
     system_temperature: bool = False
     embedding_model: str = "small"
+    all_tools: bool = False
 
     def __post_init__(self) -> None:
         if self.profile != "core":
@@ -48,12 +49,19 @@ class FeatureSelection:
     def uv_extras(self) -> tuple[str, ...]:
         """Return root extras needed by this feature selection."""
         extras: list[str] = []
+        if self.all_tools and self.camera != "usb":
+            # `camera` names one backend, but --all wants both installed. The
+            # other is overlaid here rather than by widening the field to a
+            # set, which would touch every existing caller.
+            extras.append("camera-usb")
         if self.camera is not None:
             extras.append(f"camera-{self.camera}")
         if self.transcription is not None:
             extras.append(f"transcription-{self.transcription}")
         if self.voice is not None:
             extras.append(f"voice-{self.voice}")
+        if self.all_tools and self.voice != "elevenlabs":
+            extras.append("voice-elevenlabs")
         if self.x_enabled:
             extras.append("x")
         if self.system_temperature:
@@ -114,6 +122,21 @@ X_REQUIRED_ENVIRONMENT = (
     "X_ACCESS_TOKEN_SECRET",
 )
 
+# Deliberately fake values for --all. They keep the `changeme-` marker that
+# is_placeholder_value() rejects, so a demo config announces itself as one
+# rather than passing for a working setup.
+HANDSON_ENVIRONMENT = {
+    "TAPO_CAMERA_HOST": "changeme-tapo.invalid",
+    "TAPO_USERNAME": "changeme-user",
+    "TAPO_PASSWORD": "changeme-password",
+    "ELEVENLABS_API_KEY": "changeme-elevenlabs-key",
+    "XAI_API_KEY": "changeme-xai-key",
+    "X_CONSUMER_KEY": "changeme-x-consumer-key",
+    "X_CONSUMER_SECRET": "changeme-x-consumer-secret",
+    "X_ACCESS_TOKEN": "changeme-x-access-token",
+    "X_ACCESS_TOKEN_SECRET": "changeme-x-access-token-secret",
+}
+
 _PRIVATE_KEYS = {
     "TAPO_USERNAME",
     "ELEVENLABS_VOICE_ID",
@@ -136,11 +159,39 @@ def required_environment(selection: FeatureSelection) -> tuple[str, ...]:
     required: list[str] = []
     if selection.camera == "tapo":
         required.extend(TAPO_REQUIRED_ENVIRONMENT)
-    if selection.voice == "elevenlabs":
+    if selection.voice == "elevenlabs" or selection.all_tools:
         required.extend(ELEVENLABS_REQUIRED_ENVIRONMENT)
     if selection.x_enabled:
         required.extend(X_REQUIRED_ENVIRONMENT)
     return tuple(required)
+
+
+def all_tools_selection(embedding_model: str = "small") -> FeatureSelection:
+    """Every server at once, for demos and hands-on sessions."""
+
+    return FeatureSelection(
+        camera="tapo",
+        transcription="whisper",
+        voice="voicevox",
+        x_enabled=True,
+        system_temperature=True,
+        embedding_model=embedding_model,
+        all_tools=True,
+    )
+
+
+def fill_handson_environment(environment: Mapping[str, str]) -> dict[str, str]:
+    """Overlay fake values on required keys that are empty.
+
+    Credentials already present are kept. --all exists to make every server
+    appear, not to overwrite a machine that is already configured.
+    """
+
+    filled = dict(environment)
+    for key, value in HANDSON_ENVIRONMENT.items():
+        if not filled.get(key, "").strip():
+            filled[key] = value
+    return filled
 
 
 def missing_environment(
@@ -194,10 +245,12 @@ def build_mcp_config(
 ) -> dict[str, Any]:
     """Build a deterministic MCP configuration for the selected capabilities."""
 
-    invalid = missing_environment(selection, environment) + placeholder_environment(
-        selection,
-        environment,
-    )
+    invalid = missing_environment(selection, environment)
+    if not selection.all_tools:
+        # --all fills required keys with exactly the values this check exists
+        # to reject. Skipping it is the point: the stand-ins stay recognisable
+        # rather than being disguised to slip past the guard.
+        invalid = invalid + placeholder_environment(selection, environment)
     if invalid:
         joined = ", ".join(dict.fromkeys(invalid))
         raise ValueError(f"Missing or placeholder environment values: {joined}")
@@ -221,9 +274,11 @@ def build_mcp_config(
         ),
     }
 
-    if selection.camera == "usb":
+    # Two independent checks rather than a chain: --all wants both cameras,
+    # and `camera` can only name one of them.
+    if selection.camera == "usb" or selection.all_tools:
         servers["usb-webcam"] = SERVER_SPECS["usb-webcam"].command()
-    elif selection.camera == "tapo":
+    if selection.camera == "tapo":
         camera_environment = _selected_environment(
             environment,
             TAPO_REQUIRED_ENVIRONMENT,
@@ -240,13 +295,23 @@ def build_mcp_config(
         servers["wifi-cam"] = SERVER_SPECS["wifi-cam"].command(camera_environment)
 
     if selection.voice == "voicevox":
-        servers["tts"] = SERVER_SPECS["tts"].command(
-            {
-                "VOICEVOX_URL": environment.get("VOICEVOX_URL", "").strip()
-                or DEFAULT_VOICEVOX_URL,
-                "TTS_DEFAULT_ENGINE": "voicevox",
-            }
-        )
+        voice_environment = {
+            "VOICEVOX_URL": environment.get("VOICEVOX_URL", "").strip()
+            or DEFAULT_VOICEVOX_URL,
+            "TTS_DEFAULT_ENGINE": "voicevox",
+        }
+        if selection.all_tools:
+            # Both engines are installed under --all, so carry the ElevenLabs
+            # key as well: switching engines becomes a one-line edit instead
+            # of a re-run of setup.
+            voice_environment.update(
+                _selected_environment(
+                    environment,
+                    ELEVENLABS_REQUIRED_ENVIRONMENT,
+                    ELEVENLABS_OPTIONAL_ENVIRONMENT,
+                )
+            )
+        servers["tts"] = SERVER_SPECS["tts"].command(voice_environment)
     elif selection.voice == "elevenlabs":
         voice_environment = _selected_environment(
             environment,

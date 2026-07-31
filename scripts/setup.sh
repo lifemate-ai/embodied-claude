@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Every argument goes straight to scripts/setup.py, which owns the option
+# surface; run with --help for the full list. `setup.sh --all` configures
+# every server, filling absent credentials with obviously fake values.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 

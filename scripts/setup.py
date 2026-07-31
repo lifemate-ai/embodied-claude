@@ -19,7 +19,9 @@ if __package__ in {None, ""}:
 from scripts.doctor import CheckResult, CheckStatus, run_doctor
 from scripts.onboarding import (
     FeatureSelection,
+    all_tools_selection,
     build_mcp_config,
+    fill_handson_environment,
     missing_environment,
     redact_config,
 )
@@ -54,6 +56,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--with-voice", choices=("voicevox", "elevenlabs"))
     parser.add_argument("--with-x", action="store_true")
     parser.add_argument("--with-system-temperature", action="store_true")
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help=(
+            "Enable every server, filling absent credentials with obviously "
+            "fake values. For demos and hands-on sessions, not for real use"
+        ),
+    )
     parser.add_argument(
         "--embedding-model",
         choices=("small", "base"),
@@ -307,10 +317,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(raw_arguments)
     interactive = not raw_arguments
 
-    selection = (
-        _interactive_selection()
-        if interactive
-        else FeatureSelection(
+    if interactive:
+        selection = _interactive_selection()
+        environment = _interactive_environment(selection, os.environ)
+    elif args.all:
+        # --all overrides the individual --with-* flags rather than merging
+        # with them: "everything" has no coherent reading that also honours a
+        # narrower choice made on the same command line.
+        selection = all_tools_selection(args.embedding_model)
+        environment = fill_handson_environment(os.environ)
+    else:
+        selection = FeatureSelection(
             profile=args.profile,
             camera=args.with_camera,
             transcription=args.with_transcription,
@@ -319,12 +336,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             system_temperature=args.with_system_temperature,
             embedding_model=args.embedding_model,
         )
-    )
-    environment = (
-        _interactive_environment(selection, os.environ)
-        if interactive
-        else dict(os.environ)
-    )
+        environment = dict(os.environ)
     missing = missing_environment(selection, environment)
     if missing:
         parser.error(
