@@ -8,12 +8,13 @@ import math
 import re
 import secrets
 import shlex
+from datetime import timedelta
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from social_core.db import SocialDB
-from social_core.time import utc_now
+from social_core.time import parse_timestamp, utc_now
 
 from individual_kernel_mcp.body_contingency import (
     BodyContingencyStore,
@@ -27,6 +28,14 @@ from individual_kernel_mcp.body_contingency import (
 # heuristic, kept so actions with no body channel score exactly as before.
 UNVERIFIED_CAUSAL_FIT_SUCCESS = 1.0
 UNVERIFIED_CAUSAL_FIT_FAILURE = 0.65
+
+# How long an intention may sit PENDING before recovery treats it as abandoned.
+# `hook_cli` runs the recovery on EVERY hook invocation, so without a window the
+# recovery closes intentions that were created moments ago and are about to be
+# used -- see `recover_dangling`. Five minutes is far longer than the gap between
+# proposing an action and issuing it, and far shorter than the gap left by a
+# session that died mid-action, which is what recovery exists for.
+RECOVERY_GRACE_SECONDS = 300.0
 
 
 class IntentionStatus(StrEnum):
@@ -165,13 +174,37 @@ class AgencyStore:
 
     def propose(self, proposal: ActionProposal, *, owner_id: str = "self") -> IntentionRecord:
         field = self._db.fetchone(
-            "SELECT tick_id, status FROM enacted_fields WHERE field_id = ? AND owner_id = ?",
+            """
+            SELECT tick_id, status, continuity_token FROM enacted_fields
+            WHERE field_id = ? AND owner_id = ?
+            """,
             (proposal.field_id, owner_id),
         )
         if field is None:
             raise ValueError(f"unknown field {proposal.field_id!r}")
         if field["status"] != "COMMITTED":
-            raise ValueError("actions require a COMMITTED field")
+            # The caller cannot guarantee the field it names is still current: it
+            # learned that id from a tool call, and every tool RESULT commits a
+            # new field which invalidates the previous one. Demanding COMMITTED
+            # here refused correct callers purely on timing, and was the second
+            # of the two errors that made every step cost a re-proposal.
+            #
+            # A field superseded inside the same continuity is just the clock
+            # moving, so the intention may still be formed against it. A field
+            # from another lineage is a different matter and stays refused.
+            current = self._db.fetchone(
+                """
+                SELECT continuity_token FROM enacted_fields
+                WHERE owner_id = ? AND status = 'COMMITTED'
+                """,
+                (owner_id,),
+            )
+            same_lineage = (
+                current is not None
+                and current["continuity_token"] == field["continuity_token"]
+            )
+            if not same_lineage:
+                raise ValueError("actions require a field from the current continuity")
         existing = self.get_pending(owner_id)
         if existing is not None:
             raise ValueError(
@@ -526,14 +559,43 @@ class AgencyStore:
             ],
         )
 
-    def recover_dangling(self, owner_id: str = "self") -> list[ActionOutcome]:
+    def recover_dangling(
+        self,
+        owner_id: str = "self",
+        *,
+        older_than_seconds: float = RECOVERY_GRACE_SECONDS,
+    ) -> list[ActionOutcome]:
+        """Close intentions a previous runtime abandoned -- and only those.
+
+        The staleness predicate is the entire point of this function and it was
+        missing: every PENDING row was closed on sight. Because `hook_cli` calls
+        the recovery on EVERY hook invocation, an intention created milliseconds
+        earlier was killed by the next hook to fire, and `recover_stale_runtime`
+        then invalidated the field that intention pointed at. The caller saw
+        "no matching pending intention" and "actions require a COMMITTED field"
+        -- 308 of 477 gate refusals in a single observed session -- and had to
+        re-propose before every step.
+
+        The grace window preserves the real use case, a session that died
+        mid-action, while leaving live intentions alone.
+        """
+        # The comparison below is `<=`, not `<`. Both sides are second-granular
+        # (`utc_now` uses timespec="seconds"), so with a zero window the cutoff
+        # lands on the same second as anything just created and a strict
+        # comparison recovers nothing at all -- which is how the crash-recovery
+        # test caught this. At the default window the cutoff is 300s in the past,
+        # so a live intention is still never caught.
+        cutoff = (
+            parse_timestamp(utc_now()) - timedelta(seconds=older_than_seconds)
+        ).isoformat(timespec="seconds")
         rows = self._db.fetchall(
             """
             SELECT action_id FROM field_intentions
             WHERE owner_id = ? AND status IN ('PENDING', 'ALLOWED')
+              AND created_at <= ?
             ORDER BY created_at ASC
             """,
-            (owner_id,),
+            (owner_id, cutoff),
         )
         recovered: list[ActionOutcome] = []
         for row in rows:

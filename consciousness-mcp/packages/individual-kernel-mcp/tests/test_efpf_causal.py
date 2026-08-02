@@ -476,7 +476,10 @@ def test_crash_recovery_closes_dangling_action_without_duplicate(
         tool_name="mcp__tts__say", tool_input={"text": "hello"}
     ).allow
 
-    report = producer.recover_stale_runtime()
+    # older_than_seconds=0.0 is how a test says "the runtime has been gone long
+    # enough to recover". Without it the intention is younger than the grace
+    # window and must survive -- which is the point of the next test.
+    report = producer.recover_stale_runtime(older_than_seconds=0.0)
     recovered = producer.agency.get(intention.action_id)
     assert intention.action_id in report.recovered_action_ids
     assert recovered.status == "UNKNOWN"
@@ -485,11 +488,41 @@ def test_crash_recovery_closes_dangling_action_without_duplicate(
         "SELECT COUNT(*) AS n FROM field_action_outcomes WHERE action_id = ?",
         (intention.action_id,),
     )["n"] == 1
-    producer.recover_stale_runtime()
+    producer.recover_stale_runtime(older_than_seconds=0.0)
     assert social_db.fetchone(
         "SELECT COUNT(*) AS n FROM field_action_outcomes WHERE action_id = ?",
         (intention.action_id,),
     )["n"] == 1
+
+
+def test_recovery_leaves_a_live_intention_and_its_field_alone(
+    social_db, tmp_path: Path
+) -> None:
+    """Regression: recovery used to close intentions of any age, on every hook.
+
+    `hook_cli` runs recovery on EVERY hook invocation. With no staleness
+    predicate, an intention proposed moments earlier was closed as UNKNOWN and
+    the field it pointed at was invalidated, so the very next tool call was
+    refused with "no matching pending intention" and the one after that with
+    "actions require a COMMITTED field". Those two errors accounted for 308 of
+    477 gate refusals in one observed session, and made every single step cost a
+    re-proposal. Guard the default path, not just the explicit-cutoff path.
+    """
+    producer = _producer(social_db, tmp_path)
+    field = _commit(producer)
+    runtime = FieldRuntime(social_db, producer=producer)
+    intention = runtime.propose_action(_proposal(field))
+
+    report = producer.recover_stale_runtime()
+
+    assert report.recovered_action_ids == []
+    pending = producer.agency.get_pending()
+    assert pending is not None and pending.action_id == intention.action_id
+    assert producer.agency.get(intention.action_id).status == "PENDING"
+    assert producer.fields.get(field.field_id).status == "COMMITTED"
+    assert runtime.gate_tool(
+        tool_name="mcp__tts__say", tool_input={"text": "hello"}
+    ).allow
 
 
 def test_provenance_is_preserved_in_surface() -> None:

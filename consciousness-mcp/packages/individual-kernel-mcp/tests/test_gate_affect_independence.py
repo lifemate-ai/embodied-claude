@@ -85,6 +85,12 @@ def _decide(db: SocialDB, state_dir: Path, affect: AffectState):
     producer = _producer(db, state_dir, affect)
     runtime = FieldRuntime(db, producer=producer)
     field = _commit(producer)
+    # Both affect conditions share one `social_db`, and only one intention may be
+    # pending per owner. This used to be cleared as a side effect of recovery
+    # closing every PENDING row on sight -- the very bug the grace window fixes.
+    # Say it out loud instead of leaning on it: this call means "a previous
+    # runtime is gone; take what it left".
+    producer.recover_stale_runtime(older_than_seconds=0.0)
     runtime.propose_action(_proposal(field))
     return runtime.gate_tool(tool_name="Write", tool_input=dict(_TOOL_INPUT))
 
@@ -109,6 +115,10 @@ class TestGateIsAffectBlind:
             producer = _producer(social_db, tmp_path / name, affect)
             runtime = FieldRuntime(social_db, producer=producer)
             field = _commit(producer)
+            # Same shared-db reset as `_decide`: the previous iteration's
+            # intention is still pending, and recovery no longer clears live
+            # ones by accident.
+            producer.recover_stale_runtime(older_than_seconds=0.0)
             runtime.propose_action(_proposal(field))
             decision = runtime.gate_tool(
                 tool_name="Write",

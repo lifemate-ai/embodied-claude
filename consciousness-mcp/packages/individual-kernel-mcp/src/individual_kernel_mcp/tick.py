@@ -22,6 +22,7 @@ from social_core.time import utc_now
 
 from individual_kernel_mcp._behavior import get_behavior
 from individual_kernel_mcp.agency import (
+    RECOVERY_GRACE_SECONDS,
     ActionOutcome,
     ActionProposal,
     AgencyAssessment,
@@ -664,14 +665,29 @@ class TickProducer:
             raise ValueError(f"unknown tick {tick_id!r}")
         return self.fields.close(field.field_id, output_summary=output_summary)
 
-    def recover_stale_runtime(self, owner_id: str = "self") -> RecoveryReport:
+    def recover_stale_runtime(
+        self,
+        owner_id: str = "self",
+        *,
+        older_than_seconds: float = RECOVERY_GRACE_SECONDS,
+    ) -> RecoveryReport:
+        """Close what a dead runtime left behind, without touching live work.
+
+        `hook_cli` calls this on every hook invocation, so the grace window is
+        the only thing stopping it from closing an intention that was proposed
+        moments ago and is about to be issued -- and from invalidating the field
+        that intention points at. Pass `older_than_seconds=0.0` to simulate a
+        runtime that has been gone long enough to recover.
+        """
         runtime = self.fields.runtime_state(owner_id)
         token = (
             runtime.continuity_token
             if runtime is not None
             else f"cont_{secrets.token_urlsafe(16)}"
         )
-        outcomes = self.agency.recover_dangling(owner_id)
+        outcomes = self.agency.recover_dangling(
+            owner_id, older_than_seconds=older_than_seconds
+        )
         recovered_ids = [item.action_id for item in outcomes]
         for outcome in outcomes:
             field = self.fields.get(outcome.field_id)
@@ -1387,13 +1403,28 @@ class FieldRuntime:
                 action_id=intention.action_id if intention else None,
             )
         if intention.field_id != field.field_id:
-            return ToolGateDecision(
-                allow=False,
-                reason="pending intention belongs to a superseded field",
-                external=True,
-                field_id=field.field_id,
-                action_id=intention.action_id,
-            )
+            # Exact field identity is not something a caller can achieve. The only
+            # way to learn a field_id is a tool call, and every tool RESULT commits
+            # a fresh field, so by the time the proposed action is issued the field
+            # it named has usually been superseded by ordinary tick progression.
+            # Requiring identity therefore refused correct callers on timing alone.
+            #
+            # What the gate actually needs to prevent is acting on an intention
+            # formed in a DIFFERENT lineage -- another session, another individual,
+            # a continuity that was reset. Same-continuity supersession is just the
+            # clock moving. The byte-exact tool_input hash, checked above by
+            # `match_pending`, remains the guarantee that the act is the declared
+            # one. The outcome is deliberately left bound to the field the
+            # intention was formed under, because that is the causal truth.
+            prior = self.fields.get(intention.field_id)
+            if prior is None or prior.continuity_token != field.continuity_token:
+                return ToolGateDecision(
+                    allow=False,
+                    reason="pending intention belongs to a different continuity",
+                    external=True,
+                    field_id=field.field_id,
+                    action_id=intention.action_id,
+                )
         if self.boundary_evaluator is not None:
             allowed, boundary_reason = self.boundary_evaluator(
                 tool_name, tool_input, field
