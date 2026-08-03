@@ -431,6 +431,21 @@ CREATE INDEX IF NOT EXISTS idx_organism_runs_owner_ran
     ON organism_runs(owner_id, ran_at DESC);
 """
 
+# Which Claude Code session speaks for an owner. Claimed when that session's
+# SessionStart hook fires. Subagents never fire SessionStart -- verified against
+# a run where eight of them made 419 tool calls and produced zero session_start
+# ticks -- so they can never take the primary slot, and a hook arriving under a
+# different session is given its own derived owner instead of sharing the
+# parent's field and single pending-intention slot.
+#
+# `RuntimeState` must already accept this column before the migration lands; it
+# forbids extra keys, so the reverse order takes the whole runtime down.
+# ALTER TABLE ADD COLUMN has no IF NOT EXISTS in SQLite, and `apply_migrations`
+# is what guarantees this runs exactly once.
+_MIGRATION_013_SQL = """
+ALTER TABLE field_runtime_state ADD COLUMN session_id TEXT;
+"""
+
 _MIGRATION_011_SQL = """
 CREATE TABLE IF NOT EXISTS process_meta_representations (
     process_meta_id TEXT PRIMARY KEY,
@@ -885,6 +900,10 @@ MIGRATIONS = [
     Migration(
         name="012_organism_runs",
         sql=_MIGRATION_012_SQL,
+    ),
+    Migration(
+        name="013_runtime_primary_session",
+        sql=_MIGRATION_013_SQL,
     ),
 ]
 
