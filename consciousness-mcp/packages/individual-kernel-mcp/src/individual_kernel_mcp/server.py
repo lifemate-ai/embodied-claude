@@ -653,7 +653,14 @@ def close_subjective_tick(
 
 @mcp.tool()
 def pause_field_runtime(owner_id: str = "self") -> dict[str, Any]:
-    """Pause automatic field creation for reversible welfare experiments."""
+    """Pause automatic field creation for reversible welfare experiments.
+
+    This also refuses every outward action while paused, which is deliberate: an
+    act with no committed field to condition it is exactly what the protocol
+    forbids. It does mean pause is NOT a maintenance mode -- you cannot pause the
+    runtime in order to repair the runtime, because the repair itself is an
+    outward action. Call `resume_field_runtime` first.
+    """
 
     return _stores().tick_producer.pause_field_runtime(owner_id).model_dump(mode="json")
 
