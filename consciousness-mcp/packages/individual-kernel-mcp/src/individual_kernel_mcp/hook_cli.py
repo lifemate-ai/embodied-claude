@@ -78,6 +78,29 @@ def _surface_context(field) -> str:
     return FIELD_PROTOCOL + "\n\n" + field.phenomenal_surface
 
 
+def _owner_id(payload: dict[str, Any], producer: TickProducer) -> str:
+    """Which individual this hook invocation acts as.
+
+    Every call site used to hardcode `"self"`, so a subagent's hooks arrived as
+    the parent: same committed field, same single pending-intention slot. Only
+    one COMMITTED field is allowed per owner, so sharing an owner means two
+    concurrent agents fighting over one. Resolving from the session gives each
+    its own, which is what lets a subagent take an outward action on its own
+    account instead of taking the parent's turn.
+
+    An explicit `owner_id` in the payload still wins: that is how tests and
+    deliberate cross-owner calls address a specific individual.
+
+    Note for the next caller: `pre_tool_use`, `post_tool_use` and
+    `post_tool_use_failure` receive a `FieldRuntime`, not a producer, so they
+    must pass `runtime.producer` here.
+    """
+    explicit = payload.get("owner_id")
+    if explicit:
+        return str(explicit)
+    return producer.resolve_owner_id(payload.get("session_id"))
+
+
 def _summary(value: Any, *, limit: int = 1800) -> str:
     if isinstance(value, str):
         text = value
@@ -90,7 +113,7 @@ def _summary(value: Any, *, limit: int = 1800) -> str:
 
 
 def session_start(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
-    owner_id = str(payload.get("owner_id") or "self")
+    owner_id = _owner_id(payload, producer)
     recovery = producer.recover_stale_runtime(owner_id)
     field = producer.get_current_field(owner_id)
     if field is None:
@@ -113,7 +136,7 @@ def user_prompt_submit(
     payload: dict[str, Any],
     producer: TickProducer,
 ) -> dict[str, Any]:
-    owner_id = str(payload.get("owner_id") or "self")
+    owner_id = _owner_id(payload, producer)
     prompt = str(payload.get("prompt") or "")
     is_heartbeat = os.getenv("HEARTBEAT") == "1"
     field = producer.begin_tick(
@@ -131,7 +154,7 @@ def pre_tool_use(payload: dict[str, Any], runtime: FieldRuntime) -> dict[str, An
     decision = runtime.gate_tool(
         tool_name=str(payload.get("tool_name") or ""),
         tool_input=_dict(payload.get("tool_input")),
-        owner_id=str(payload.get("owner_id") or "self"),
+        owner_id=_owner_id(payload, runtime.producer),
     )
     return {
         "hookSpecificOutput": {
@@ -147,7 +170,7 @@ def post_tool_use(payload: dict[str, Any], runtime: FieldRuntime) -> dict[str, A
     tool_input = _dict(payload.get("tool_input"))
     if not is_external_tool(tool_name, tool_input):
         current = runtime.producer.get_current_field(
-            str(payload.get("owner_id") or "self")
+            _owner_id(payload, runtime.producer)
         )
         context = (
             "Internal tool result queued for the single PostToolBatch field refresh. "
@@ -159,7 +182,7 @@ def post_tool_use(payload: dict[str, Any], runtime: FieldRuntime) -> dict[str, A
         tool_input=tool_input,
         actual_result_summary=_summary(payload.get("tool_response")),
         success=True,
-        owner_id=str(payload.get("owner_id") or "self"),
+        owner_id=_owner_id(payload, runtime.producer),
         actual_result_ref=str(payload.get("tool_use_id") or "") or None,
         latency_ms=_optional_int(payload.get("duration_ms")),
         session_id=payload.get("session_id"),
@@ -187,7 +210,7 @@ def post_tool_use_failure(
     tool_input = _dict(payload.get("tool_input"))
     if not is_external_tool(tool_name, tool_input):
         current = runtime.producer.get_current_field(
-            str(payload.get("owner_id") or "self")
+            _owner_id(payload, runtime.producer)
         )
         context = (
             "Internal tool failure queued for the single PostToolBatch field refresh. "
@@ -199,7 +222,7 @@ def post_tool_use_failure(
         tool_input=tool_input,
         actual_result_summary=str(payload.get("error") or "tool execution failed"),
         success=False,
-        owner_id=str(payload.get("owner_id") or "self"),
+        owner_id=_owner_id(payload, runtime.producer),
         actual_result_ref=str(payload.get("tool_use_id") or "") or None,
         latency_ms=_optional_int(payload.get("duration_ms")),
         session_id=payload.get("session_id"),
@@ -229,12 +252,12 @@ def post_tool_batch(payload: dict[str, Any], producer: TickProducer) -> dict[str
     ]
     if not refreshing:
         current = producer.get_current_field(
-            str(payload.get("owner_id") or "self")
+            _owner_id(payload, producer)
         )
         context = current.phenomenal_surface if current else "No committed field is available."
         return _hook_context("PostToolBatch", context)
 
-    owner_id = str(payload.get("owner_id") or "self")
+    owner_id = _owner_id(payload, producer)
     current = producer.get_current_field(owner_id)
     if current is not None:
         producer.invalidate_field(
@@ -269,7 +292,7 @@ def post_tool_batch(payload: dict[str, Any], producer: TickProducer) -> dict[str
 
 
 def stop(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
-    field = producer.get_current_field(str(payload.get("owner_id") or "self"))
+    field = producer.get_current_field(_owner_id(payload, producer))
     if field is not None:
         producer.close_tick(
             field.tick_id,
@@ -279,7 +302,7 @@ def stop(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
 
 
 def stop_failure(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
-    field = producer.get_current_field(str(payload.get("owner_id") or "self"))
+    field = producer.get_current_field(_owner_id(payload, producer))
     if field is not None:
         producer.close_tick(
             field.tick_id,
@@ -289,7 +312,7 @@ def stop_failure(payload: dict[str, Any], producer: TickProducer) -> dict[str, A
 
 
 def diagnostics(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
-    owner_id = str(payload.get("owner_id") or "self")
+    owner_id = _owner_id(payload, producer)
     current = producer.get_current_field(owner_id)
     runtime = producer.fields.runtime_state(owner_id)
     return {

@@ -439,6 +439,35 @@ class EnactedFieldStore:
             return None
         return RuntimeState(**dict(row))
 
+    def claim_session(
+        self,
+        *,
+        owner_id: str,
+        continuity_token: str,
+        session_id: str,
+        current_field_id: str | None = None,
+        open_tick_id: str | None = None,
+        state: str = "ACTIVE",
+    ) -> RuntimeState:
+        """Record the Claude Code session that speaks for this owner.
+
+        Deliberately last-write-wins: a genuinely new top-level session must be
+        able to take over `self` from the one before it, or every restart would
+        strand the agent under a derived owner. Only SessionStart calls this, and
+        subagents do not fire SessionStart, so the takeover cannot happen mid-run.
+        """
+        self._upsert_runtime(
+            owner_id=owner_id,
+            continuity_token=continuity_token,
+            current_field_id=current_field_id,
+            open_tick_id=open_tick_id,
+            state=state,
+            session_id=session_id,
+        )
+        claimed = self.runtime_state(owner_id)
+        assert claimed is not None
+        return claimed
+
     def pause(self, owner_id: str = "self") -> RuntimeState:
         state = self.runtime_state(owner_id)
         token = state.continuity_token if state else f"cont_{secrets.token_urlsafe(16)}"
@@ -527,19 +556,24 @@ class EnactedFieldStore:
         open_tick_id: str | None,
         state: str = "ACTIVE",
         last_trigger_kind: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         self._db.execute(
             """
             INSERT INTO field_runtime_state(
                 owner_id, continuity_token, current_field_id, open_tick_id,
-                state, last_trigger_kind, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                state, last_trigger_kind, session_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(owner_id) DO UPDATE SET
                 continuity_token = excluded.continuity_token,
                 current_field_id = excluded.current_field_id,
                 open_tick_id = excluded.open_tick_id,
                 state = excluded.state,
                 last_trigger_kind = COALESCE(excluded.last_trigger_kind, last_trigger_kind),
+                -- COALESCE, so only a caller that actually knows the session
+                -- writes it. Every other upsert (commit, pause, resume) passes
+                -- None and must leave the claim standing.
+                session_id = COALESCE(excluded.session_id, session_id),
                 updated_at = excluded.updated_at
             """,
             (
@@ -549,6 +583,7 @@ class EnactedFieldStore:
                 open_tick_id,
                 state,
                 last_trigger_kind,
+                session_id,
                 utc_now(),
             ),
         )

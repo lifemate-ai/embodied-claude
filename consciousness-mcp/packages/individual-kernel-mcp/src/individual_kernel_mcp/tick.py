@@ -735,6 +735,60 @@ class TickProducer:
             resumed_field_id=current.field_id if current else None,
         )
 
+    def claim_primary_session(self, owner_id: str, session_id: str | None) -> None:
+        """Record that this Claude Code session speaks for `owner_id`.
+
+        Called from the SessionStart hook, which only a top-level session fires.
+        Subagents reach the kernel through PreToolUse alone -- measured against a
+        run where eight of them made 419 tool calls and produced no session_start
+        tick at all -- so the primary slot cannot be taken from underneath a
+        parent that is merely idle while its subagents work.
+        """
+        if not session_id:
+            return
+        state = self.fields.runtime_state(owner_id)
+        token = (
+            state.continuity_token
+            if state is not None
+            else f"cont_{secrets.token_urlsafe(16)}"
+        )
+        self.fields.claim_session(
+            owner_id=owner_id,
+            continuity_token=token,
+            session_id=session_id,
+            current_field_id=state.current_field_id if state else None,
+            open_tick_id=state.open_tick_id if state else None,
+            state=state.state if state else "ACTIVE",
+        )
+
+    def resolve_owner_id(
+        self,
+        session_id: str | None,
+        *,
+        primary_owner_id: str = "self",
+    ) -> str:
+        """Return the owner a hook from `session_id` should act as.
+
+        The primary session keeps `self` and its continuity. Any other session is
+        a subagent, and gets an owner of its own so that it can hold a field and
+        a pending intention without competing for the parent's single slot --
+        `enacted_fields` allows one COMMITTED field per owner, so sharing an owner
+        means sharing one field between concurrent agents.
+
+        Falls back to the primary when there is nothing to tell them apart: no
+        session in the payload, or no claim recorded yet. That keeps tests and
+        manual calls behaving exactly as before.
+        """
+        if not session_id:
+            return primary_owner_id
+        state = self.fields.runtime_state(primary_owner_id)
+        if state is None or not state.session_id:
+            return primary_owner_id
+        if state.session_id == session_id:
+            return primary_owner_id
+        digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
+        return f"{primary_owner_id}:agent:{digest}"
+
     def pause_field_runtime(self, owner_id: str = "self"):
         return self.fields.pause(owner_id)
 

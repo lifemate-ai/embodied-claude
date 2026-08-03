@@ -525,6 +525,77 @@ def test_recovery_leaves_a_live_intention_and_its_field_alone(
     ).allow
 
 
+def test_a_subagent_session_gets_its_own_owner(social_db, tmp_path: Path) -> None:
+    """A second session must not share the parent's field or intention slot.
+
+    `enacted_fields` permits one COMMITTED field per owner and `propose` permits
+    one pending intention per owner, so two concurrent agents under the same
+    owner fight over both. Splitting the owner is what lets a subagent act with
+    its own agency instead of taking the parent's turn.
+    """
+    producer = _producer(social_db, tmp_path)
+    producer.claim_primary_session("self", "parent-session")
+
+    assert producer.resolve_owner_id("parent-session") == "self"
+
+    child = producer.resolve_owner_id("child-session")
+    assert child != "self"
+    assert child.startswith("self:agent:")
+    # Stable across calls, so a subagent keeps one identity for its whole run.
+    assert producer.resolve_owner_id("child-session") == child
+    assert producer.resolve_owner_id("other-child") != child
+
+
+def test_owner_resolution_falls_back_to_self_without_a_claim(
+    social_db, tmp_path: Path
+) -> None:
+    """No session in the payload, or no claim yet, must behave exactly as before.
+
+    Tests and manual tool calls pass no session at all; if those silently became
+    derived owners they would stop seeing the field they just committed.
+    """
+    producer = _producer(social_db, tmp_path)
+
+    assert producer.resolve_owner_id(None) == "self"
+    assert producer.resolve_owner_id("") == "self"
+    # Claim not recorded yet: anything is potentially the primary.
+    assert producer.resolve_owner_id("unknown-session") == "self"
+
+
+def test_a_new_top_level_session_takes_over_the_primary_slot(
+    social_db, tmp_path: Path
+) -> None:
+    """Restarting Claude Code must return the agent to `self`, not strand it.
+
+    Only SessionStart claims, and subagents do not fire SessionStart, so
+    last-write-wins cannot be triggered mid-run by a subagent.
+    """
+    producer = _producer(social_db, tmp_path)
+    producer.claim_primary_session("self", "first-session")
+    producer.claim_primary_session("self", "second-session")
+
+    assert producer.resolve_owner_id("second-session") == "self"
+    assert producer.resolve_owner_id("first-session").startswith("self:agent:")
+
+
+def test_committing_a_field_does_not_erase_the_session_claim(
+    social_db, tmp_path: Path
+) -> None:
+    """Regression: every tick upserts the runtime row.
+
+    Without COALESCE on session_id, the first commit after SessionStart would
+    blank the claim and every later hook -- including the parent's own -- would
+    resolve to `self` again, silently undoing the split.
+    """
+    producer = _producer(social_db, tmp_path)
+    producer.claim_primary_session("self", "parent-session")
+    _commit(producer)
+
+    state = producer.fields.runtime_state("self")
+    assert state is not None and state.session_id == "parent-session"
+    assert producer.resolve_owner_id("child-session").startswith("self:agent:")
+
+
 def test_provenance_is_preserved_in_surface() -> None:
     field = EnactedField(
         tick_id="tick",
