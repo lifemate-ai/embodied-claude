@@ -113,6 +113,14 @@ def _summary(value: Any, *, limit: int = 1800) -> str:
 
 
 def session_start(payload: dict[str, Any], producer: TickProducer) -> dict[str, Any]:
+    # Claim before resolving. `_owner_id` reads the stored session, so without
+    # this the runtime never learns which session is primary and every hook --
+    # parent and subagent alike -- resolves to "self", which is the state this
+    # whole mechanism exists to avoid. Claiming for "self" rather than for the
+    # resolved owner is deliberate: only a top-level session fires SessionStart,
+    # so this event is exactly what identifies the primary.
+    if not payload.get("owner_id"):
+        producer.claim_primary_session("self", payload.get("session_id"))
     owner_id = _owner_id(payload, producer)
     recovery = producer.recover_stale_runtime(owner_id)
     field = producer.get_current_field(owner_id)

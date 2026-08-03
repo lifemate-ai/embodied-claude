@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -210,3 +211,149 @@ def test_heartbeat_stop_continuation_is_cross_platform(
     assert result["decision"] == "block"
     assert "finish the release check" in result["reason"]
     db.close()
+
+
+_OWNER_TOOL = "Write"
+_OWNER_INPUT = {"file_path": "/tmp/efpf-owner-fixture", "content": "parent"}
+
+
+def _field_id(result: dict) -> str:
+    context = result["hookSpecificOutput"]["additionalContext"]
+    match = re.search(r'field_id="([^"]+)"', context)
+    assert match is not None, context
+    return match.group(1)
+
+
+def _producer(tmp_path) -> tuple[SocialDB, TickProducer]:
+    db = SocialDB(tmp_path / "hook-social.db")
+    return db, TickProducer(
+        db,
+        interoception_path=tmp_path / "interoception.json",
+        desires_path=tmp_path / "desires.json",
+    )
+
+
+def _register_intention(tmp_path, field_id: str) -> None:
+    db, producer = _producer(tmp_path)
+    FieldRuntime(db, producer=producer).propose_action(
+        ActionProposal(
+            field_id=field_id,
+            tool_name=_OWNER_TOOL,
+            tool_input=_OWNER_INPUT,
+            goal="write the fixture once",
+        )
+    )
+    db.close()
+
+
+def _committed_field_id(tmp_path, owner_id: str) -> str | None:
+    db, producer = _producer(tmp_path)
+    field = producer.get_current_field(owner_id)
+    db.close()
+    return None if field is None else field.field_id
+
+
+def _start_parent_and_register(tmp_path) -> str:
+    _run_hook(
+        tmp_path,
+        "session-start",
+        {
+            "session_id": "parent-session",
+            "hook_event_name": "SessionStart",
+            "source": "startup",
+        },
+    )
+    parent = _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {
+            "session_id": "parent-session",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "write the fixture",
+        },
+    )
+    parent_field_id = _field_id(parent)
+    _register_intention(tmp_path, parent_field_id)
+    return parent_field_id
+
+
+def test_a_subagent_turn_leaves_the_parents_field_and_intention_alone(
+    tmp_path,
+) -> None:
+    """Drive the hooks end to end the way a subagent actually arrives.
+
+    Every hook used to act as owner "self", and only one COMMITTED field is
+    allowed per owner, so a subagent's UserPromptSubmit took the parent's
+    single slot. Resolving the owner from the session id gives the child its
+    own field and its own intention slot; the parent keeps both.
+    """
+    parent_field_id = _start_parent_and_register(tmp_path)
+
+    child = _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {
+            "session_id": "child-session",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "look something up for the parent",
+        },
+    )
+    assert _field_id(child) != parent_field_id
+    assert _committed_field_id(tmp_path, "self") == parent_field_id
+
+    # The child holds no intention of its own and must not spend the parent's.
+    child_gate = _run_hook(
+        tmp_path,
+        "pre-tool-use",
+        {
+            "session_id": "child-session",
+            "hook_event_name": "PreToolUse",
+            "tool_name": _OWNER_TOOL,
+            "tool_input": _OWNER_INPUT,
+            "tool_use_id": "child-write",
+        },
+    )
+    assert child_gate["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    parent_gate = _run_hook(
+        tmp_path,
+        "pre-tool-use",
+        {
+            "session_id": "parent-session",
+            "hook_event_name": "PreToolUse",
+            "tool_name": _OWNER_TOOL,
+            "tool_input": _OWNER_INPUT,
+            "tool_use_id": "parent-write",
+        },
+    )
+    assert parent_gate["hookSpecificOutput"]["permissionDecision"] == "allow", (
+        parent_gate
+    )
+
+
+def test_forcing_one_shared_owner_takes_the_parents_committed_slot(
+    tmp_path,
+) -> None:
+    """Same script, except the child is told to act as "self".
+
+    `_owner_id` honours an explicit `owner_id` in the payload, which reproduces
+    the pre-fix behaviour without editing the live hook: the child's tick
+    occupies the one COMMITTED slot and the parent's field is no longer the
+    committed one. Keeps the test above from passing vacuously.
+    """
+    parent_field_id = _start_parent_and_register(tmp_path)
+
+    child = _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {
+            "session_id": "child-session",
+            "owner_id": "self",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "look something up for the parent",
+        },
+    )
+    child_field_id = _field_id(child)
+
+    assert child_field_id != parent_field_id
+    assert _committed_field_id(tmp_path, "self") == child_field_id
