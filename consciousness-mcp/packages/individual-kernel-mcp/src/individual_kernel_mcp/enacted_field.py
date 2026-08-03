@@ -180,6 +180,14 @@ class RuntimeState(BaseModel):
     last_trigger_kind: str | None = None
     last_recovery_at: str | None = None
     updated_at: str
+    # The Claude Code session that speaks for this owner, claimed at its
+    # SessionStart. `runtime_state` builds this model straight from the row and
+    # the config forbids extras, so this field has to land BEFORE the migration
+    # that adds the column -- otherwise every path that reads runtime state
+    # raises at once, the gate fails closed, and the runtime can no longer be
+    # repaired from inside. That is not hypothetical; it happened while writing
+    # this change in the other order.
+    session_id: str | None = None
 
 
 class EnactedFieldStore:
