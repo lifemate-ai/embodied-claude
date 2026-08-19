@@ -187,7 +187,7 @@ class CameraMCPServer:
                 ),
             ]
 
-            # Add stereo vision tools if right camera is configured
+            # Add two-eye tools if right camera is configured (two views, no depth computed)
             if self._has_stereo:
                 tools.extend(
                     [
@@ -202,7 +202,7 @@ class CameraMCPServer:
                         ),
                         Tool(
                             name="see_both",
-                            description="See with BOTH eyes simultaneously (stereo vision). Returns two images side by side - left eye and right eye views. Use this for depth perception or comparing views from both cameras.",
+                            description="See with BOTH eyes simultaneously. Returns the left and right views as separate images. Useful for resolving occlusion (what is in front of what) and comparing viewpoints. Note: no disparity or depth is computed.",
                             inputSchema={
                                 "type": "object",
                                 "properties": {},
@@ -539,7 +539,7 @@ class CameraMCPServer:
                             ),
                             TextContent(
                                 type="text",
-                                text=f"Stereo capture at {left_result.timestamp} (L: {left_result.width}x{left_result.height}, R: {right_result.width}x{right_result.height})",
+                                text=f"Both-eyes capture at {left_result.timestamp} (L: {left_result.width}x{left_result.height}, R: {right_result.width}x{right_result.height})",
                             ),
                         ]
 
@@ -741,7 +741,7 @@ class CameraMCPServer:
                 )
                 await self._camera_right.connect()
                 self._has_stereo = True
-                logger.info(f"Connected to right camera at {right_config.host} (stereo vision enabled)")
+                logger.info(f"Connected to right camera at {right_config.host} (both-eyes tools enabled)")
             except Exception as e:
                 logger.warning(f"Failed to connect right camera at {right_config.host}: {e}")
                 self._camera_right = None

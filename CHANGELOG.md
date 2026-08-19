@@ -4,6 +4,36 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+A reader going through `wifi-cam-mcp` with the code open (fmtowns3, #132)
+found that the second camera was documented in three places that disagreed
+with each other and with the implementation: the tool description promised
+depth, the config silently ignored one of its own variables, and the README
+listed tools by names that no longer exist.
+
+### Fixed
+
+- wifi-cam: `see_both` no longer describes itself as stereo vision with depth
+  perception. It captures both cameras and returns the two views as separate
+  images; nothing computes disparity, and the model reading that description
+  was one step from claiming it could judge distance. The text now says what
+  the two views are good for (occlusion, comparing viewpoints) and that no
+  depth is computed.
+- wifi-cam: `TAPO_RIGHT_PTZ_MODE` is read. `right_camera_from_env()` built its
+  `CameraConfig` without `ptz_mode`, so the right camera was always `auto`
+  regardless of the environment; it now follows the same read, fallback to
+  `TAPO_PTZ_MODE`, and validation as the left camera, with tests.
+
+### Changed
+
+- wifi-cam: the README tool table names the tools that are actually registered
+  (`see`, `look_left`, ... `listen`), documents the optional right camera and
+  the thirteen `see_right` / `see_both` / `right_eye_*` / `both_eyes_*` / eye
+  position tools it adds, and notes how to cover several locations by
+  registering the server more than once with different `TAPO_CAMERA_HOST`.
+- hooks: the `hearing-daemon.py` stub points at where hearing actually went,
+  `lifemate-ai/embodied-codex` -> `hearing/`, instead of a directory that is
+  not in this repository.
+
 ## [0.4.6] - 2026-07-31
 
 Setting up for a hands-on meant a room full of laptops with no cameras and no
