@@ -32,7 +32,7 @@ def _snapshot(age: timedelta) -> dict:
         "desires": {
             "look_outside": 0.018,
             "browse_curiosity": 1.0,
-            "miss_kouta": 1.0,
+            "miss_companion": 1.0,
             "observe_room": 1.0,
             "identity_coherence": 0.4,
         },

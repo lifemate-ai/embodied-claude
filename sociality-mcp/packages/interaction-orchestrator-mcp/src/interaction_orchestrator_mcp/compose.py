@@ -11,7 +11,7 @@ from boundary_mcp.store import BoundaryStore
 from joint_attention_mcp.store import JointAttentionStore
 from relationship_mcp.store import RelationshipStore
 from self_narrative_mcp.store import SelfNarrativeStore
-from social_core import DEFAULT_POLICY_TIMEZONE, local_view, utc_now
+from social_core import DEFAULT_POLICY_TIMEZONE, companion_id, local_view, utc_now
 from social_state_mcp.store import SocialStateStore
 
 from .desire_source import load_desire_snapshot
@@ -358,7 +358,9 @@ def _pick_contract(
     *, person_id: str | None, channel: str, quiet_active: bool
 ) -> ResponseContract:
     base = ResponseContract()
-    if person_id == "kouta":
+    # Contract for the configured primary companion (COMPANION_ID); everyone
+    # else gets the neutral default above.
+    if person_id == companion_id():
         base = ResponseContract(
             treat_user_as="high-context technical partner",
             avoid=[

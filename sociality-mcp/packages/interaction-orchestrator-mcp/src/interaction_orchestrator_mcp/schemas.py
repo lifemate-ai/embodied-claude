@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from social_core.models import EpistemicClaim, EvidenceType
+from social_core.persona import companion_id
 
 Channel = Literal["chat", "voice", "autonomous", "x", "file", "system"]
 
@@ -47,7 +48,9 @@ class ComposeInteractionContextInput(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    person_id: str | None = "kouta"
+    # The primary companion's identifier comes from COMPANION_ID; read per
+    # instance so a changed environment is honoured without a reload.
+    person_id: str | None = Field(default_factory=companion_id)
     channel: Channel = "chat"
     user_text: str | None = None
     autonomous_trigger: str | None = None

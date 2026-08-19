@@ -41,6 +41,16 @@ preferred_nudge_style = "brief_gentle"
     return path
 
 
+@pytest.fixture(autouse=True)
+def companion_is_kouta(monkeypatch):
+    """The fixture policy and events name the companion "kouta".
+
+    The primary-companion contract is keyed on COMPANION_ID (#135), so the
+    tests state that binding instead of relying on a literal in the code.
+    """
+    monkeypatch.setenv("COMPANION_ID", "kouta")
+
+
 @pytest.fixture
 def db(tmp_path: Path) -> SocialDB:
     social_db = SocialDB(tmp_path / "social.db")

@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -58,8 +60,88 @@ COMPANION_NAME = os.getenv("COMPANION_NAME", "あなた")
 SELF_NAME = os.getenv("SELF_NAME", "自分")
 SELF_PRONOUN = os.getenv("SELF_PRONOUN", "自分")
 
-# JST timezone
-JST = timezone(timedelta(hours=9))
+# ──────────────────────────────────────────────
+# 時間帯（アロスタシス用）。既定値はこれまでの JST / 0-5 時 / 5-7 時と同じ。
+# ──────────────────────────────────────────────
+#
+# タイムゾーンも深夜帯も固定だと、JST 以外の地域では現地の昼間に「深夜モード」が
+# 発火し、夜勤の生活では逆に効く。しかもエラーもログも出ないので、外からは
+# 「今日はあまり寂しがらないな」としか見えない。env で上書きできるようにする。
+#
+# DESIRE_TIMEZONE : IANA 名（Asia/Tokyo）か固定オフセット（+09:00 / -05:00）。
+#                   解決できなければ +09:00 に落ちる（クラッシュしない）。
+# DESIRE_NIGHT_START / DESIRE_NIGHT_END : 深夜帯 [start, end)。end < start なら
+#                   日付をまたぐ帯（22-5 時など）として扱う。
+# DESIRE_DAWN_END : 早朝帯 [NIGHT_END, DAWN_END)。
+DEFAULT_TIMEZONE = "Asia/Tokyo"
+DEFAULT_NIGHT_START = 0
+DEFAULT_NIGHT_END = 5
+DEFAULT_DAWN_END = 7
+
+_OFFSET_RE = re.compile(r"^([+-])(\d{1,2})(?::?(\d{2}))?$")
+
+
+def _fixed_offset(spec: str) -> tzinfo | None:
+    """Parse ``+09:00`` / ``-0500`` / ``+9`` into a fixed-offset timezone."""
+    m = _OFFSET_RE.match(spec.strip())
+    if not m:
+        return None
+    sign = 1 if m.group(1) == "+" else -1
+    hours = int(m.group(2))
+    minutes = int(m.group(3) or 0)
+    if hours > 23 or minutes > 59:
+        return None
+    return timezone(sign * timedelta(hours=hours, minutes=minutes), spec.strip())
+
+
+def resolve_timezone(spec: str | None = None) -> tzinfo:
+    """Resolve ``DESIRE_TIMEZONE`` to a tzinfo, defaulting to Asia/Tokyo.
+
+    Accepts an IANA name or a fixed offset. When zoneinfo cannot resolve the
+    name (Windows without tzdata, or a typo) it falls back to the fixed +09:00
+    that this module always used, rather than failing a body sense over a
+    configuration string.
+    """
+    raw = (spec if spec is not None else os.getenv("DESIRE_TIMEZONE", "")).strip()
+    if not raw:
+        raw = DEFAULT_TIMEZONE
+    fixed = _fixed_offset(raw)
+    if fixed is not None:
+        return fixed
+    try:
+        return ZoneInfo(raw)
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone(timedelta(hours=9), "JST")
+
+
+def _env_hour(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value % 24
+
+
+def quiet_bands() -> tuple[int, int, int]:
+    """Return ``(night_start, night_end, dawn_end)`` hours from env (or defaults)."""
+    return (
+        _env_hour("DESIRE_NIGHT_START", DEFAULT_NIGHT_START),
+        _env_hour("DESIRE_NIGHT_END", DEFAULT_NIGHT_END),
+        _env_hour("DESIRE_DAWN_END", DEFAULT_DAWN_END),
+    )
+
+
+def hour_in_band(hour: int, start: int, end: int) -> bool:
+    """``start <= hour < end`` on a 24-hour clock, wrapping past midnight if end < start."""
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
 
 
 # ──────────────────────────────────────────────
@@ -167,26 +249,30 @@ def get_allostatic_set_point(desire_name: str, now: datetime) -> float:
     """
     アロスタシス: 時間帯によるセットポイントの予測的調整。
 
-    深夜(0-5時)はsocial系欲求のセットポイントを下げる（一人でも平気）。
-    identity_coherenceは常に高いまま。
+    深夜帯（既定 0-5 時）は social 系欲求のセットポイントを下げる（一人でも平気）。
+    早朝帯（既定 5-7 時）は徐々に元に戻る。identity_coherence は常に高いまま。
+    タイムゾーンと時間帯は DESIRE_TIMEZONE / DESIRE_NIGHT_START / DESIRE_NIGHT_END /
+    DESIRE_DAWN_END で上書きできる（既定は従来どおり JST / 0-5 / 5-7）。
     """
     cfg = DESIRE_CONFIGS[desire_name]
     base_sp = cfg.set_point
 
-    # JSTに変換（naive datetimeの場合はUTCとみなす）
+    # ローカル時刻に変換（naive datetime の場合は UTC とみなす）
+    local_tz = resolve_timezone()
     if now.tzinfo is None:
-        now_jst = now.replace(tzinfo=timezone.utc).astimezone(JST)
+        now_local = now.replace(tzinfo=timezone.utc).astimezone(local_tz)
     else:
-        now_jst = now.astimezone(JST)
+        now_local = now.astimezone(local_tz)
 
-    hour = now_jst.hour
+    hour = now_local.hour
+    night_start, night_end, dawn_end = quiet_bands()
 
     # identity_coherenceは時間帯に関係なく不変
     if desire_name == "identity_coherence":
         return base_sp
 
-    # 深夜帯（0-5時JST）の調整
-    if 0 <= hour < 5:
+    # 深夜帯の調整
+    if hour_in_band(hour, night_start, night_end):
         if desire_name == "miss_companion":
             # 深夜は一人でも平気: セットポイントを下げる
             return max(0.0, base_sp - 0.15)
@@ -194,8 +280,8 @@ def get_allostatic_set_point(desire_name: str, now: datetime) -> float:
             # 深夜は外や部屋を見る欲求も落ち着く
             return max(0.0, base_sp - 0.1)
 
-    # 早朝帯（5-7時JST）: 徐々に元に戻る
-    if 5 <= hour < 7:
+    # 早朝帯: 徐々に元に戻る
+    if hour_in_band(hour, night_end, dawn_end):
         if desire_name == "miss_companion":
             return max(0.0, base_sp - 0.05)
 

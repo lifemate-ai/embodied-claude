@@ -24,7 +24,7 @@ from joint_attention_mcp.store import JointAttentionStore
 from mcp.server.fastmcp import FastMCP
 from relationship_mcp.store import RelationshipStore
 from self_narrative_mcp.store import SelfNarrativeStore
-from social_core import SocialDB
+from social_core import SocialDB, companion_id
 from social_state_mcp.inference import should_interrupt_result, turn_taking_state
 from social_state_mcp.inference import (
     summarize_social_context as build_social_context_summary,
@@ -457,7 +457,7 @@ def reflect_on_change(horizon_days: int = 7) -> dict[str, Any]:
 
 @mcp.tool()
 def compose_interaction_context_tool(
-    person_id: str | None = "kouta",
+    person_id: str | None = companion_id(),
     channel: str = "chat",
     user_text: str | None = None,
     autonomous_trigger: str | None = None,
@@ -658,7 +658,8 @@ async def _handle_http(
         status = "404 Not Found"
 
         if "GET /ingest" in req:
-            # Ingest a human utterance: /ingest?person_id=kouta&text=hello&kind=human_utterance
+            # Ingest a human utterance:
+            # /ingest?person_id=<COMPANION_ID>&text=hello&kind=human_utterance
             from datetime import datetime, timezone
             person_id = params.get("person_id", [None])[0]
             text = params.get("text", [""])[0]
@@ -717,7 +718,7 @@ async def _handle_http(
             stores = _stores()
             ctx = compose_interaction_context(
                 ComposeInteractionContextInput(
-                    person_id=params.get("person_id", ["kouta"])[0],
+                    person_id=params.get("person_id", [companion_id()])[0],
                     channel=params.get("channel", ["chat"])[0],
                     user_text=params.get("text", [None])[0],
                     autonomous_trigger=params.get("trigger", [None])[0],

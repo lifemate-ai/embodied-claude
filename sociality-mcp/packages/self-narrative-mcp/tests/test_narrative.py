@@ -131,5 +131,17 @@ def test_self_summary_and_reflect_on_change(store):
     summary = store.get_self_summary()
     change = store.reflect_on_change(horizon_days=2)
 
-    assert "Kokone" in summary.summary
+    assert summary.summary.startswith("This agent keeps a socially aware")
     assert change.summary
+
+
+def test_self_summary_names_the_configured_agent(monkeypatch):
+    """get_self_summary is injected into prompts, so it must not name someone else's agent."""
+    from self_narrative_mcp.summarizer import build_self_summary
+
+    monkeypatch.delenv("SELF_NAME", raising=False)
+    assert build_self_summary(None, [], []).startswith("This agent keeps")
+    assert "Kokone" not in build_self_summary(None, [], [])
+
+    monkeypatch.setenv("SELF_NAME", "Kokone")
+    assert build_self_summary(None, [], []).startswith("Kokone keeps")

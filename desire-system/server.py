@@ -192,9 +192,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=(
-                    "desires.jsonが見つからへん。\n"
+                    "desires.json が見つかりません。\n"
                     f"パス: {DESIRES_PATH}\n"
-                    "desire_updater を先に実行: "
+                    "先に desire-updater を実行してください: "
                     "uv run --directory desire-system desire-updater"
                 ),
             )]
@@ -250,7 +250,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         if data is None:
             return [TextContent(
                 type="text",
-                text="desires.jsonが見つからへん。先にdesire-updaterを実行して。",
+                text="desires.json が見つかりません。先に desire-updater を実行してください。",
             )]
 
         desires = data.get("desires", {})

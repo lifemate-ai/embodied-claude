@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from boundary_mcp.store import BoundaryStore
-from social_core import SocialDB
+from social_core import SocialDB, companion_id
 
 from individual_kernel_mcp.agency import is_external_tool
 from individual_kernel_mcp.boundary_adapter import BoundaryPolicyAdapter
@@ -150,7 +150,7 @@ def user_prompt_submit(
     field = producer.begin_tick(
         "heartbeat" if is_heartbeat else "user_prompt",
         owner_id,
-        person_id=str(payload.get("person_id") or "kouta"),
+        person_id=str(payload.get("person_id") or companion_id()),
         user_text=None if is_heartbeat else prompt,
         session_id=payload.get("session_id"),
     )

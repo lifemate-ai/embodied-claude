@@ -115,6 +115,44 @@ def test_core_profile_has_exactly_the_hardware_free_servers() -> None:
     }
 
 
+def test_persona_environment_is_passed_through_only_when_set() -> None:
+    """setup never invents a companion; it only carries one the operator named (#135)."""
+    bare = build_mcp_config(FeatureSelection(system_temperature=True), {})
+    assert "env" not in bare["mcpServers"]["desire-system"]
+    assert "env" not in bare["mcpServers"]["sociality"]
+    assert "env" not in bare["mcpServers"]["system-temperature"]
+    assert "COMPANION_NAME" not in bare["mcpServers"]["memory"]["env"]
+
+    environment = {
+        "COMPANION_NAME": "コウタ",
+        "COMPANION_ID": "kouta",
+        "SELF_NAME": "ここね",
+        "DESIRE_TIMEZONE": "Asia/Tokyo",
+        "DESIRE_NIGHT_START": "22",
+        "SYSTEM_TEMPERATURE_TONE": "kansai",
+        "UNRELATED": "ignored",
+    }
+    config = build_mcp_config(FeatureSelection(system_temperature=True), environment)
+    servers = config["mcpServers"]
+
+    assert servers["memory"]["env"]["COMPANION_NAME"] == "コウタ"
+    assert "COMPANION_ID" in servers["memory"]["env"]
+    assert servers["desire-system"]["env"] == {
+        "COMPANION_NAME": "コウタ",
+        "COMPANION_ID": "kouta",
+        "SELF_NAME": "ここね",
+        "DESIRE_TIMEZONE": "Asia/Tokyo",
+        "DESIRE_NIGHT_START": "22",
+    }
+    assert servers["sociality"]["env"]["COMPANION_ID"] == "kouta"
+    assert servers["individual-kernel"]["env"]["COMPANION_ID"] == "kouta"
+    assert servers["individual-kernel"]["env"]["DESIRE_NIGHT_START"] == "22"
+    assert servers["individual-kernel"]["env"]["SOCIAL_DB_PATH"] == "~/.claude/sociality/social.db"
+    assert servers["system-temperature"]["env"] == {"SYSTEM_TEMPERATURE_TONE": "kansai"}
+    for server in servers.values():
+        assert "UNRELATED" not in server.get("env", {})
+
+
 def test_generated_servers_use_root_workspace_entrypoints() -> None:
     config = build_mcp_config(
         FeatureSelection(

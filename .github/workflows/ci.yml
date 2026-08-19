@@ -42,6 +42,7 @@ jobs:
           uv run --project "$GITHUB_WORKSPACE" --directory wifi-cam-mcp pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory desire-system pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory system-temperature-mcp pytest -q
+          uv run --project "$GITHUB_WORKSPACE" --directory x-mcp pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory consciousness-mcp/packages/individual-kernel-mcp pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp pytest -q
           uv run --project "$GITHUB_WORKSPACE" --directory sociality-mcp/packages/agent-grammar pytest -q

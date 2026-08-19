@@ -126,7 +126,7 @@ def _tweepy_api():
 
 @mcp.tool()
 def post_tweet(text: str, image_path: str = "", reply_to: str = "") -> str:
-    """Post a tweet to X as @xai_kokone, optionally with an image.
+    """Post a tweet to X from the configured account, optionally with an image.
 
     IMPORTANT: X uses weighted character count. Japanese/CJK characters count as 2.
     Effective limit is ~140 Japanese characters (= 280 weighted).
@@ -156,7 +156,7 @@ def post_tweet(text: str, image_path: str = "", reply_to: str = "") -> str:
 
     response = client.create_tweet(**kwargs)
     tweet_id = response.data["id"]
-    return f"Posted! https://x.com/xai_kokone/status/{tweet_id}"
+    return f"Posted! https://x.com/i/status/{tweet_id}"
 
 
 @mcp.tool()

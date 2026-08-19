@@ -1,9 +1,17 @@
-"""Shared storage and schema helpers for Kokone sociality MCPs."""
+"""Shared storage and schema helpers for the sociality MCPs."""
 
 from .confidence import clamp01, confidence_from_evidence, weighted_average
 from .db import DEFAULT_SOCIAL_DB_PATH, SocialDB, get_social_db_path
 from .events import EventStore, build_event_id
 from .models import EVENT_KINDS, SocialEvent, SocialEventCreate
+from .persona import (
+    DEFAULT_COMPANION_ID,
+    DEFAULT_COMPANION_NAME,
+    DEFAULT_SELF_NAME,
+    companion_id,
+    companion_name,
+    self_name,
+)
 from .time import (
     DEFAULT_POLICY_TIMEZONE,
     FixedClock,
@@ -15,7 +23,10 @@ from .time import (
 )
 
 __all__ = [
+    "DEFAULT_COMPANION_ID",
+    "DEFAULT_COMPANION_NAME",
     "DEFAULT_POLICY_TIMEZONE",
+    "DEFAULT_SELF_NAME",
     "DEFAULT_SOCIAL_DB_PATH",
     "EVENT_KINDS",
     "EventStore",
@@ -25,12 +36,15 @@ __all__ = [
     "SocialEventCreate",
     "build_event_id",
     "clamp01",
+    "companion_id",
+    "companion_name",
     "confidence_from_evidence",
     "ensure_iso8601",
     "get_social_db_path",
     "in_quiet_hours",
     "local_view",
     "parse_timestamp",
+    "self_name",
     "utc_now",
     "weighted_average",
 ]

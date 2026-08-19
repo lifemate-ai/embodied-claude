@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
@@ -21,6 +22,12 @@ from .types import CameraPosition
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Display name of the person the agent lives with. Used as the default ``person``
+# for the theory-of-mind and joint-attention tools; read once at import so the
+# advertised schema default and the value actually used are the same string.
+# Same variable and default as desire-system (see #134, #135).
+COMPANION_NAME = os.getenv("COMPANION_NAME", "あなた")
 
 
 async def _start_http_recall_server(
@@ -676,8 +683,8 @@ class MemoryMCPServer:
                             },
                             "person": {
                                 "type": "string",
-                                "description": "Who you are talking to (default: コウタ)",
-                                "default": "コウタ",
+                                "description": f"Who you are talking to (default: {COMPANION_NAME})",
+                                "default": COMPANION_NAME,
                             },
                         },
                         "required": ["situation"],
@@ -706,8 +713,8 @@ class MemoryMCPServer:
                             },
                             "person": {
                                 "type": "string",
-                                "description": "Who you are sharing attention with (default: コウタ)",
-                                "default": "コウタ",
+                                "description": f"Who you are sharing attention with (default: {COMPANION_NAME})",
+                                "default": COMPANION_NAME,
                             },
                         },
                         "required": ["target"],
@@ -1392,7 +1399,7 @@ Date Range:
                         if not situation:
                             return [TextContent(type="text", text="Error: situation is required")]
 
-                        person = arguments.get("person", "コウタ")
+                        person = arguments.get("person", COMPANION_NAME)
 
                         # Pull relevant memories: personality, communication patterns
                         tom_memories = await self._memory_store.recall(
@@ -1446,7 +1453,7 @@ Date Range:
 
                         direction = arguments.get("direction", "respond")
                         my_observation = arguments.get("my_observation", "")
-                        person = arguments.get("person", "コウタ")
+                        person = arguments.get("person", COMPANION_NAME)
 
                         # Pull memories related to the shared target
                         ja_memories = await self._memory_store.recall(

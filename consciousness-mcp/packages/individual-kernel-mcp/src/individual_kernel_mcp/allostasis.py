@@ -21,11 +21,81 @@ caller supplies the clock and tests stay deterministic.
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-JST = timezone(timedelta(hours=9))
+# Quiet-hours clock. Mirrors desire-system/desire_updater.py: the same four
+# environment variables, the same defaults, so both projections of the same
+# need agree on when night is. Hardcoding JST and 0-5 meant a non-JST
+# deployment ran its "night" in the local afternoon, silently.
+DEFAULT_TIMEZONE = "Asia/Tokyo"
+DEFAULT_NIGHT_START = 0
+DEFAULT_NIGHT_END = 5
+DEFAULT_DAWN_END = 7
+
+_OFFSET_RE = re.compile(r"^([+-])(\d{1,2})(?::?(\d{2}))?$")
+
+
+def _fixed_offset(spec: str) -> tzinfo | None:
+    match = _OFFSET_RE.match(spec.strip())
+    if not match:
+        return None
+    sign = 1 if match.group(1) == "+" else -1
+    hours = int(match.group(2))
+    minutes = int(match.group(3) or 0)
+    if hours > 23 or minutes > 59:
+        return None
+    return timezone(sign * timedelta(hours=hours, minutes=minutes), spec.strip())
+
+
+def resolve_timezone(spec: str | None = None) -> tzinfo:
+    """Resolve ``DESIRE_TIMEZONE`` (IANA name or ``+09:00``), defaulting to Asia/Tokyo.
+
+    A name zoneinfo cannot resolve falls back to the fixed +09:00 this module
+    always used, rather than failing the body state over a configuration string.
+    """
+    raw = (spec if spec is not None else os.getenv("DESIRE_TIMEZONE", "")).strip()
+    if not raw:
+        raw = DEFAULT_TIMEZONE
+    fixed = _fixed_offset(raw)
+    if fixed is not None:
+        return fixed
+    try:
+        return ZoneInfo(raw)
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone(timedelta(hours=9), "JST")
+
+
+def _env_hour(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw) % 24
+    except ValueError:
+        return default
+
+
+def quiet_bands() -> tuple[int, int, int]:
+    """``(night_start, night_end, dawn_end)`` hours from the environment."""
+    return (
+        _env_hour("DESIRE_NIGHT_START", DEFAULT_NIGHT_START),
+        _env_hour("DESIRE_NIGHT_END", DEFAULT_NIGHT_END),
+        _env_hour("DESIRE_DAWN_END", DEFAULT_DAWN_END),
+    )
+
+
+def hour_in_band(hour: int, start: int, end: int) -> bool:
+    """``start <= hour < end`` on a 24-hour clock, wrapping past midnight if ``end < start``."""
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
 
 # Weights for the two valence terms. Chosen so that a fully good context reaches
 # +1 and a fully bad one reaches -1; see tests/test_valence_composition.py.
@@ -43,14 +113,13 @@ class DesireSpec:
     set_point: float
 
 
-# Mirrors desire-system/desire_updater.py. That package has its own virtualenv
-# and is not part of this workspace, so the constants are duplicated rather than
-# imported; mcpBehavior.toml can override them without touching code.
+# Mirrors desire-system/desire_updater.py. That package is a separate
+# distribution, so the constants are duplicated rather than imported;
+# mcpBehavior.toml can override them without touching code.
 DEFAULT_DESIRE_SPECS: dict[str, DesireSpec] = {
     "look_outside": DesireSpec(satisfaction_hours=1.0, set_point=0.3),
     "browse_curiosity": DesireSpec(satisfaction_hours=2.0, set_point=0.3),
     "miss_companion": DesireSpec(satisfaction_hours=3.0, set_point=0.3),
-    "miss_kouta": DesireSpec(satisfaction_hours=3.0, set_point=0.3),
     "observe_room": DesireSpec(satisfaction_hours=0.167, set_point=0.2),
     "identity_coherence": DesireSpec(satisfaction_hours=1.0, set_point=0.9),
     "cognitive_load": DesireSpec(satisfaction_hours=1.5, set_point=0.3),
@@ -148,18 +217,21 @@ def allostatic_set_point(name: str, spec: DesireSpec, now: datetime) -> float:
 
     Being alone at 3am is not the same as being alone at noon, so the social and
     outward-looking needs settle overnight. Identity coherence does not: it is
-    wanted equally at every hour.
+    wanted equally at every hour. "Night" is read from DESIRE_TIMEZONE /
+    DESIRE_NIGHT_START / DESIRE_NIGHT_END / DESIRE_DAWN_END (default JST, 0-5,
+    5-7), the same variables desire-system uses.
     """
 
     if name == "identity_coherence":
         return spec.set_point
-    hour = now.astimezone(JST).hour
-    if 0 <= hour < 5:
-        if name in ("miss_companion", "miss_kouta"):
+    hour = now.astimezone(resolve_timezone()).hour
+    night_start, night_end, dawn_end = quiet_bands()
+    if hour_in_band(hour, night_start, night_end):
+        if name == "miss_companion":
             return max(0.0, spec.set_point - 0.15)
         if name in ("look_outside", "observe_room"):
             return max(0.0, spec.set_point - 0.1)
-    if 5 <= hour < 7 and name in ("miss_companion", "miss_kouta"):
+    if hour_in_band(hour, night_end, dawn_end) and name == "miss_companion":
         return max(0.0, spec.set_point - 0.05)
     return spec.set_point
 

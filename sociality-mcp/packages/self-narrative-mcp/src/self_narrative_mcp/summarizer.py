@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+from social_core.persona import self_name
+
 
 def build_day_summary(day: str, event_kinds: list[str], person_ids: list[str]) -> str:
     """Build a compact daybook summary from event kinds and participants."""
@@ -52,7 +54,7 @@ def build_self_summary(
     continuity trace rather than a generic posture statement.
     """
 
-    pieces = ["Kokone keeps a socially aware, continuity-seeking self-model."]
+    pieces = [f"{self_name()} keeps a socially aware, continuity-seeking self-model."]
     if facets:
         pieces.append(f"Current facets: {', '.join(facets[:2])}.")
     if arcs:

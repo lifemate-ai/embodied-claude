@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.13.*"
 
 [manifest]
@@ -588,6 +588,7 @@ dependencies = [
     { name = "chromadb" },
     { name = "mcp" },
     { name = "python-dotenv" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -607,6 +608,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
 ]
 provides-extras = ["dev"]
 

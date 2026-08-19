@@ -357,3 +357,47 @@ def test_forcing_one_shared_owner_takes_the_parents_committed_slot(
 
     assert child_field_id != parent_field_id
     assert _committed_field_id(tmp_path, "self") == child_field_id
+
+
+class _RecordingProducer:
+    """Just enough of a TickProducer to see what person_id a tick is opened with."""
+
+    def __init__(self) -> None:
+        self.begin_kwargs: dict = {}
+
+    def resolve_owner_id(self, _session_id):
+        return "self"
+
+    def begin_tick(self, _kind, _owner_id, **kwargs):
+        self.begin_kwargs = kwargs
+        return type("Field", (), {"tick_id": "tick-1"})()
+
+    def compete_and_commit(self, _tick_id):
+        return type("Outcome", (), {"field": None})()
+
+
+def _record_user_prompt(monkeypatch, payload: dict) -> dict:
+    from individual_kernel_mcp import hook_cli
+
+    monkeypatch.setattr(hook_cli, "_surface_context", lambda _field: "")
+    producer = _RecordingProducer()
+    hook_cli.user_prompt_submit(payload, producer)
+    return producer.begin_kwargs
+
+
+def test_user_prompt_person_id_defaults_to_neutral_companion(monkeypatch) -> None:
+    monkeypatch.delenv("COMPANION_ID", raising=False)
+    kwargs = _record_user_prompt(monkeypatch, {"prompt": "hi", "session_id": "s"})
+    assert kwargs["person_id"] == "companion"
+
+
+def test_user_prompt_person_id_honours_companion_id_env(monkeypatch) -> None:
+    monkeypatch.setenv("COMPANION_ID", "kouta")
+    kwargs = _record_user_prompt(monkeypatch, {"prompt": "hi", "session_id": "s"})
+    assert kwargs["person_id"] == "kouta"
+
+    # An explicit person_id in the payload still wins over the environment.
+    kwargs = _record_user_prompt(
+        monkeypatch, {"prompt": "hi", "session_id": "s", "person_id": "guest"}
+    )
+    assert kwargs["person_id"] == "guest"

@@ -72,6 +72,25 @@ class TestCompose:
         assert ctx.compact_prompt_block.startswith("[interaction_context]")
         assert ctx.timezone == "Asia/Tokyo"
 
+    def test_primary_contract_follows_companion_id(self, stores, monkeypatch):
+        """The primary-companion contract is for whoever COMPANION_ID names (#135)."""
+        monkeypatch.delenv("COMPANION_ID", raising=False)
+        default_ctx = _compose(stores, user_text="テスト", person_id="companion")
+        assert "generic reassurance" in default_ctx.response_contract.avoid
+
+        other = _compose(stores, user_text="テスト", person_id="kouta")
+        assert "generic reassurance" not in other.response_contract.avoid
+
+        monkeypatch.setenv("COMPANION_ID", "kouta")
+        named = _compose(stores, user_text="テスト", person_id="kouta")
+        assert "generic reassurance" in named.response_contract.avoid
+
+    def test_person_id_defaults_to_companion_id(self, monkeypatch):
+        monkeypatch.delenv("COMPANION_ID", raising=False)
+        assert ComposeInteractionContextInput().person_id == "companion"
+        monkeypatch.setenv("COMPANION_ID", "kouta")
+        assert ComposeInteractionContextInput().person_id == "kouta"
+
     def test_autonomous_channel_tightens_contract(self, stores):
         ctx = _compose(stores, user_text=None, channel="autonomous")
         joined = " ".join(ctx.response_contract.avoid)

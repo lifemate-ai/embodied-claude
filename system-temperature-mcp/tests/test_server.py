@@ -203,3 +203,131 @@ def test_windows_temperature_prefers_lhm_webserver(monkeypatch) -> None:
     )
 
     assert server.get_windows_temperatures() == expected
+
+
+# ---------------------------------------------------------------------------
+# Tone and timezone (#135)
+# ---------------------------------------------------------------------------
+
+
+def _reading(celsius: float) -> list[dict]:
+    return [{"source": "test", "name": "CPU", "temperature_celsius": celsius}]
+
+
+def test_default_tone_is_the_original_kansai_phrase(monkeypatch) -> None:
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+
+    text = server.interpret_temperature(_reading(52.0))
+
+    assert text.splitlines()[0] == "快適やで〜。ちょうどええ感じ！"
+
+
+def test_structured_line_is_appended_regardless_of_tone(monkeypatch) -> None:
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+    assert server.interpret_temperature(_reading(52.0)).splitlines()[1] == (
+        "level=comfortable max_celsius=52.0"
+    )
+    assert server.interpret_temperature([]).splitlines()[1] == "level=unknown"
+
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "neutral")
+    assert server.interpret_temperature(_reading(85.5)).splitlines()[1] == (
+        "level=very_hot max_celsius=85.5"
+    )
+
+
+def test_neutral_tone_has_no_dialect(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "neutral")
+
+    for celsius in (20.0, 35.0, 52.0, 65.0, 75.0, 85.0, 95.0):
+        phrase = server.interpret_temperature(_reading(celsius)).splitlines()[0]
+        assert "やで" not in phrase and "やな" not in phrase and "へん" not in phrase
+    assert server.interpret_temperature(_reading(52.0)).splitlines()[0] == (
+        "快適です。ちょうどよい状態です。"
+    )
+    phrase = server.interpret_temperature([]).splitlines()[0]
+    assert "へん" not in phrase
+
+
+def test_unknown_tone_falls_back_to_neutral(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "klingon")
+
+    assert server._tone() == "neutral"
+    assert "やで" not in server.interpret_temperature(_reading(52.0))
+
+
+def test_temperature_level_bands_match_thresholds() -> None:
+    assert server.temperature_level(None) == "unknown"
+    assert server.temperature_level(29.9) == "cold"
+    assert server.temperature_level(30.0) == "cool"
+    assert server.temperature_level(45.0) == "comfortable"
+    assert server.temperature_level(60.0) == "warm"
+    assert server.temperature_level(70.0) == "hot"
+    assert server.temperature_level(80.0) == "very_hot"
+    assert server.temperature_level(90.0) == "critical"
+
+
+def test_part_of_day_matches_existing_bands() -> None:
+    assert server.part_of_day(7) == "morning"
+    assert server.part_of_day(11) == "late_morning"
+    assert server.part_of_day(13) == "noon"
+    assert server.part_of_day(15) == "afternoon"
+    assert server.part_of_day(18) == "evening"
+    assert server.part_of_day(20) == "night"
+    assert server.part_of_day(23) == "late_night"
+    assert server.part_of_day(1) == "late_night"
+    assert server.part_of_day(3) == "midnight"
+
+
+def _freeze_now(monkeypatch, utc_tuple) -> None:
+    from datetime import UTC
+    from datetime import datetime as real_datetime
+
+    fixed = real_datetime(*utc_tuple, tzinfo=UTC)
+
+    class _FrozenDatetime(real_datetime):
+        @classmethod
+        def now(cls, tzinfo=None):
+            return fixed.astimezone(tzinfo) if tzinfo else fixed
+
+    monkeypatch.setattr(server, "datetime", _FrozenDatetime)
+
+
+def test_current_time_default_tone_and_timezone(monkeypatch) -> None:
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TIMEZONE", raising=False)
+    _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))  # 07:30 JST on the 15th
+
+    sentence, structured = server.get_current_time().splitlines()
+
+    assert sentence == "今は 2026年08月15日(土) 07時30分00秒 やで。朝やな〜。おはよう！"
+    assert structured == "iso=2026-08-15T07:30:00+09:00 part_of_day=morning"
+
+
+def test_current_time_neutral_tone(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "neutral")
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TIMEZONE", raising=False)
+    _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))
+
+    sentence, structured = server.get_current_time().splitlines()
+
+    assert sentence == "今は 2026年08月15日(土) 07時30分00秒 です。朝です。おはようございます。"
+    assert "やで" not in sentence
+    assert structured.endswith("part_of_day=morning")
+
+
+def test_current_time_respects_timezone_env(monkeypatch) -> None:
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TIMEZONE", "America/New_York")
+    _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))  # 18:30 EDT on the 14th
+
+    sentence, structured = server.get_current_time().splitlines()
+
+    assert "2026年08月14日(金) 18時30分00秒" in sentence
+    assert structured == "iso=2026-08-14T18:30:00-04:00 part_of_day=evening"
+
+
+def test_unknown_timezone_env_falls_back_to_jst(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TIMEZONE", "Not/AZone")
+    _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))
+
+    assert "iso=2026-08-15T07:30:00+09:00" in server.get_current_time()
