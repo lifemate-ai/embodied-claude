@@ -37,9 +37,10 @@ scripts\setup.cmd --profile core --non-interactive
 WSL2 is not required. The Windows launcher runs the same Python setup service
 and writes the same portable Claude Code hook configuration as POSIX setup.
 
-Setup performs one locked Core workspace sync, writes the Core `.mcp.json`, creates
-`socialPolicy.toml` only when absent, warms the selected memory model, and runs
-the doctor.
+Setup performs one locked Core workspace sync, writes the Core `.mcp.json`,
+approves those servers for headless runs in `.claude/settings.local.json`,
+creates `socialPolicy.toml` only when absent, warms the selected memory model,
+and runs the doctor.
 
 Core contains:
 
@@ -289,6 +290,48 @@ Setup does not merge unknown custom MCP servers into the generated profile.
 Keep a manual copy or re-add custom entries after generation. The doctor
 reports unknown entries as warnings and does not modify them.
 
+### `env` blocks override the inherited environment
+
+A value in a server's `env` block wins over whatever the parent process
+exported, so only put values there that you want pinned. Setup writes
+`SOCIAL_DB_PATH` and `MEMORY_HTTP_PORT` only when they are set in the
+environment it runs in; otherwise the servers fall back to their code defaults
+(`~/.claude/sociality/social.db` and `18900`) and a later
+`SOCIAL_DB_PATH=... claude` still takes effect. Copying the defaults into
+`.mcp.json` by hand would silently pin them.
+
+## Headless (`claude -p`) and MCP approval
+
+Claude Code loads project `.mcp.json` servers only after they have been
+approved once, and `claude -p` has no way to ask. Unapproved servers are skipped
+without a message, so an autonomous heartbeat can start with no memory, no
+sociality and no kernel and log a normal-looking run. Editing `.mcp.json`
+resets the approval, so adding a camera later puts every server back to
+pending.
+
+Setup therefore also writes the approval, as the list Claude Code reads from
+the repository:
+
+```json
+// .claude/settings.local.json
+{ "enabledMcpjsonServers": ["memory", "desire-system", "sociality", "individual-kernel"] }
+```
+
+Other keys in that file (for example `permissions.allow`, which
+`autonomous-action.sh` reads) are kept; only the list is replaced, and it is
+set to exactly the servers setup just generated. The file is ignored by Git.
+
+If you edit `.mcp.json` by hand, re-run setup or add the new server name to
+`enabledMcpjsonServers` yourself. The doctor warns for every `.mcp.json`
+server missing from the list:
+
+```text
+[warn] headless:memory: memory is in .mcp.json but not enabled for headless runs; `claude -p` will skip it silently
+```
+
+`claude mcp list` showing `Pending approval` is the same condition seen from
+the other side.
+
 ## Doctor
 
 Run static checks:
@@ -332,7 +375,8 @@ Statuses:
 | `[error]` | Core or a selected configuration cannot start correctly |
 
 Static doctor is read-only. It does not create state directories, start MCP
-servers, connect to hardware, or make network calls. It verifies:
+servers, or connect to hardware. Its one network action is a TCP connect to
+the memory HTTP recall port on localhost. It verifies:
 
 - Python 3.13
 - current `uv.lock`
@@ -342,6 +386,15 @@ servers, connect to hardware, or make network calls. It verifies:
 - `socialPolicy.toml`
 - writable existing state parents
 - optional `ffmpeg`, `mpv`, or `ffplay`
+- every `.mcp.json` server is enabled for headless runs (see above)
+- memory HTTP recall port (`MEMORY_HTTP_PORT`, default `18900`) is listening.
+  `individual-kernel` pulls memory candidates into each tick over it and
+  commits the field without them when nothing answers. memory-mcp binds the
+  port when Claude Code starts it, so this is a warning until the first
+  session is running.
+- `SOUL.md`, `TODO.md`, `ROUTINES.md` for the autonomous prompt (a warning
+  once `autonomous-action.sh` is installed; see
+  [`docs/autonomous-files.md`](autonomous-files.md))
 
 Unknown custom MCP entries are warnings.
 

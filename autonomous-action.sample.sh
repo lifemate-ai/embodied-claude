@@ -337,6 +337,19 @@ fi
 # TODO.md — やりたいこと・タスクを管理するファイル（自分で作成する）
 # ROUTINES.md — 定期実行するルーチンを定義するファイル（任意）
 # これらが存在しない場合は CLAUDE.md のみで動作する。
+# 雛形は examples/SOUL.sample.md などに、説明は docs/autonomous-files.md にある。
+#
+# 存在しないファイルへの @ 参照は、エラーも出さずにただ解決されない。
+# Heartbeat は完走し、ログにも何も残らないので、ここで名指しで警告しておく（#140）。
+# 中断はしない。無い状態でも CLAUDE.md だけで動く、という今までの挙動はそのまま。
+for PROMPT_FILE in SOUL.md TODO.md ROUTINES.md; do
+  if [ ! -f "$SCRIPT_DIR/$PROMPT_FILE" ]; then
+    PROMPT_FILE_WARNING="WARN: $PROMPT_FILE not found in $SCRIPT_DIR; the @$PROMPT_FILE reference in the prompt will not resolve (see docs/autonomous-files.md)"
+    echo "$PROMPT_FILE_WARNING" >> "$LOG_FILE"
+    echo "$PROMPT_FILE_WARNING" >&2
+  fi
+done
+
 PROMPT="自律行動タイム（Heartbeat）
 
 @SOUL.md

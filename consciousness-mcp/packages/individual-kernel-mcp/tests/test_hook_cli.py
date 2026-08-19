@@ -19,6 +19,8 @@ from individual_kernel_mcp.tick import FieldRuntime, TickProducer
 def _run_hook(tmp_path, command: str, payload: dict) -> dict:
     env = dict(os.environ)
     env["SOCIAL_DB_PATH"] = str(tmp_path / "hook-social.db")
+    # Keep the hook off the machine's real recall endpoint; 0 means "none".
+    env["MEMORY_HTTP_PORT"] = "0"
     result = subprocess.run(
         [sys.executable, "-m", "individual_kernel_mcp.hook_cli", command],
         input=json.dumps(payload),

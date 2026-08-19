@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import tempfile
 import urllib.parse
 import urllib.request
@@ -153,6 +154,61 @@ def default_interoception_path() -> Path:
     return Path(tempfile.gettempdir()) / "interoception_state.json"
 
 
+DEFAULT_MEMORY_HTTP_PORT = 18900
+MEMORY_HTTP_TIMEOUT_SECONDS = 1.2
+
+# Whether the last memory recall attempt in this process failed. Set on the
+# first failure so the warning is printed once rather than every tick, and
+# cleared by a success so a later outage is reported again (#140).
+_memory_http_unreachable = False
+
+
+def memory_http_port() -> int:
+    """The port memory-mcp binds its HTTP recall endpoint to.
+
+    0 means memory-mcp took an ephemeral port (the isolated probe does this),
+    so there is nothing knowable to ask and recall is treated as disabled.
+    """
+
+    return int(os.getenv("MEMORY_HTTP_PORT", str(DEFAULT_MEMORY_HTTP_PORT)))
+
+
+def memory_http_recall_url(user_text: str) -> str:
+    port = memory_http_port()
+    return (
+        f"http://127.0.0.1:{port}/recall?"
+        + urllib.parse.urlencode({"q": user_text, "n": 4})
+    )
+
+
+def _warn_memory_http_unreachable(url: str, error: BaseException) -> None:
+    """Say, once per outage, that ticks are running without memory.
+
+    The field commits normally either way and `<current_field>` still renders,
+    so nothing downstream reveals that recall never answered. The heartbeat
+    runs headless; stderr is the only channel that reaches its log.
+    """
+
+    global _memory_http_unreachable
+    if _memory_http_unreachable:
+        return
+    _memory_http_unreachable = True
+    endpoint = url.split("?", 1)[0]
+    print(
+        f"individual-kernel: memory HTTP recall at {endpoint} is unreachable "
+        f"({type(error).__name__}); fields are being committed without memory "
+        "candidates. Start memory-mcp's HTTP recall server or set "
+        "MEMORY_HTTP_PORT.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _note_memory_http_reachable() -> None:
+    global _memory_http_unreachable
+    _memory_http_unreachable = False
+
+
 class TickProducer:
     """Deterministically produces and commits one field per tick."""
 
@@ -235,6 +291,12 @@ class TickProducer:
         self.workspace.affect = self._tick_affect(interoception)
         desire_snapshot = self._read_json(self.desires_path)
         dominant_desire = str(desire_snapshot.get("dominant") or "") or None
+        # Network I/O stays outside the transaction; fetching first lets the
+        # field record whether recall answered, so a tick that ran without
+        # memory says so in its own trace instead of looking like every other.
+        memory_recall, memory_items = (
+            self._fetch_memory_http(user_text) if user_text else (None, [])
+        )
 
         with self.db.transaction():
             frame = self.frames.record(
@@ -282,6 +344,11 @@ class TickProducer:
                         "trigger": trigger_kind.value,
                         "raw_user_text_is_not_field_evidence": True,
                         "retention_decay": 0.72,
+                        **(
+                            {"memory_recall": memory_recall}
+                            if memory_recall is not None
+                            else {}
+                        ),
                     },
                 )
             )
@@ -300,8 +367,8 @@ class TickProducer:
             self._ingest_recent_social(field, exclude_session_id=session_id)
             self.generate_self_model_candidate(field.tick_id, owner_id=owner_id)
 
-        if user_text:
-            self._ingest_memory_http(field.tick_id, user_text)
+        if memory_items:
+            self.ingest_memory_candidates(field.tick_id, memory_items)
         return field
 
     def ingest_observation(
@@ -992,23 +1059,33 @@ class TickProducer:
             source_mode=SourceMode.REMEMBERED,
         )
 
-    def _ingest_memory_http(self, tick_id: str, user_text: str) -> None:
-        port = int(os.getenv("MEMORY_HTTP_PORT", "18900"))
-        url = (
-            f"http://127.0.0.1:{port}/recall?"
-            + urllib.parse.urlencode({"q": user_text, "n": 4})
-        )
+    def _fetch_memory_http(self, user_text: str) -> tuple[str, list[dict[str, Any]]]:
+        """Ask memory-mcp's HTTP recall endpoint for candidates.
+
+        Returns a short status for the field's epistemic trace and the items
+        to ingest. A failure yields no items; it used to yield no trace of
+        itself either, so a missing recall daemon meant every heartbeat ran on
+        zero memory while looking healthy (#140). The failure is now named in
+        the trace and warned about once per outage on stderr.
+        """
+
+        if memory_http_port() == 0:
+            return "disabled", []
+        url = memory_http_recall_url(user_text)
         try:
-            with urllib.request.urlopen(url, timeout=1.2) as response:
+            with urllib.request.urlopen(
+                url, timeout=MEMORY_HTTP_TIMEOUT_SECONDS
+            ) as response:
                 raw = json.loads(response.read().decode("utf-8"))
-        except Exception:
-            return
+        except Exception as error:
+            _warn_memory_http_unreachable(url, error)
+            return f"unreachable:{type(error).__name__}", []
+        _note_memory_http_reachable()
         items = raw if isinstance(raw, list) else raw.get("memories", raw.get("results", []))
-        if isinstance(items, list):
-            self.ingest_memory_candidates(
-                tick_id,
-                [item for item in items if isinstance(item, dict)],
-            )
+        if not isinstance(items, list):
+            return "ok:0", []
+        candidates = [item for item in items if isinstance(item, dict)]
+        return f"ok:{len(candidates)}", candidates
 
     def _read_interoception(
         self,

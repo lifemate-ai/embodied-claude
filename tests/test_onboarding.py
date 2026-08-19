@@ -109,10 +109,28 @@ def test_core_profile_has_exactly_the_hardware_free_servers() -> None:
     assert config["mcpServers"]["memory"]["env"]["MEMORY_EMBEDDING_MODEL"] == (
         SMALL_EMBEDDING_MODEL
     )
-    assert config["mcpServers"]["individual-kernel"]["env"] == {
-        "SOCIAL_DB_PATH": "~/.claude/sociality/social.db",
-        "MEMORY_HTTP_PORT": "18900",
+    # An env block overrides the inherited environment, so pinning the code
+    # defaults here would make a later SOCIAL_DB_PATH=... in the parent
+    # process a no-op (#140). Nothing is written unless the operator set it.
+    assert "env" not in config["mcpServers"]["individual-kernel"]
+    assert "env" not in config["mcpServers"]["sociality"]
+    assert "MEMORY_HTTP_PORT" not in config["mcpServers"]["memory"]["env"]
+
+
+def test_state_overrides_are_pinned_only_when_the_operator_set_them() -> None:
+    config = build_mcp_config(
+        FeatureSelection(),
+        {"SOCIAL_DB_PATH": "/srv/staging/social.db", "MEMORY_HTTP_PORT": "18901"},
+    )
+
+    servers = config["mcpServers"]
+    assert servers["individual-kernel"]["env"] == {
+        "SOCIAL_DB_PATH": "/srv/staging/social.db",
+        "MEMORY_HTTP_PORT": "18901",
     }
+    # Every reader of a value gets the same pin, so they cannot disagree.
+    assert servers["sociality"]["env"] == {"SOCIAL_DB_PATH": "/srv/staging/social.db"}
+    assert servers["memory"]["env"]["MEMORY_HTTP_PORT"] == "18901"
 
 
 def test_generated_servers_use_root_workspace_entrypoints() -> None:

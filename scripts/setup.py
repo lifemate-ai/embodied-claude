@@ -30,6 +30,7 @@ from scripts.setup_io import (
     ConfigConflictError,
     apply_config_plan,
     copy_policy_if_missing,
+    enable_headless_servers,
     plan_config_write,
 )
 
@@ -262,6 +263,20 @@ def execute_setup(
     else:
         print(f"==> backed up old config to {plan.backup.name}", file=output)
         print("==> replaced .mcp.json", file=output)
+
+    # Without this, `claude -p` (the autonomous heartbeat) starts with none of
+    # the servers just written and says nothing about it (#140).
+    settings_path = repo_root / ".claude" / "settings.local.json"
+    server_names = list(config["mcpServers"])
+    if enable_headless_servers(settings_path, server_names):
+        print(
+            "==> approved "
+            + ", ".join(server_names)
+            + " for headless runs in .claude/settings.local.json",
+            file=output,
+        )
+    else:
+        print("==> keeping headless approval in .claude/settings.local.json", file=output)
 
     policy_source = repo_root / "examples" / "configs" / "socialPolicy.example.toml"
     if not policy_source.is_file():
