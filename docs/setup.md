@@ -239,6 +239,12 @@ uses the LibreHardwareMonitor bridge documented in
 [`system-temperature-mcp/README_WinNative.md`](../system-temperature-mcp/README_WinNative.md).
 WSL2 normally cannot see Windows host temperature sensors.
 
+### Hearing hooks
+
+The `UserPromptSubmit` / `Stop` hooks that feed microphone transcripts into the
+conversation are opt-in. Registration, the `Stop` timeout (at least 25 s), and
+the Windows notes live in [docs/hearing-hooks.md](hearing-hooks.md).
+
 ## Preview Without Side Effects
 
 Use `--dry-run` to inspect a redacted generated config:

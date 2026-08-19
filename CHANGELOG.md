@@ -4,6 +4,31 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+On Windows the hearing hooks did nothing and said nothing. Three idioms that
+are unambiguous on macOS and Linux mean something else under Git Bash:
+`/tmp` written inside the embedded Python resolves to the current drive root
+(the shell's `/tmp` is the user's temp folder), `python3` is often the
+Microsoft Store alias that exits 49 without running anything, and MSYS
+`kill -0` cannot see a daemon started as a native Windows process. Every
+check failed closed, so the hook exited 0 and the buffer stayed full.
+
+### Fixed
+
+- hearing: both hooks resolve the working directory once in the shell
+  (`HEARING_DIR`, default `$TMPDIR` or `/tmp`) and hand it to the embedded
+  Python, which no longer hard-codes `/tmp/...`; they probe for an interpreter
+  that actually runs `import sys` (`HEARING_PYTHON` to pin one, otherwise
+  `python3` then `python`); and `pid_alive` falls back to `tasklist` when
+  `kill -0` cannot reach the daemon. Python runs in UTF-8 mode so the
+  `[hearing]` line survives a cp932 console. POSIX behaviour is unchanged.
+  Reported with a tested patch by fmtowns3 in #139.
+- hearing: the stop hook's library location is now `HEARING_LIB_DIR`; the same
+  name had been doing double duty for the buffer directory.
+- docs: `docs/hearing-hooks.md` documents registration, the `Stop` timeout
+  (one silent pass is about 21 s, so `"timeout": 30` rather than the core
+  hooks' 10), and the Windows notes -- point `command` at
+  `C:/Program Files/Git/bin/bash.exe` rather than the WSL alias `bash`.
+
 ## [0.4.6] - 2026-07-31
 
 Setting up for a hands-on meant a room full of laptops with no cameras and no
