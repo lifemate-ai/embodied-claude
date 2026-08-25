@@ -6,25 +6,86 @@
 #   - バッファは消さずに読む（offset以降の新しい行だけ処理）
 #   - 有効 → offset更新 & 処理済み行を削除 & block
 #   - 無効 → offset据え置き → 短いsleep後に即リトライ（新データが溜まるのを待つ）
+#
+# 登録時の注意:
+#   - このフックは無音 1 回あたり約 21 秒かかる（既定値: HEARING_WAIT_SECONDS 5
+#     + リトライ 3×HEARING_RETRY_WAIT 3 + HEARING_GUARANTEED_SLEEP 5）。
+#     同梱の core フックは "timeout": 10 だが、このフックは **25 秒以上** にすること。
+#     10 秒のままだと待機の途中で打ち切られ、ターン延長が一度も成立しない（エラーも出ない）。
+#   - Windows では "command": "bash" が WSL のエイリアスに当たるので、Git Bash の実体
+#     （C:\Program Files\Git\bin\bash.exe）を明示する。詳細は docs/hearing-hooks.md。
+#
+# 移植性メモ（#139）:
+#   - バッファ等の置き場所は HEARING_DIR（既定: $TMPDIR または /tmp）。シェル側で解決して
+#     環境変数で Python に渡す。Python 内に "/tmp/..." を直接書かない。
+#   - hearing ライブラリの場所（uv run --directory に渡す）は HEARING_LIB_DIR。別物。
+#   - python3 は Store のエイリアスのことがあるので実際に動くものを探す（HEARING_PYTHON で固定可）。
+#   - MSYS の kill -0 はネイティブプロセスを見られないので tasklist にフォールバック。
 
-BUFFER_FILE="/tmp/hearing_buffer.jsonl"
-PID_FILE="/tmp/hearing-daemon.pid"
-OFFSET_FILE="/tmp/hearing_stop_offset"
-TIMING_LOG="/tmp/hearing_timing.log"
-GUARANTEED_COUNTER="/tmp/hearing-guaranteed-counter"
-CONTEXT_FILE="/tmp/hearing_context.json"
+HEARING_DIR="${HEARING_DIR:-${TMPDIR:-/tmp}}"
+export HEARING_DIR
+# Windows の Python は既定で stdout/ファイルをロケール（cp932 等）で扱うので、
+# [hearing] 行と JSON が UTF-8 で往復するよう UTF-8 モードを強制する（POSIX では実質無変化）。
+export PYTHONUTF8=1
+
+BUFFER_FILE="$HEARING_DIR/hearing_buffer.jsonl"
+PID_FILE="$HEARING_DIR/hearing-daemon.pid"
+OFFSET_FILE="$HEARING_DIR/hearing_stop_offset"
+TIMING_LOG="$HEARING_DIR/hearing_timing.log"
+GUARANTEED_COUNTER="$HEARING_DIR/hearing-guaranteed-counter"
+CONTEXT_FILE="$HEARING_DIR/hearing_context.json"
+LAST_TS_FILE="$HEARING_DIR/hearing_stop_last_ts"
+
+# ── 動く Python を選ぶ ───────────────────────────────────────────
+# HEARING_PYTHON が設定されていればそれを使う。なければ python3 → python の順で
+# "import sys" が通る最初のものを採用する（Store のエイリアスは終了コード 49 で弾かれる）。
+find_python() {
+    local candidate
+    if [ -n "${HEARING_PYTHON:-}" ]; then
+        # 明示指定はそれだけを試す（動かなければ黙って終了）
+        if "$HEARING_PYTHON" -c "import sys" >/dev/null 2>&1; then
+            printf '%s\n' "$HEARING_PYTHON"
+            return 0
+        fi
+        return 1
+    fi
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 &&
+           "$candidate" -c "import sys" >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+PY="$(find_python)" || exit 0
+[ -z "$PY" ] && exit 0
+
+# ── PID 生存確認（kill -0 → tasklist フォールバック）──────────────
+# MSYS の kill はネイティブプロセス（Windows で起動したデーモン）を見られないので、
+# kill -0 が失敗したら tasklist に聞く。MSYS_NO_PATHCONV / MSYS2_ARG_CONV_EXCL は
+# "/FI" が "C:/Program Files/Git/FI" に変換されるのを止めるため（POSIX では無視される）。
+pid_alive() {
+    kill -0 "$1" 2>/dev/null && return 0
+    if command -v tasklist >/dev/null 2>&1; then
+        MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' tasklist /FI "PID eq $1" /FO CSV /NH 2>/dev/null | grep -q "\"$1\"" && return 0
+    fi
+    return 1
+}
 
 # stdinからコンテキストを保存（1回だけ読める）
 cat > "$CONTEXT_FILE"
 
 # タイミング記録
-NOW=$(python3 -c "import time; print(f'{time.time():.3f}')")
-PREV=$(cat /tmp/hearing_stop_last_ts 2>/dev/null || echo "$NOW")
-DELTA=$(python3 -c "print(f'{$NOW - $PREV:.1f}')")
-echo "$NOW" > /tmp/hearing_stop_last_ts
+NOW=$("$PY" -c "import time; print(f'{time.time():.3f}')")
+PREV=$(cat "$LAST_TS_FILE" 2>/dev/null)
+PREV=${PREV:-$NOW}
+DELTA=$("$PY" -c "print(f'{$NOW - $PREV:.1f}')")
+echo "$NOW" > "$LAST_TS_FILE"
 echo "[$(date +%H:%M:%S)] stop-hook-start delta=${DELTA}s count=${COUNT:-?}" >> "$TIMING_LOG"
 MAX_HEARING_CONTINUES=${MAX_HEARING_CONTINUES:-20}
-COUNTER_FILE="/tmp/hearing-stop-counter"
+COUNTER_FILE="$HEARING_DIR/hearing-stop-counter"
 WAIT_SECONDS=${HEARING_WAIT_SECONDS:-5}
 RETRY_WAIT=${HEARING_RETRY_WAIT:-3}
 NO_SPEECH_THRESHOLD=${HEARING_NO_SPEECH_THRESHOLD:-0.6}
@@ -36,9 +97,11 @@ if [ -z "$MCP_BEHAVIOR_TOML" ]; then
     [ -f "$_PROJECT_ROOT/mcpBehavior.toml" ] && MCP_BEHAVIOR_TOML="$_PROJECT_ROOT/mcpBehavior.toml"
 fi
 if [ -n "$MCP_BEHAVIOR_TOML" ] && [ -f "$MCP_BEHAVIOR_TOML" ]; then
-    HEARING_DIR="$(cd "$(dirname "$0")/../.." && pwd)/embodied-claude/hearing"
-    [ ! -d "$HEARING_DIR" ] && HEARING_DIR="$(cd "$(dirname "$0")/../.." && pwd)/hearing"
-    eval "$(uv run --directory "$HEARING_DIR" python3 -c "
+    # HEARING_LIB_DIR: hearing ライブラリ（uv プロジェクト）の場所。
+    # バッファ置き場の HEARING_DIR とは別物なので名前を分けている。
+    HEARING_LIB_DIR="${HEARING_LIB_DIR:-$(cd "$(dirname "$0")/../.." && pwd)/embodied-claude/hearing}"
+    [ ! -d "$HEARING_LIB_DIR" ] && HEARING_LIB_DIR="$(cd "$(dirname "$0")/../.." && pwd)/hearing"
+    eval "$(uv run --directory "$HEARING_LIB_DIR" python -c "
 import tomllib
 try:
     with open('$MCP_BEHAVIOR_TOML', 'rb') as f:
@@ -57,7 +120,7 @@ HEARING_GUARANTEED_SLEEP=${HEARING_GUARANTEED_SLEEP:-5}
 DAEMON_RUNNING=false
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE" 2>/dev/null)
-    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+    if [ -n "$PID" ] && pid_alive "$PID"; then
         DAEMON_RUNNING=true
     fi
 fi
@@ -76,16 +139,20 @@ fi
 sleep "$WAIT_SECONDS"
 
 # ── バッファを行番号ベースで読み取り・判定 ─────────────────────
-RESULT=$(python3 - "$NO_SPEECH_THRESHOLD" "$OFFSET_FILE" "$BUFFER_FILE" "$RETRY_WAIT" "$COUNT" <<'PYEOF' 2>>/tmp/hearing_timing.log
+RESULT=$("$PY" - "$NO_SPEECH_THRESHOLD" "$OFFSET_FILE" "$BUFFER_FILE" "$RETRY_WAIT" "$COUNT" <<'PYEOF' 2>>"$TIMING_LOG"
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
+# バッファ等の置き場所。シェル側の HEARING_DIR と一致させる（Windows では /tmp を直接書かない）
+HEARING_DIR = Path(os.environ.get("HEARING_DIR") or tempfile.gettempdir())
+
 threshold = float(sys.argv[1]) if len(sys.argv) > 1 else 0.6
-offset_file = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/tmp/hearing_stop_offset")
-buffer_file = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("/tmp/hearing_buffer.jsonl")
+offset_file = Path(sys.argv[2]) if len(sys.argv) > 2 else HEARING_DIR / "hearing_stop_offset"
+buffer_file = Path(sys.argv[3]) if len(sys.argv) > 3 else HEARING_DIR / "hearing_buffer.jsonl"
 retry_wait = float(sys.argv[4]) if len(sys.argv) > 4 else 4.0
 
 def read_offset():
@@ -173,8 +240,8 @@ def llm_filter(texts):
 
     # コンテキスト読み込み（短く切る。[hearing]やhookメタ情報を除去）
     context_parts = []
-    user_prompt = Path("/tmp/hearing_user_prompt.txt")
-    context_json = Path("/tmp/hearing_context.json")
+    user_prompt = HEARING_DIR / "hearing_user_prompt.txt"
+    context_json = HEARING_DIR / "hearing_context.json"
     if user_prompt.exists():
         up = user_prompt.read_text().strip()
         # LLMプロンプトの再帰ネスト除去: 【タスク】マーカーがあれば手前を切る
@@ -302,7 +369,7 @@ PYEOF
 )
 
 # ── 判定 ──────────────────────────────────────────────────────
-END_TS=$(python3 -c "import time; print(f'{time.time():.3f}')")
+END_TS=$("$PY" -c "import time; print(f'{time.time():.3f}')")
 GCOUNT=$(cat "$GUARANTEED_COUNTER" 2>/dev/null || echo 0)
 MIN_GUARANTEED=${HEARING_MIN_GUARANTEED:-5}
 
@@ -310,12 +377,12 @@ if [ -n "$RESULT" ]; then
     echo $((COUNT + 1)) > "$COUNTER_FILE"
     # HIT → 保証カウンターリセット（発話があったので）
     rm -f "$GUARANTEED_COUNTER"
-    ELAPSED=$(python3 -c "print(f'{$END_TS - $NOW:.1f}')")
+    ELAPSED=$("$PY" -c "print(f'{$END_TS - $NOW:.1f}')")
     echo "[$(date +%H:%M:%S)] stop-hook-block elapsed=${ELAPSED}s chain=$((COUNT+1))" >> "$TIMING_LOG"
     ESCAPED=$(echo "$RESULT" | sed 's/"/\\"/g')
     echo "{\"decision\": \"block\", \"reason\": \"Stop hook feedback:\n${ESCAPED}\nチェイン($((COUNT+1))/${MAX_HEARING_CONTINUES}) 保証(0/${MIN_GUARANTEED})\"}"
 else
-    ELAPSED=$(python3 -c "print(f'{$END_TS - $NOW:.1f}')")
+    ELAPSED=$("$PY" -c "print(f'{$END_TS - $NOW:.1f}')")
     # チェーン保証: 連続空回数が保証回数以内なら待機
     if [ "$GCOUNT" -lt "$MIN_GUARANTEED" ]; then
         # 保証待機: 次のセグメントが来るまで待つ
