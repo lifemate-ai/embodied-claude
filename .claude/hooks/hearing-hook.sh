@@ -119,10 +119,12 @@ DRAIN_TMP = HEARING_DIR / "hearing_buffer_drain.jsonl"
 if not BUFFER.exists() or BUFFER.stat().st_size == 0:
     sys.exit(0)
 
-# os.rename はアトミック操作。rename 後にデーモンが書き込む新エントリは
+# os.replace は両 OS でアトミック操作。rename 後にデーモンが書き込む新エントリは
 # open("a") によって新しい BUFFER ファイルへ書かれるため、データ欠損なし。
+# os.rename は Windows では宛先が残っていると FileExistsError になり、
+# 以降毎回無言で失敗し続けるので使わない（#144 での fmtowns3 さんの指摘）。
 try:
-    os.rename(str(BUFFER), str(DRAIN_TMP))
+    os.replace(str(BUFFER), str(DRAIN_TMP))
 except OSError as e:
     print(f"[hearing] drain_error={e}", file=sys.stderr)
     sys.exit(0)

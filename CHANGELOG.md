@@ -40,6 +40,11 @@ check failed closed, so the hook exited 0 and the buffer stayed full.
   Reported with a tested patch by fmtowns3 in #139.
 - hearing: the stop hook's library location is now `HEARING_LIB_DIR`; the same
   name had been doing double duty for the buffer directory.
+- hearing: the buffer drain uses `os.replace` instead of `os.rename`. On
+  Windows `os.rename` raises `FileExistsError` when a leftover drain file
+  exists (a hook killed between rename and unlink leaves one), and with stderr
+  discarded every later run silently skipped the drain while the buffer grew.
+  Found and verified by fmtowns3 while testing this PR on the #139 machine.
 - docs: `docs/hearing-hooks.md` documents registration, the `Stop` timeout
   (one silent pass is about 21 s, so `"timeout": 30` rather than the core
   hooks' 10), and the Windows notes -- point `command` at
