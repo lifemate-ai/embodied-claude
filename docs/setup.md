@@ -265,6 +265,12 @@ The tool replies are phrased in Kansai dialect by default. Set
 `SYSTEM_TEMPERATURE_TIMEZONE` (IANA name, default `Asia/Tokyo`) for the clock;
 see [Persona and companion](#persona-and-companion) below.
 
+### Hearing hooks
+
+The `UserPromptSubmit` / `Stop` hooks that feed microphone transcripts into the
+conversation are opt-in. Registration, the `Stop` timeout (at least 25 s), and
+the Windows notes live in [docs/hearing-hooks.md](hearing-hooks.md).
+
 ## Persona and companion
 
 Several servers carry names or a voice. None of them is required, and every
