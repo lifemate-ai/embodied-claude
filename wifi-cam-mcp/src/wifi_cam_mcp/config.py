@@ -110,6 +110,15 @@ class CameraConfig:
         mount_mode = (
             os.getenv("TAPO_RIGHT_MOUNT_MODE", "") or os.getenv("TAPO_MOUNT_MODE", "") or "normal"
         ).lower()
+        if mount_mode not in ("normal", "ceiling"):
+            raise ValueError(f"Invalid mount mode '{mount_mode}'. Must be 'normal' or 'ceiling'.")
+        ptz_mode = (
+            os.getenv("TAPO_RIGHT_PTZ_MODE", "") or os.getenv("TAPO_PTZ_MODE", "") or "auto"
+        ).lower()
+        if ptz_mode not in ("auto", "relative", "continuous"):
+            raise ValueError(
+                f"Invalid PTZ mode '{ptz_mode}'. Must be 'auto', 'relative', or 'continuous'."
+            )
         max_width = int(os.getenv("CAPTURE_MAX_WIDTH", "1920"))
         max_height = int(os.getenv("CAPTURE_MAX_HEIGHT", "1080"))
 
@@ -123,6 +132,7 @@ class CameraConfig:
             onvif_port=onvif_port,
             stream_url=stream_url,
             mount_mode=mount_mode,
+            ptz_mode=ptz_mode,
             max_width=max_width,
             max_height=max_height,
         )

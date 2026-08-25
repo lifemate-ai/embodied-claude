@@ -1,7 +1,8 @@
 #!/bin/bash
 # hearing-hook.sh - 聴覚バッファを Claude のコンテキストに注入する UserPromptSubmit フック
 #
-# hearing-daemon.py が /tmp/hearing_buffer.jsonl に蓄積した文字起こし結果を
+# hearing ライブラリ（別リポジトリ lifemate-ai/embodied-codex の hearing/）が
+# /tmp/hearing_buffer.jsonl に蓄積した文字起こし結果を
 # UserPromptSubmit のたびに読み取り、[hearing] プレフィックス付きで stdout に出力する。
 # 読み取り後はバッファをアトミックに空にする。
 #
