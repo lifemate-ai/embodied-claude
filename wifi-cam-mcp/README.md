@@ -10,17 +10,52 @@ Tapo C210などのWiFiカメラをMCP経由で制御して、AIに部屋を見�
 
 ## できること
 
+登録されるツール名は `server.py` の `list_tools()` のとおりです。
+
 | ツール | 説明 |
 |--------|------|
-| `camera_capture` | 今見えてる景色を撮影 |
-| `camera_pan_left` | 左を向く |
-| `camera_pan_right` | 右を向く |
-| `camera_tilt_up` | 上を向く |
-| `camera_tilt_down` | 下を向く |
-| `camera_look_around` | 部屋を見渡す（4方向撮影） |
+| `see` | 今見えてる景色を撮影（カメラの向きも一緒に返す） |
+| `look_left` | 左を向く（`degrees`、既定 30） |
+| `look_right` | 右を向く（`degrees`、既定 30） |
+| `look_up` | 上を向く（`degrees`、既定 20） |
+| `look_down` | 下を向く（`degrees`、既定 20） |
+| `look_around` | 部屋を見渡す（正面・左・右・上の4方向撮影） |
 | `camera_info` | カメラ情報取得 |
 | `camera_presets` | プリセット位置一覧 |
-| `camera_go_to_preset` | プリセット位置に移動 |
+| `camera_go_to_preset` | プリセット位置に移動（`preset_id`） |
+| `listen` | マイクで聞く（`duration` 秒、`transcribe` で文字起こし） |
+
+### 右カメラ（両目）を追加する
+
+同じ場所に 2 台目のカメラを置き、`TAPO_RIGHT_*` を設定すると、起動時に右カメラへ
+接続できた場合だけ次の 13 ツールが追加されます（`.env.example` も参照）。
+
+| 環境変数 | 説明 |
+|----------|------|
+| `TAPO_RIGHT_CAMERA_HOST` | 右カメラの IP アドレス（これが無いと右カメラは無効） |
+| `TAPO_RIGHT_USERNAME` / `TAPO_RIGHT_PASSWORD` | 右カメラの認証情報（未設定なら `TAPO_USERNAME` / `TAPO_PASSWORD` を流用） |
+| `TAPO_RIGHT_ONVIF_PORT` | ONVIF ポート（未設定なら `TAPO_ONVIF_PORT`、既定 2020） |
+| `TAPO_RIGHT_STREAM_URL` | RTSP URL（未設定なら自動検出） |
+| `TAPO_RIGHT_MOUNT_MODE` | `normal` / `ceiling`（未設定なら `TAPO_MOUNT_MODE`） |
+| `TAPO_RIGHT_PTZ_MODE` | `auto` / `relative` / `continuous`（未設定なら `TAPO_PTZ_MODE`） |
+
+| ツール | 説明 |
+|--------|------|
+| `see_right` | 右目だけで見る |
+| `see_both` | 両目で同時に撮影。左右の画像を別々に返す。手前・奥の関係（オクルージョン）の確認や視点の比較に使える。**視差や奥行きは計算しない** |
+| `right_eye_look_left` / `right_eye_look_right` / `right_eye_look_up` / `right_eye_look_down` | 右目だけを動かす |
+| `both_eyes_look_left` / `both_eyes_look_right` / `both_eyes_look_up` / `both_eyes_look_down` | 両目を同じ向きに動かす |
+| `get_eye_positions` | 両目の現在のパン・チルト角を取得 |
+| `align_eyes` | 右目を左目と同じ向きに合わせる |
+| `reset_eye_positions` | 両目の位置トラッキングを (0, 0) にリセット |
+
+### 複数拠点にカメラを置く
+
+離れた場所にカメラを置きたい場合は、右カメラではなく **wifi-cam-mcp を MCP サーバーとして
+複数回登録**し、それぞれに別の `TAPO_CAMERA_HOST` を env で渡してください
+（例: `wifi-cam-living` と `wifi-cam-office`）。ツール名は MCP サーバー名で名前空間が
+分かれるので衝突しません。このとき `TAPO_RIGHT_*` は設定しないでおくと、両目系のツールは
+生えません。両目系は同じ場所に並べた左右ペアのためのものです。
 
 ## セットアップ
 

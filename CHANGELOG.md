@@ -4,6 +4,12 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+A reader going through `wifi-cam-mcp` with the code open (fmtowns3, #132)
+found that the second camera was documented in three places that disagreed
+with each other and with the implementation: the tool description promised
+depth, the config silently ignored one of its own variables, and the README
+listed tools by names that no longer exist.
+
 On Windows the hearing hooks did nothing and said nothing. Three idioms that
 are unambiguous on macOS and Linux mean something else under Git Bash:
 `/tmp` written inside the embedded Python resolves to the current drive root
@@ -14,6 +20,16 @@ check failed closed, so the hook exited 0 and the buffer stayed full.
 
 ### Fixed
 
+- wifi-cam: `see_both` no longer describes itself as stereo vision with depth
+  perception. It captures both cameras and returns the two views as separate
+  images; nothing computes disparity, and the model reading that description
+  was one step from claiming it could judge distance. The text now says what
+  the two views are good for (occlusion, comparing viewpoints) and that no
+  depth is computed.
+- wifi-cam: `TAPO_RIGHT_PTZ_MODE` is read. `right_camera_from_env()` built its
+  `CameraConfig` without `ptz_mode`, so the right camera was always `auto`
+  regardless of the environment; it now follows the same read, fallback to
+  `TAPO_PTZ_MODE`, and validation as the left camera, with tests.
 - hearing: both hooks resolve the working directory once in the shell
   (`HEARING_DIR`, default `$TMPDIR` or `/tmp`) and hand it to the embedded
   Python, which no longer hard-codes `/tmp/...`; they probe for an interpreter
@@ -28,6 +44,17 @@ check failed closed, so the hook exited 0 and the buffer stayed full.
   (one silent pass is about 21 s, so `"timeout": 30` rather than the core
   hooks' 10), and the Windows notes -- point `command` at
   `C:/Program Files/Git/bin/bash.exe` rather than the WSL alias `bash`.
+
+### Changed
+
+- wifi-cam: the README tool table names the tools that are actually registered
+  (`see`, `look_left`, ... `listen`), documents the optional right camera and
+  the thirteen `see_right` / `see_both` / `right_eye_*` / `both_eyes_*` / eye
+  position tools it adds, and notes how to cover several locations by
+  registering the server more than once with different `TAPO_CAMERA_HOST`.
+- hooks: the `hearing-daemon.py` stub points at where hearing actually went,
+  `lifemate-ai/embodied-codex` -> `hearing/`, instead of a directory that is
+  not in this repository.
 
 ## [0.4.6] - 2026-07-31
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from wifi_cam_mcp import config
-from wifi_cam_mcp.config import ServerConfig
+from wifi_cam_mcp.config import CameraConfig, ServerConfig
 from wifi_cam_mcp.server import resolve_transcribe
 
 
@@ -66,3 +66,56 @@ def test_listen_resolves_explicit_or_configured_transcription_default(
     expected: bool,
 ) -> None:
     assert resolve_transcribe(arguments, default=default) is expected
+
+
+@pytest.fixture
+def right_camera_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A minimal right-camera environment with no PTZ/mount overrides set."""
+    monkeypatch.setenv("TAPO_RIGHT_CAMERA_HOST", "192.0.2.2")
+    monkeypatch.setenv("TAPO_USERNAME", "user")
+    monkeypatch.setenv("TAPO_PASSWORD", "secret")
+    for name in (
+        "TAPO_PTZ_MODE",
+        "TAPO_RIGHT_PTZ_MODE",
+        "TAPO_MOUNT_MODE",
+        "TAPO_RIGHT_MOUNT_MODE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_right_camera_ptz_mode_defaults_to_auto(right_camera_env: None) -> None:
+    right = CameraConfig.right_camera_from_env()
+
+    assert right is not None
+    assert right.ptz_mode == "auto"
+
+
+def test_right_camera_reads_its_own_ptz_mode(
+    monkeypatch: pytest.MonkeyPatch, right_camera_env: None
+) -> None:
+    monkeypatch.setenv("TAPO_RIGHT_PTZ_MODE", "relative")
+
+    right = CameraConfig.right_camera_from_env()
+
+    assert right is not None
+    assert right.ptz_mode == "relative"
+
+
+def test_right_camera_falls_back_to_left_ptz_mode(
+    monkeypatch: pytest.MonkeyPatch, right_camera_env: None
+) -> None:
+    monkeypatch.setenv("TAPO_PTZ_MODE", "continuous")
+
+    right = CameraConfig.right_camera_from_env()
+
+    assert right is not None
+    assert right.ptz_mode == "continuous"
+
+
+def test_right_camera_rejects_invalid_ptz_mode(
+    monkeypatch: pytest.MonkeyPatch, right_camera_env: None
+) -> None:
+    monkeypatch.setenv("TAPO_RIGHT_PTZ_MODE", "sideways")
+
+    with pytest.raises(ValueError, match="PTZ mode"):
+        CameraConfig.right_camera_from_env()
