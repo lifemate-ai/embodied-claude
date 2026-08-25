@@ -18,6 +18,14 @@ pinned a state path that was meant to be overridable. All four fail in the
 configuration layer and look healthy in the execution layer; interactive use
 catches them because a person is watching, and autonomous use has no one.
 
+A Windows user cloned the repository with `uv` already on PATH, opened it in
+Claude Code, and could not write a single file. The committed
+`.claude/settings.json` hooks were firing, the gate was failing closed as
+designed, and the deny reason told them to call `propose_field_action` -- a
+tool of the `individual-kernel` MCP server that only exists once
+`scripts/setup.sh` has written the gitignored `.mcp.json`. The gate was armed
+and its key had not been issued (#137, reported by fmtowns3).
+
 ### Added
 
 - setup: after writing `.mcp.json`, the same server names are written to
@@ -66,6 +74,31 @@ catches them because a person is watching, and autonomous use has no one.
   production would share one database while looking separate. Setup writes
   either only when the operator has set it, and then into every server that
   reads it, so the readers cannot disagree.
+- individual-kernel: when the PreToolUse hook denies an outward action and the
+  project has no `.mcp.json` registering `individual-kernel`, the reason now
+  says so, names `./scripts/setup.sh` (or `scripts\setup.cmd`), and keeps the
+  runtime's own verdict after `Original reason:`. The decision is unchanged --
+  still a deny -- only the message became something a session can act on.
+  Detection reads the project-scoped `.mcp.json` only; a server registered at
+  user scope is not seen, and the hint is then merely a prefix on an otherwise
+  correct deny.
+- individual-kernel: the hook CLI no longer turns unreadable stdin into an
+  empty payload. For `pre-tool-use` an empty payload has no tool name, which
+  the gate reads as an internal tool and allows, so a pipe that lost its input
+  looked like a gate that had stopped working. Missing or invalid JSON is now
+  a deny with the reason `EFPF hook received no/invalid JSON on stdin; failing
+  closed`, matching the fail-closed stance `main` already took for exceptions.
+  Other hook events keep treating it as an empty payload.
+- doctor: a new `hooks:gate` check connects the two halves. When the
+  repository ships a PreToolUse hook and the configuration does not register
+  `individual-kernel`, it reports that the committed hooks are active as soon
+  as `uv` is on PATH and that outward tool actions are denied until setup has
+  run.
+- docs: setup guide and both READMEs now say to run setup before opening the
+  repository root in Claude Code, what the deny looks like beforehand, and
+  that the hooks invoke `uv run --directory ${CLAUDE_PROJECT_DIR}`, so firing
+  them with a foreign project root leaves a `.venv` there -- something `uv`
+  does before any hook code runs, so it is documented rather than prevented.
 
 ### Changed
 

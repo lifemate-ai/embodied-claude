@@ -51,6 +51,27 @@ Core contains:
 | `sociality` | People, relationships, boundaries, and interaction context |
 | `individual-kernel` | Enacted field runtime, action gate, and diagnostics |
 
+### Run setup before opening the repository in Claude Code
+
+The repository ships `.claude/settings.json`, whose hooks are active in any
+Claude Code session opened at the repository root as soon as `uv` is on PATH.
+The PreToolUse hook fails closed: with no registered intention it denies
+`Write`, `Edit`, and any `Bash` command that changes state. The only way to
+register an intention is `propose_field_action`, a tool of the
+`individual-kernel` MCP server, and that server is wired up by the gitignored
+`.mcp.json` that setup generates. A checkout that has not run setup therefore
+cannot write and cannot unlock writing from inside the session. The deny reason
+says so and names `./scripts/setup.sh`; the doctor reports the same state as
+`hooks:gate`. Run setup first, then start (or restart) Claude Code. To read the
+code without running setup, open a different directory as the project root.
+
+The hooks run `uv run --directory ${CLAUDE_PROJECT_DIR} ...`. If they fire with
+a project root that is not this repository -- for example when settings were
+copied elsewhere -- `uv` creates a fresh `.venv` in that directory before the
+hook code runs, which this project cannot prevent from inside the hook. Keep
+the project root at the repository root, and delete any stray `.venv` that
+appears in an unrelated folder.
+
 ## Guided Chooser
 
 Run without arguments:
@@ -438,6 +459,19 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ```
 
 Open a new terminal and rerun setup.
+
+### Every write is denied right after cloning
+
+The deny reason begins with `individual-kernel MCP server is not configured for
+this project` and ends with the runtime's own verdict. Read-only tools still
+pass. Run `./scripts/setup.sh` (or `scripts\setup.cmd`), then restart Claude
+Code; see [Run setup before opening the repository in Claude
+Code](#run-setup-before-opening-the-repository-in-claude-code).
+
+A deny that reads `EFPF hook received no/invalid JSON on stdin; failing
+closed` means the hook ran but no payload reached it. When driving the hook by
+hand, PowerShell `'{json}' | uv run ...` can drop stdin; use Git Bash, or
+`cmd /c "... < file"`.
 
 ### A Core server is disconnected
 

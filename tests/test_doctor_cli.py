@@ -120,3 +120,54 @@ def test_live_checks_delegate_to_the_isolated_mcp_probe(
     assert results[0].status is CheckStatus.OK
     assert "31 tools" in results[0].detail
     assert "--remember-roundtrip" in calls[0]
+
+
+def _repo_with_hooks(tmp_path: Path) -> Path:
+    """A checkout as git delivers it: the hook settings, no .mcp.json."""
+    root = tmp_path / "repo"
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "settings.json").write_text(
+        json.dumps({"hooks": {"PreToolUse": [{"hooks": [{"type": "command"}]}]}}),
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_hook_gate_check_names_the_deny_when_mcp_json_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = _repo_with_hooks(tmp_path)
+    config_path = root / ".mcp.json"
+
+    result = doctor.check_hook_gate(root, None, config_path)
+
+    assert result is not None
+    assert result.status is CheckStatus.ERROR
+    assert result.subject == "hooks:gate"
+    assert "active as soon as uv is on PATH" in result.detail
+    assert "denied" in result.detail
+    assert "setup.sh" in (result.remediation or "")
+
+
+def test_hook_gate_check_passes_when_individual_kernel_is_configured(
+    tmp_path: Path,
+) -> None:
+    root = _repo_with_hooks(tmp_path)
+    config = {"mcpServers": {"individual-kernel": {"command": "uv"}}}
+
+    result = doctor.check_hook_gate(root, config, root / ".mcp.json")
+
+    assert result is not None
+    assert result.status is CheckStatus.OK
+
+    missing_kernel = doctor.check_hook_gate(
+        root, {"mcpServers": {"memory": {}}}, root / ".mcp.json"
+    )
+    assert missing_kernel is not None
+    assert missing_kernel.status is CheckStatus.ERROR
+
+
+def test_hook_gate_check_is_silent_without_a_committed_pre_tool_use_hook(
+    tmp_path: Path,
+) -> None:
+    assert doctor.check_hook_gate(tmp_path, None, tmp_path / ".mcp.json") is None

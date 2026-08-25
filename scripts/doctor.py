@@ -503,6 +503,49 @@ def _load_config(path: Path) -> tuple[dict[str, Any] | None, CheckResult]:
     return value, CheckResult(CheckStatus.OK, "config:file", f"loaded {path}")
 
 
+def check_hook_gate(
+    repo_root: Path,
+    config: Mapping[str, Any] | None,
+    config_path: Path,
+) -> CheckResult | None:
+    """Connect the committed hook gate to the config that makes it passable.
+
+    `.claude/settings.json` is in git and fires `efpf-hook pre-tool-use` as soon
+    as `uv` is on PATH; `.mcp.json` is gitignored and only `scripts/setup.sh`
+    writes it. A checkout that has the first without the second denies every
+    outward tool action and has no way to register an intention (#137). The
+    missing-config check already says "run setup"; this one says why a session
+    opened at the repository root cannot write until then. Returns None when
+    the repository ships no PreToolUse hook, so the check is silent elsewhere.
+    """
+
+    settings_path = repo_root / ".claude" / "settings.json"
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    hooks = settings.get("hooks") if isinstance(settings, Mapping) else None
+    if not isinstance(hooks, Mapping) or "PreToolUse" not in hooks:
+        return None
+
+    servers = config.get("mcpServers") if isinstance(config, Mapping) else None
+    if isinstance(servers, Mapping) and "individual-kernel" in servers:
+        return CheckResult(
+            CheckStatus.OK,
+            "hooks:gate",
+            "committed PreToolUse hook is backed by the configured individual-kernel server",
+        )
+    return CheckResult(
+        CheckStatus.ERROR,
+        "hooks:gate",
+        "the committed .claude/settings.json hooks are active as soon as uv is on PATH; "
+        f"until {config_path} registers individual-kernel, outward tool actions "
+        "(Write, Edit, mutating Bash) are denied in any Claude Code session opened at "
+        "this repository root",
+        "Run ./scripts/setup.sh (scripts\\setup.cmd on Windows), then restart the session.",
+    )
+
+
 def _check_python() -> CheckResult:
     if sys.version_info[:2] == (3, 13):
         return CheckResult(CheckStatus.OK, "python", sys.version.split()[0])
@@ -587,6 +630,9 @@ def run_doctor(
     results.append(check_memory_http_port())
     config, config_result = _load_config(config_path)
     results.append(config_result)
+    gate_result = check_hook_gate(repo_root, config, config_path)
+    if gate_result is not None:
+        results.append(gate_result)
     if config is not None:
         results.extend(validate_mcp_config(config))
         results.extend(check_headless_approval(repo_root, config))

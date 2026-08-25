@@ -42,6 +42,13 @@ The Core profile needs no camera, API key, or other hardware. It configures:
 - `sociality`: people, relationships, boundaries, and interaction context
 - `individual-kernel`: the Enacted First-Person Field runtime and diagnostics
 
+Run setup before starting Claude Code here. The repository ships
+`.claude/settings.json`, and its hooks are active as soon as `uv` is on PATH:
+until setup has written `.mcp.json`, every write in a session opened at the
+repository root is denied with a message pointing back at setup. See
+[Run setup before opening the repository in Claude
+Code](docs/setup.md#run-setup-before-opening-the-repository-in-claude-code).
+
 ## Confirm It Works
 
 1. Start `claude` from this repository.
