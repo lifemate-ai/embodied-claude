@@ -12,16 +12,28 @@ from social_core import SocialDB
 
 from individual_kernel_mcp import tick
 from individual_kernel_mcp.agency import ActionProposal
-from individual_kernel_mcp.hook_cli import stop
+from individual_kernel_mcp.hook_cli import (
+    UNREADABLE_INPUT_REASON,
+    kernel_server_configured,
+    stop,
+)
 from individual_kernel_mcp.tick import FieldRuntime, TickProducer
 
 
-def _run_hook(tmp_path, command: str, payload: dict) -> dict:
+def _run_hook(
+    tmp_path,
+    command: str,
+    payload: dict | None,
+    *,
+    raw_input: str | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> dict:
     env = dict(os.environ)
     env["SOCIAL_DB_PATH"] = str(tmp_path / "hook-social.db")
+    env.update(env_overrides or {})
     result = subprocess.run(
         [sys.executable, "-m", "individual_kernel_mcp.hook_cli", command],
-        input=json.dumps(payload),
+        input=json.dumps(payload) if raw_input is None else raw_input,
         text=True,
         capture_output=True,
         env=env,
@@ -401,3 +413,154 @@ def test_user_prompt_person_id_honours_companion_id_env(monkeypatch) -> None:
         monkeypatch, {"prompt": "hi", "session_id": "s", "person_id": "guest"}
     )
     assert kwargs["person_id"] == "guest"
+
+
+# --- #137: the gate fires from the committed .claude/settings.json as soon as
+# uv is on PATH, but the way out of a deny (propose_field_action) is an MCP tool
+# that only exists once scripts/setup.sh has written .mcp.json. Before setup the
+# deny must say so; and unreadable stdin must not pass for an internal tool.
+
+_WRITE_PAYLOAD = {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {"file_path": "a.txt", "content": "x"},
+    "tool_use_id": "write-137",
+}
+
+
+def _project_env(project_dir: Path) -> dict[str, str]:
+    return {"CLAUDE_PROJECT_DIR": str(project_dir)}
+
+
+def _write_mcp_json(project_dir: Path, servers: dict) -> None:
+    (project_dir / ".mcp.json").write_text(
+        json.dumps({"mcpServers": servers}), encoding="utf-8"
+    )
+
+
+def test_pre_tool_deny_points_at_setup_when_kernel_is_not_configured(
+    tmp_path: Path,
+) -> None:
+    """The reporter's exact script: clone, uv on PATH, no .mcp.json."""
+    project = tmp_path / "project"
+    project.mkdir()
+    env = _project_env(project)
+    _run_hook(
+        tmp_path,
+        "session-start",
+        {"session_id": "x", "source": "startup"},
+        env_overrides=env,
+    )
+    _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {"session_id": "x", "prompt": "hi"},
+        env_overrides=env,
+    )
+    result = _run_hook(tmp_path, "pre-tool-use", _WRITE_PAYLOAD, env_overrides=env)
+
+    output = result["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    reason = output["permissionDecisionReason"]
+    assert reason.startswith("individual-kernel MCP server is not configured")
+    assert "scripts/setup.sh" in reason
+    assert str(project) in reason
+    # The runtime's own verdict is kept, so nothing about the gate is hidden.
+    assert reason.endswith(
+        "Original reason: no matching pending intention; call propose_field_action first"
+    )
+
+
+def test_pre_tool_deny_keeps_original_reason_when_kernel_is_configured(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_mcp_json(
+        project,
+        {
+            "individual-kernel": {
+                "command": "uv",
+                "args": ["run", "--package", "individual-kernel-mcp", "individual-kernel-mcp"],
+            }
+        },
+    )
+    result = _run_hook(
+        tmp_path, "pre-tool-use", _WRITE_PAYLOAD, env_overrides=_project_env(project)
+    )
+
+    output = result["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == (
+        "no COMMITTED field; refresh the field before outward action"
+    )
+
+
+def test_pre_tool_allow_is_unaffected_by_missing_kernel_config(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    result = _run_hook(
+        tmp_path,
+        "pre-tool-use",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls -la"},
+        },
+        env_overrides=_project_env(project),
+    )
+
+    output = result["hookSpecificOutput"]
+    assert output["permissionDecision"] == "allow"
+    assert output["permissionDecisionReason"] == (
+        "internal/read-only tool; outward action gate not required"
+    )
+
+
+def test_kernel_server_configured_reads_only_the_project_mcp_json(tmp_path: Path) -> None:
+    assert kernel_server_configured(tmp_path) is False
+
+    _write_mcp_json(tmp_path, {"memory": {"command": "uv"}})
+    assert kernel_server_configured(tmp_path) is False
+
+    _write_mcp_json(tmp_path, {"individual-kernel": {"command": "uv"}})
+    assert kernel_server_configured(tmp_path) is True
+
+    (tmp_path / ".mcp.json").write_text("{not json", encoding="utf-8")
+    assert kernel_server_configured(tmp_path) is None
+
+
+def test_kernel_server_configured_honours_claude_project_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_mcp_json(project, {"individual-kernel": {"command": "uv"}})
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(project))
+    monkeypatch.chdir(tmp_path)
+
+    assert kernel_server_configured() is True
+
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR")
+    assert kernel_server_configured() is False
+
+
+@pytest.mark.parametrize("raw_input", ["", "not json", "[1, 2]", "   \n"])
+def test_pre_tool_use_fails_closed_on_unreadable_stdin(tmp_path: Path, raw_input: str) -> None:
+    """A pipe that loses stdin used to read as allow; it must read as a deny."""
+    result = _run_hook(tmp_path, "pre-tool-use", None, raw_input=raw_input)
+
+    output = result["hookSpecificOutput"]
+    assert output["hookEventName"] == "PreToolUse"
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == UNREADABLE_INPUT_REASON
+
+
+def test_other_hooks_treat_unreadable_stdin_as_an_empty_payload(tmp_path: Path) -> None:
+    result = _run_hook(tmp_path, "post-tool-batch", None, raw_input="not json")
+
+    output = result["hookSpecificOutput"]
+    assert output["hookEventName"] == "PostToolBatch"
+    assert output["additionalContext"] == "No committed field is available."
+
+    assert _run_hook(tmp_path, "stop-failure", None, raw_input="") == {}

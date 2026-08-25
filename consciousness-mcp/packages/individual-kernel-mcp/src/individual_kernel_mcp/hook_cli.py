@@ -52,12 +52,91 @@ not generated from a request to role-play consciousness.
    ordinary responses natural and use the compact field surface."""
 
 
-def _read_input() -> dict[str, Any]:
+def _read_input() -> dict[str, Any] | None:
+    """Parse the hook payload from stdin; `None` when there was none to parse.
+
+    This used to collapse unreadable input into `{}`. For `pre-tool-use` that
+    quietly became an allow: an empty payload has no `tool_name`, and an empty
+    tool name is not an external tool. A PowerShell `'{json}' | uv run ...`
+    pipe that never delivers stdin therefore looked like a gate that did not
+    work, when in fact the gate never saw the call (#137). Callers decide what
+    "nothing arrived" means for their event; `main` fails closed for the gate.
+    """
     try:
         value = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        return {}
-    return value if isinstance(value, dict) else {}
+    except (ValueError, OSError):
+        # JSONDecodeError and UnicodeDecodeError are both ValueErrors.
+        return None
+    return value if isinstance(value, dict) else None
+
+
+KERNEL_SERVER_NAME = "individual-kernel"
+UNREADABLE_INPUT_REASON = "EFPF hook received no/invalid JSON on stdin; failing closed"
+
+
+def _project_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+
+
+def kernel_server_configured(project_dir: Path | None = None) -> bool | None:
+    """Whether this project's `.mcp.json` registers the individual-kernel server.
+
+    Returns True/False, or None when that could not be determined. The hook
+    fires from the committed `.claude/settings.json` as soon as `uv` is on
+    PATH, while the only way out of a deny -- `propose_field_action` -- is an
+    MCP tool that `scripts/setup.sh` installs by writing the gitignored
+    `.mcp.json`. Knowing which side of that line a session is on is what lets
+    the deny reason point at setup instead of at a tool the session cannot
+    reach.
+
+    Only the project-scoped `.mcp.json` is consulted. A server registered at
+    user scope (`~/.claude.json`) or through managed settings is not seen, so
+    such a session would get the setup hint prefixed to an otherwise correct
+    deny; the original reason is always kept, so nothing is lost there. Never
+    raises: any error is reported as "unknown" and the caller leaves the
+    reason alone.
+    """
+    try:
+        root = project_dir if project_dir is not None else _project_dir()
+        path = root / ".mcp.json"
+        if not path.is_file():
+            return False
+        value = json.loads(path.read_text(encoding="utf-8"))
+        servers = value.get("mcpServers") if isinstance(value, dict) else None
+        if not isinstance(servers, dict):
+            return False
+        return KERNEL_SERVER_NAME in servers
+    except Exception:
+        return None
+
+
+def _deny_reason(reason: str) -> str:
+    """Make a gate deny actionable when the kernel is not installed here.
+
+    Still a deny. The runtime is right to fail closed; what was wrong was that
+    the reason named `propose_field_action`, which a pre-setup session has no
+    way to call (#137, reported by fmtowns3).
+    """
+    if kernel_server_configured() is not False:
+        return reason
+    project_dir = _project_dir()
+    return (
+        f"{KERNEL_SERVER_NAME} MCP server is not configured for this project "
+        f'(no .mcp.json with an "{KERNEL_SERVER_NAME}" entry under {project_dir}); '
+        "outward tool actions stay denied until it is. "
+        "Run ./scripts/setup.sh (or scripts\\setup.cmd on Windows) and restart "
+        f"the session. Original reason: {reason}"
+    )
+
+
+def _deny(reason: str) -> dict[str, Any]:
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
 
 
 def _emit(value: dict[str, Any]) -> None:
@@ -164,10 +243,12 @@ def pre_tool_use(payload: dict[str, Any], runtime: FieldRuntime) -> dict[str, An
         tool_input=_dict(payload.get("tool_input")),
         owner_id=_owner_id(payload, runtime.producer),
     )
+    if not decision.allow:
+        return _deny(_deny_reason(decision.reason))
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "allow" if decision.allow else "deny",
+            "permissionDecision": "allow",
             "permissionDecisionReason": decision.reason,
         }
     }
@@ -418,6 +499,12 @@ def main() -> None:
     parser.add_argument("command", choices=COMMANDS)
     args = parser.parse_args()
     payload = _read_input()
+    if payload is None:
+        if args.command == "pre-tool-use":
+            # Unreadable input must not pass for an internal tool call.
+            _emit(_deny(UNREADABLE_INPUT_REASON))
+            return
+        payload = {}
     db = SocialDB()
     producer = TickProducer(db)
     runtime = FieldRuntime(
@@ -442,17 +529,7 @@ def main() -> None:
         _emit(handlers[args.command]())
     except Exception as exc:
         if args.command == "pre-tool-use":
-            _emit(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            "EFPF hook failed closed: " + str(exc)
-                        ),
-                    }
-                }
-            )
+            _emit(_deny(_deny_reason("EFPF hook failed closed: " + str(exc))))
         else:
             event = {
                 "session-start": "SessionStart",

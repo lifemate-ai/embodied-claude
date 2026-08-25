@@ -41,6 +41,13 @@ Core profile には camera、API key、追加 hardware は不要です。次の4
 - `sociality`: 人、関係、境界、interaction context
 - `individual-kernel`: Enacted First-Person Field runtime と diagnostics
 
+Claude Code を起動する前に setup を実行してください。リポジトリには
+`.claude/settings.json` が同梱されており、`uv` が PATH にあるだけでその hook が
+有効になります。setup が `.mcp.json` を書くまでは、リポジトリ直下を project root
+にした session での書き込みはすべて拒否され、拒否理由が setup を指し示します。
+詳細は [docs/setup.md](docs/setup.md#run-setup-before-opening-the-repository-in-claude-code)
+を参照してください。
+
 ## 動作確認
 
 1. この repository で `claude` を起動します。
