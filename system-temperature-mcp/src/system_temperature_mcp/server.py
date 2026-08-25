@@ -220,10 +220,19 @@ def interpret_temperature(temps: list[dict[str, Any]]) -> str:
 def _run_powershell(script: str) -> str:
     """Run a PowerShell script and return stdout. Returns empty string on failure."""
     try:
+        # PowerShell 5.1 writes the OEM code page, while bare text=True decodes
+        # with the ANSI code page (or UTF-8 under PYTHONUTF8=1) -- on a
+        # Japanese host both happen to be 932, elsewhere they differ. A decode
+        # failure happens inside subprocess's reader thread, leaving
+        # returncode=0 with stdout=None, so the strip() below would raise
+        # AttributeError past the except clause. "oem" is a Windows-only codec
+        # alias; errors="replace" keeps the no-raise promise of the docstring.
         result = subprocess.run(
             ["powershell", "-NonInteractive", "-NoProfile", "-Command", script],
             capture_output=True,
             text=True,
+            encoding="oem" if os.name == "nt" else "utf-8",
+            errors="replace",
             timeout=5,
             check=False,
         )

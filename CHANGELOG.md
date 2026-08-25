@@ -135,6 +135,15 @@ and its key had not been issued (#137, reported by fmtowns3).
   that the hooks invoke `uv run --directory ${CLAUDE_PROJECT_DIR}`, so firing
   them with a foreign project root leaves a `.venv` there -- something `uv`
   does before any hook code runs, so it is documented rather than prevented.
+- system-temperature: `_run_powershell` decodes with the OEM code page on
+  Windows (`encoding="oem"`, with `errors="replace"`). PowerShell 5.1 writes
+  OEM while bare `text=True` reads the ANSI code page -- or UTF-8 under
+  `PYTHONUTF8=1` -- and a decode failure inside subprocess's reader thread
+  leaves `returncode=0` with `stdout=None`, so the following `strip()` raised
+  an `AttributeError` the function's own contract says cannot happen. On a
+  Japanese host both code pages are 932 and it happened to line up; where they
+  differ the output mojibakes silently instead. Found, measured and patched by
+  fmtowns3 on this PR.
 
 ### Changed
 
