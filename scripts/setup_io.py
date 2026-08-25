@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -120,6 +120,48 @@ def apply_config_plan(plan: ConfigPlan, config: Mapping[str, Any]) -> None:
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+HEADLESS_ENABLE_KEY = "enabledMcpjsonServers"
+
+
+def enable_headless_servers(settings_path: Path, server_names: Sequence[str]) -> bool:
+    """Approve project MCP servers for `claude -p` by name.
+
+    Claude Code loads `.mcp.json` servers only after they are approved, and a
+    headless run has no way to ask. It skips them silently instead, and every
+    edit of `.mcp.json` resets the approval (#140). The list in
+    `.claude/settings.local.json` is what makes the approval survive, so it is
+    rewritten to exactly the servers setup just generated: other keys in the
+    file are left alone, and the list is replaced rather than appended to.
+
+    Returns whether the file changed.
+    """
+
+    settings: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ConfigConflictError(
+                f"{settings_path} is not valid JSON; fix it before rerunning setup"
+            ) from error
+        if not isinstance(loaded, dict):
+            raise ConfigConflictError(
+                f"{settings_path} must contain a JSON object at the top level"
+            )
+        settings = loaded
+
+    wanted = list(dict.fromkeys(str(name) for name in server_names))
+    if settings.get(HEADLESS_ENABLE_KEY) == wanted:
+        return False
+    settings[HEADLESS_ENABLE_KEY] = wanted
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def copy_policy_if_missing(source: Path, destination: Path) -> bool:

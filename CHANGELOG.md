@@ -19,6 +19,14 @@ and the social tools opened every tick on a `person_id` nobody in the room
 answered to. Each value was a fact about one deployment, left where the code
 made it look like a fact about the system.
 
+A Windows install (#140, reported by fmtowns3) turned up four ways a heartbeat
+could run with something missing and say nothing: the MCP servers were never
+approved for `claude -p`, the memory recall port had nobody listening, the
+`@SOUL.md` mentions pointed at files that did not exist, and the example config
+pinned a state path that was meant to be overridable. All four fail in the
+configuration layer and look healthy in the execution layer; interactive use
+catches them because a person is watching, and autonomous use has no one.
+
 On Windows the hearing hooks did nothing and said nothing. Three idioms that
 are unambiguous on macOS and Linux mean something else under Git Bash:
 `/tmp` written inside the embedded Python resolves to the current drive root
@@ -35,6 +43,24 @@ tool of the `individual-kernel` MCP server that only exists once
 `scripts/setup.sh` has written the gitignored `.mcp.json`. The gate was armed
 and its key had not been issued (#137, reported by fmtowns3).
 
+### Added
+
+- setup: after writing `.mcp.json`, the same server names are written to
+  `enabledMcpjsonServers` in `.claude/settings.local.json`. Project MCP servers
+  are loaded only once approved, `claude -p` cannot ask, and every edit of
+  `.mcp.json` resets the approval -- so the list is replaced with exactly what
+  setup generated, other keys in the file are kept, and the file is now
+  ignored by Git. `docs/setup.md` gains a section on it.
+- doctor: warns for every `.mcp.json` server missing from that list, when the
+  memory HTTP recall port (`MEMORY_HTTP_PORT`, default 18900) is not
+  listening, and -- once `autonomous-action.sh` is installed -- for each of
+  `SOUL.md`, `TODO.md`, `ROUTINES.md` that is absent. The recall probe is the
+  one network action the static doctor now takes, a TCP connect on localhost.
+- `docs/autonomous-files.md` describes the three files the autonomous prompt
+  mentions with `@`, and `examples/SOUL.sample.md`, `TODO.sample.md`,
+  `ROUTINES.sample.md` are neutral templates to copy from. Until now the three
+  comment lines in the script were their only documentation.
+
 ### Fixed
 
 - wifi-cam: `see_both` no longer describes itself as stereo vision with depth
@@ -47,6 +73,24 @@ and its key had not been issued (#137, reported by fmtowns3).
   `CameraConfig` without `ptz_mode`, so the right camera was always `auto`
   regardless of the environment; it now follows the same read, fallback to
   `TAPO_PTZ_MODE`, and validation as the left camera, with tests.
+- individual-kernel: when the HTTP recall endpoint does not answer, the tick
+  no longer returns in silence. It warns once per outage on stderr (and again
+  after a recovery and a second outage), and the committed field's epistemic
+  trace records `memory_recall` as `ok:<n>`, `unreachable:<error>` or
+  `disabled`, so a tick that ran on no memory is distinguishable from one
+  that did not. `MEMORY_HTTP_PORT=0` now means recall is off rather than a
+  doomed connect to port 0; the isolated probe already used it that way.
+- autonomous-action.sample.sh: checks that `SOUL.md`, `TODO.md` and
+  `ROUTINES.md` exist before building the prompt and writes a `WARN:` line to
+  its log and stderr for each that does not. It does not abort; the heartbeat
+  still runs on `CLAUDE.md` alone, as before.
+- `.mcp.json.example` and setup no longer pin `SOCIAL_DB_PATH` and
+  `MEMORY_HTTP_PORT` in the `individual-kernel` env block. A value there
+  overrides the inherited environment, so writing the code defaults made a
+  later `SOCIAL_DB_PATH=...` in the parent process a no-op -- staging and
+  production would share one database while looking separate. Setup writes
+  either only when the operator has set it, and then into every server that
+  reads it, so the readers cannot disagree.
 - hearing: both hooks resolve the working directory once in the shell
   (`HEARING_DIR`, default `$TMPDIR` or `/tmp`) and hand it to the embedded
   Python, which no longer hard-codes `/tmp/...`; they probe for an interpreter

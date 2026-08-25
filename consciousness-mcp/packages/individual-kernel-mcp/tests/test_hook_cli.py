@@ -30,6 +30,8 @@ def _run_hook(
 ) -> dict:
     env = dict(os.environ)
     env["SOCIAL_DB_PATH"] = str(tmp_path / "hook-social.db")
+    # Keep the hook off the machine's real recall endpoint; 0 means "none".
+    env["MEMORY_HTTP_PORT"] = "0"
     env.update(env_overrides or {})
     result = subprocess.run(
         [sys.executable, "-m", "individual_kernel_mcp.hook_cli", command],

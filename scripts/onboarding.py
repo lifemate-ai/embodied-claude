@@ -114,6 +114,11 @@ TAPO_REQUIRED_ENVIRONMENT = (
 )
 ELEVENLABS_REQUIRED_ENVIRONMENT = ("ELEVENLABS_API_KEY",)
 ELEVENLABS_OPTIONAL_ENVIRONMENT = ("ELEVENLABS_VOICE_ID",)
+# Both have code defaults (~/.claude/sociality/social.db and 18900). A value in
+# a server's env block overrides the inherited environment, so writing the
+# default here would pin it and silently defeat a later SOCIAL_DB_PATH=... in
+# the parent process. They are emitted only when the operator has set them.
+INDIVIDUAL_KERNEL_OPTIONAL_ENVIRONMENT = ("SOCIAL_DB_PATH", "MEMORY_HTTP_PORT")
 X_REQUIRED_ENVIRONMENT = (
     "XAI_API_KEY",
     "X_CONSUMER_KEY",
@@ -287,18 +292,31 @@ def build_mcp_config(
     quiet_hours_environment = _selected_environment(
         environment, (), QUIET_HOURS_OPTIONAL_ENVIRONMENT
     )
+    # Operator overrides are pinned into every server that reads them, so the
+    # readers cannot disagree about which database or port is meant.
+    memory_environment = {"MEMORY_EMBEDDING_MODEL": embedding_model}
+    memory_environment.update(
+        _selected_environment(environment, (), ("MEMORY_HTTP_PORT",))
+    )
+    memory_environment.update(persona_environment)
     servers: dict[str, dict[str, Any]] = {
-        "memory": SERVER_SPECS["memory"].command(
-            {"MEMORY_EMBEDDING_MODEL": embedding_model, **persona_environment}
-        ),
+        "memory": SERVER_SPECS["memory"].command(memory_environment),
         "desire-system": SERVER_SPECS["desire-system"].command(
             {**persona_environment, **quiet_hours_environment}
         ),
-        "sociality": SERVER_SPECS["sociality"].command(persona_environment),
+        "sociality": SERVER_SPECS["sociality"].command(
+            {
+                **_selected_environment(environment, (), ("SOCIAL_DB_PATH",)),
+                **persona_environment,
+            }
+        ),
         "individual-kernel": SERVER_SPECS["individual-kernel"].command(
             {
-                "SOCIAL_DB_PATH": "~/.claude/sociality/social.db",
-                "MEMORY_HTTP_PORT": "18900",
+                **_selected_environment(
+                    environment,
+                    (),
+                    INDIVIDUAL_KERNEL_OPTIONAL_ENVIRONMENT,
+                ),
                 **persona_environment,
                 **quiet_hours_environment,
             }

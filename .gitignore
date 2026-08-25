@@ -43,6 +43,9 @@ ENV/
 .mcp.json
 .mcp.json.backup-*
 
+# Per-machine Claude Code settings (setup writes the headless MCP approval here)
+.claude/settings.local.json
+
 # Captured images
 /captures/
 *.jpg

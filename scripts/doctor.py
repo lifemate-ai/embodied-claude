@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -311,6 +312,170 @@ def check_optional_dependencies(
     return results
 
 
+HEADLESS_SETTINGS = Path(".claude") / "settings.local.json"
+AUTONOMOUS_FILES = ("SOUL.md", "TODO.md", "ROUTINES.md")
+DEFAULT_MEMORY_HTTP_PORT = 18900
+
+
+def check_headless_approval(
+    repo_root: Path,
+    config: Mapping[str, Any],
+) -> list[CheckResult]:
+    """Check that every `.mcp.json` server is approved for `claude -p`.
+
+    Project MCP servers need a one-time approval that only an interactive
+    session can give. Headless runs skip unapproved servers without a word, so
+    the autonomous heartbeat can start with no memory and log a normal-looking
+    session (#140). `.claude/settings.local.json` carries the approval.
+    """
+
+    servers = config.get("mcpServers", {})
+    if not isinstance(servers, Mapping) or not servers:
+        return []
+    settings_path = repo_root / HEADLESS_SETTINGS
+    enabled: set[str] = set()
+    enable_all = False
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            return [
+                CheckResult(
+                    CheckStatus.WARN,
+                    "headless:settings",
+                    f"{settings_path} is not readable JSON: {error}",
+                    "Fix the file or re-run scripts/setup.sh.",
+                )
+            ]
+        if isinstance(settings, Mapping):
+            enable_all = settings.get("enableAllProjectMcpServers") is True
+            listed = settings.get("enabledMcpjsonServers", [])
+            if isinstance(listed, list):
+                enabled = {str(item) for item in listed}
+
+    results: list[CheckResult] = []
+    for raw_name in servers:
+        name = str(raw_name)
+        if enable_all or name in enabled:
+            continue
+        results.append(
+            CheckResult(
+                CheckStatus.WARN,
+                f"headless:{name}",
+                f"{name} is in .mcp.json but not enabled for headless runs; "
+                "`claude -p` will skip it silently",
+                "re-run scripts/setup.sh or add it to .claude/settings.local.json "
+                "enabledMcpjsonServers",
+            )
+        )
+    if not results:
+        results.append(
+            CheckResult(
+                CheckStatus.OK,
+                "headless:approval",
+                f"every .mcp.json server is enabled in {HEADLESS_SETTINGS}",
+            )
+        )
+    return results
+
+
+def _port_is_listening(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def check_memory_http_port(
+    environment: Mapping[str, str] | None = None,
+    *,
+    is_listening: Callable[[str, int], bool] = _port_is_listening,
+) -> CheckResult:
+    """Check that memory-mcp's HTTP recall endpoint is reachable.
+
+    individual-kernel pulls memory candidates into each tick over this port and
+    commits the field without them when nothing answers, so a closed port means
+    every heartbeat runs on no memory while looking normal (#140).
+    """
+
+    source = os.environ if environment is None else environment
+    raw = str(source.get("MEMORY_HTTP_PORT", DEFAULT_MEMORY_HTTP_PORT)).strip()
+    try:
+        port = int(raw)
+    except ValueError:
+        return CheckResult(
+            CheckStatus.WARN,
+            "memory:http-recall",
+            f"MEMORY_HTTP_PORT is not a number: {raw!r}",
+            "Unset it or set it to the port memory-mcp binds (default 18900).",
+        )
+    if port == 0:
+        return CheckResult(
+            CheckStatus.WARN,
+            "memory:http-recall",
+            "MEMORY_HTTP_PORT=0 disables HTTP recall; individual-kernel ticks "
+            "will carry no memory candidates",
+            "Unset MEMORY_HTTP_PORT unless this is intended.",
+        )
+    if is_listening("127.0.0.1", port):
+        return CheckResult(
+            CheckStatus.OK,
+            "memory:http-recall",
+            f"memory HTTP recall port {port} is listening",
+        )
+    return CheckResult(
+        CheckStatus.WARN,
+        "memory:http-recall",
+        f"memory HTTP recall port {port} is not listening; individual-kernel "
+        "ticks will carry no memory candidates",
+        "Expected until memory-mcp is running (it binds the port at startup). "
+        "If it is running, check MEMORY_HTTP_PORT matches in .mcp.json and the "
+        "environment.",
+    )
+
+
+def check_autonomous_files(repo_root: Path) -> list[CheckResult]:
+    """Check the files the autonomous prompt pulls in with `@FILE`.
+
+    `autonomous-action.sh` references SOUL.md, TODO.md and ROUTINES.md; an
+    `@` mention of a missing file resolves to nothing and nothing says so
+    (#140). A warning is only worth raising once the script is installed;
+    before that the absence is merely stated.
+    """
+
+    missing = [name for name in AUTONOMOUS_FILES if not (repo_root / name).is_file()]
+    installed = (repo_root / "autonomous-action.sh").is_file()
+    if not missing:
+        return [
+            CheckResult(
+                CheckStatus.OK,
+                "autonomous:files",
+                "SOUL.md, TODO.md and ROUTINES.md are present",
+            )
+        ]
+    if not installed:
+        return [
+            CheckResult(
+                CheckStatus.OK,
+                "autonomous:files",
+                f"{', '.join(missing)} absent; only needed once autonomous-action.sh "
+                "is installed (see docs/autonomous-files.md)",
+            )
+        ]
+    return [
+        CheckResult(
+            CheckStatus.WARN,
+            f"autonomous:{name}",
+            f"{name} is missing from {repo_root}; the @{name} reference in the "
+            "autonomous prompt will not resolve",
+            f"Copy examples/{name.removesuffix('.md')}.sample.md to {name} and edit "
+            "it (see docs/autonomous-files.md).",
+        )
+        for name in missing
+    ]
+
+
 def _load_config(path: Path) -> tuple[dict[str, Any] | None, CheckResult]:
     try:
         value = json.loads(path.read_text())
@@ -461,6 +626,8 @@ def run_doctor(
         check_state_path(home / ".claude" / "memories"),
         check_state_path(home / ".claude" / "sociality" / "social.db"),
     ]
+    results.extend(check_autonomous_files(repo_root))
+    results.append(check_memory_http_port())
     config, config_result = _load_config(config_path)
     results.append(config_result)
     gate_result = check_hook_gate(repo_root, config, config_path)
@@ -468,6 +635,7 @@ def run_doctor(
         results.append(gate_result)
     if config is not None:
         results.extend(validate_mcp_config(config))
+        results.extend(check_headless_approval(repo_root, config))
         results.extend(check_workspace_packages(repo_root, config))
         results.extend(check_optional_dependencies(config, which=which))
     return results
