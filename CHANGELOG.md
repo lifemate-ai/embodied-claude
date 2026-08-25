@@ -4,6 +4,12 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+A reader going through `wifi-cam-mcp` with the code open (fmtowns3, #132)
+found that the second camera was documented in three places that disagreed
+with each other and with the implementation: the tool description promised
+depth, the config silently ignored one of its own variables, and the README
+listed tools by names that no longer exist.
+
 A Windows install (#140, reported by fmtowns3) turned up four ways a heartbeat
 could run with something missing and say nothing: the MCP servers were never
 approved for `claude -p`, the memory recall port had nobody listening, the
@@ -32,6 +38,16 @@ catches them because a person is watching, and autonomous use has no one.
 
 ### Fixed
 
+- wifi-cam: `see_both` no longer describes itself as stereo vision with depth
+  perception. It captures both cameras and returns the two views as separate
+  images; nothing computes disparity, and the model reading that description
+  was one step from claiming it could judge distance. The text now says what
+  the two views are good for (occlusion, comparing viewpoints) and that no
+  depth is computed.
+- wifi-cam: `TAPO_RIGHT_PTZ_MODE` is read. `right_camera_from_env()` built its
+  `CameraConfig` without `ptz_mode`, so the right camera was always `auto`
+  regardless of the environment; it now follows the same read, fallback to
+  `TAPO_PTZ_MODE`, and validation as the left camera, with tests.
 - individual-kernel: when the HTTP recall endpoint does not answer, the tick
   no longer returns in silence. It warns once per outage on stderr (and again
   after a recovery and a second outage), and the committed field's epistemic
@@ -50,6 +66,17 @@ catches them because a person is watching, and autonomous use has no one.
   production would share one database while looking separate. Setup writes
   either only when the operator has set it, and then into every server that
   reads it, so the readers cannot disagree.
+
+### Changed
+
+- wifi-cam: the README tool table names the tools that are actually registered
+  (`see`, `look_left`, ... `listen`), documents the optional right camera and
+  the thirteen `see_right` / `see_both` / `right_eye_*` / `both_eyes_*` / eye
+  position tools it adds, and notes how to cover several locations by
+  registering the server more than once with different `TAPO_CAMERA_HOST`.
+- hooks: the `hearing-daemon.py` stub points at where hearing actually went,
+  `lifemate-ai/embodied-codex` -> `hearing/`, instead of a directory that is
+  not in this repository.
 
 ## [0.4.6] - 2026-07-31
 
