@@ -61,9 +61,21 @@ def _read_input() -> dict[str, Any] | None:
     pipe that never delivers stdin therefore looked like a gate that did not
     work, when in fact the gate never saw the call (#137). Callers decide what
     "nothing arrived" means for their event; `main` fails closed for the gate.
+
+    The payload is read at the byte layer and decoded as UTF-8 explicitly:
+    hook pipes carry UTF-8 JSON regardless of the console code page, and a
+    locale text wrapper (cp932 + surrogateescape on Japanese Windows) would
+    mojibake non-ASCII into lone surrogates that later blow up the intention
+    hash instead of failing here, closed (#152).
     """
     try:
-        value = json.load(sys.stdin)
+        buffer = getattr(sys.stdin, "buffer", None)
+        raw = (
+            buffer.read()
+            if buffer is not None
+            else sys.stdin.read().encode("utf-8", "surrogateescape")
+        )
+        value = json.loads(raw.decode("utf-8"))
     except (ValueError, OSError):
         # JSONDecodeError and UnicodeDecodeError are both ValueErrors.
         return None
@@ -140,8 +152,17 @@ def _deny(reason: str) -> dict[str, Any]:
 
 
 def _emit(value: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
-    sys.stdout.write("\n")
+    # Written at the byte layer for the same reason _read_input reads it: the
+    # hook pipe is UTF-8 JSON, and ensure_ascii=False through a cp932 text
+    # wrapper would emit bytes Claude Code cannot parse (#152).
+    data = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        buffer.write(data + b"\n")
+        buffer.flush()
+    else:
+        sys.stdout.write(data.decode("utf-8"))
+        sys.stdout.write("\n")
 
 
 def _hook_context(event: str, context: str) -> dict[str, Any]:

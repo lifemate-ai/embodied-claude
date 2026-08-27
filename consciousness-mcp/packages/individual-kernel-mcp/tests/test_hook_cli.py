@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -14,6 +15,8 @@ from individual_kernel_mcp import tick
 from individual_kernel_mcp.agency import ActionProposal
 from individual_kernel_mcp.hook_cli import (
     UNREADABLE_INPUT_REASON,
+    _emit,
+    _read_input,
     kernel_server_configured,
     stop,
 )
@@ -37,6 +40,10 @@ def _run_hook(
         [sys.executable, "-m", "individual_kernel_mcp.hook_cli", command],
         input=json.dumps(payload) if raw_input is None else raw_input,
         text=True,
+        # Claude Code speaks UTF-8 on the hook pipes; without this the parent
+        # side of the test would encode with the locale (cp932 on Japanese
+        # Windows) and never exercise the #152 path.
+        encoding="utf-8",
         capture_output=True,
         env=env,
         check=True,
@@ -566,3 +573,78 @@ def test_other_hooks_treat_unreadable_stdin_as_an_empty_payload(tmp_path: Path) 
     assert output["additionalContext"] == "No committed field is available."
 
     assert _run_hook(tmp_path, "stop-failure", None, raw_input="") == {}
+
+
+def test_pre_tool_gate_matches_non_ascii_tool_input(tmp_path) -> None:
+    """#152: a correctly registered intention with Japanese input must match."""
+    tool_name = "Write"
+    tool_input = {"file_path": "/tmp/efpf-メモ", "content": "こんにちは、あ"}
+    _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {
+            "session_id": "session-152",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "日本語を書く",
+        },
+    )
+    db = SocialDB(tmp_path / "hook-social.db")
+    producer = TickProducer(
+        db,
+        interoception_path=tmp_path / "interoception.json",
+        desires_path=tmp_path / "desires.json",
+    )
+    field = producer.get_current_field()
+    assert field is not None
+    FieldRuntime(db, producer=producer).propose_action(
+        ActionProposal(
+            field_id=field.field_id,
+            tool_name=tool_name,
+            tool_input=tool_input,
+            goal="日本語のファイルを書く",
+        )
+    )
+    db.close()
+
+    result = _run_hook(
+        tmp_path,
+        "pre-tool-use",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "tool_use_id": "write-152",
+        },
+    )
+
+    output = result["hookSpecificOutput"]
+    assert output["permissionDecision"] == "allow", output
+
+
+def test_read_input_decodes_utf8_despite_cp932_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The byte-layer read must not care what encoding the wrapper claims."""
+    payload = {"tool_name": "Write", "tool_input": {"content": "こんにちは、あ"}}
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    wrapper = io.TextIOWrapper(
+        io.BufferedReader(io.BytesIO(raw)),
+        encoding="cp932",
+        errors="surrogateescape",
+    )
+    monkeypatch.setattr(sys, "stdin", wrapper)
+
+    value = _read_input()
+
+    assert value is not None
+    assert value["tool_input"]["content"] == "こんにちは、あ"
+
+
+def test_emit_writes_utf8_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    buffer = io.BytesIO()
+    wrapper = io.TextIOWrapper(buffer, encoding="cp932")
+    monkeypatch.setattr(sys, "stdout", wrapper)
+
+    _emit({"reason": "プロジェクト"})
+
+    assert buffer.getvalue() == '{"reason":"プロジェクト"}\n'.encode()

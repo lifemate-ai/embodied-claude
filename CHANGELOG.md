@@ -144,6 +144,16 @@ and its key had not been issued (#137, reported by fmtowns3).
   Japanese host both code pages are 932 and it happened to line up; where they
   differ the output mojibakes silently instead. Found, measured and patched by
   fmtowns3 on this PR.
+- individual-kernel: the efpf hook reads its stdin payload at the byte layer
+  and decodes UTF-8 explicitly, and `_emit` writes UTF-8 bytes. When the
+  stdio text wrapper carries the locale encoding (cp932 + `surrogateescape`
+  on Japanese Windows), a UTF-8 payload with non-ASCII mojibakes into lone
+  surrogates that `hash_tool_input` cannot encode -- so an operator who had
+  correctly registered an intention got every non-ASCII outward action denied,
+  while the no-intention early return hid the bug from manual probing. Truly
+  broken input still lands in the #137 fail-closed branch, and correctness no
+  longer depends on `main()`'s stream reconfiguration taking effect. Reported
+  with the diagnosis and both fix candidates by fmtowns3 in #152.
 
 ### Changed
 
