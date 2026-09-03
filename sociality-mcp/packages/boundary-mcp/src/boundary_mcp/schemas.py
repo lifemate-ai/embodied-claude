@@ -14,6 +14,9 @@ class EvaluateActionResult(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     reasons: list[str]
     safer_alternatives: list[str] = Field(default_factory=list)
+    # The person's ``preferred_nudge_style`` from socialPolicy.toml, when a
+    # person rule exists. Callers shaping a nudge or a reply read it here.
+    nudge_style: str | None = None
 
 
 class ReviewSocialPostResult(BaseModel):

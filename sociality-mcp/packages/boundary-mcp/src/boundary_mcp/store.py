@@ -22,6 +22,13 @@ from .schemas import EvaluateActionResult, QuietModeState, ReviewSocialPostResul
 PRIVATE_STATE_WORDS = ("tired", "疲れ", "sleepy", "眠い", "stress", "しんど", "元気ない")
 ROUTINE_WORDS = ("meeting", "会議", "dentist", "sleep", "commute", "routine")
 
+# Actions that publish something outside the room. An emergency can justify
+# speaking loudly in a privacy zone; it never creates consent to publish, so
+# a privacy-zone denial of these actions is not overridden by urgency (#150).
+PUBLISHING_ACTIONS = frozenset(
+    {"post_image", "post_text", "post_tweet", "post_video", "share_image", "publish"}
+)
+
 
 class BoundaryStore:
     """Action gating against policy and consent state."""
@@ -105,6 +112,9 @@ class BoundaryStore:
         )
         high_urgency = urgency in {"high", "critical"} or bool(context.get("health_safety"))
         person_rule = self.policy.person_rule_for(person_id)
+        nudge_style = person_rule.preferred_nudge_style if person_rule else None
+        # Set when a rule must hold even under high urgency.
+        hard_deny = False
 
         if quiet_active and action_type in {"say", "nudge_human", "speak_loud"}:
             if high_urgency:
@@ -119,10 +129,32 @@ class BoundaryStore:
             reasons.append(f"person-specific rule avoids {action_type}")
             alternatives.append("switch to a quieter channel")
 
-        if (action_type == "post_tweet" or channel == "x") and context.get("scene_contains_face"):
-            rule = self.policy.posting_rule_for("x")
+        zones = self.policy.privacy_zones_for(
+            zone_name=context.get("zone") or context.get("zone_name"),
+            camera_preset=context.get("camera_preset"),
+        )
+        for zone in zones:
+            if action_type not in set(zone.deny_actions):
+                continue
+            publishing = action_type in PUBLISHING_ACTIONS
+            if publishing or not high_urgency:
+                decision = "deny"
+                reasons.append(f"privacy zone {zone.name} denies {action_type}")
+                alternatives.append("act from outside the zone, or keep it as a private memory")
+                hard_deny = hard_deny or publishing
+            else:
+                reasons.append(f"privacy zone {zone.name} would deny {action_type}")
+
+        person_present = bool(
+            context.get("scene_contains_face")
+            or context.get("person_present")
+            or payload_preview.get("person_mentions")
+        )
+        posting = action_type in PUBLISHING_ACTIONS or channel == "x"
+        rule = self.policy.posting_rule_for(channel or "x") if posting else None
+        if rule and context.get("scene_contains_face"):
             consent = self._latest_consent(person_id, "public_face_photo") if person_id else None
-            if rule and rule.require_face_consent and consent is not True:
+            if rule.require_face_consent and consent is not True:
                 decision = "deny"
                 reasons.append("face present and consent not recorded")
                 alternatives.extend(
@@ -132,6 +164,21 @@ class BoundaryStore:
                         "keep as private memory instead",
                     ]
                 )
+        if (
+            rule
+            and rule.require_review_if_person_present
+            and person_present
+            and context.get("reviewed") is not True
+        ):
+            decision = "deny"
+            hard_deny = True
+            reasons.append(
+                f"posting rule for {rule.channel} requires review_social_post "
+                "before posting while a person is present"
+            )
+            alternatives.append(
+                "run review_social_post first, then pass context.reviewed=true"
+            )
 
         recent_nudges = self._recent_nudge_count(person_id)
         max_nudges = self.policy.global_policy.max_nudges_per_hour
@@ -155,12 +202,13 @@ class BoundaryStore:
             reasons.append("same topic was nudged recently")
             alternatives.append("wait before repeating the same reminder")
 
-        if high_urgency and reasons:
+        if high_urgency and reasons and not hard_deny:
             return EvaluateActionResult(
                 decision="allow_with_override",
                 confidence=0.91,
                 reasons=["urgent health/safety context overrides quieter social rules", *reasons],
                 safer_alternatives=alternatives,
+                nudge_style=nudge_style,
             )
 
         confidence = confidence_from_evidence(
@@ -173,6 +221,7 @@ class BoundaryStore:
             confidence=confidence,
             reasons=reasons or ["no matching boundary rule fired"],
             safer_alternatives=alternatives,
+            nudge_style=nudge_style,
         )
 
     def review_social_post(

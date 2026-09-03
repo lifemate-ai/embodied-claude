@@ -129,3 +129,116 @@ def test_review_social_post_flags_private_state(store):
 
     assert review.risk_level == "medium"
     assert review.recommendation == "rewrite"
+
+
+def test_privacy_zone_denies_by_camera_preset(store):
+    result = store.evaluate_action(
+        action_type="post_image",
+        context={"camera_preset": "bed", "time_local": "2026-04-15T15:00:00+09:00"},
+    )
+
+    assert result.decision == "deny"
+    assert any("privacy zone sleeping_area" in reason for reason in result.reasons)
+
+
+def test_privacy_zone_denies_by_zone_name(store):
+    result = store.evaluate_action(
+        action_type="continuous_listen",
+        context={"zone": "sleeping_area", "time_local": "2026-04-15T15:00:00+09:00"},
+    )
+
+    assert result.decision == "deny"
+
+
+def test_privacy_zone_ignores_actions_it_does_not_list(store):
+    result = store.evaluate_action(
+        action_type="say",
+        context={"camera_preset": "bed", "time_local": "2026-04-15T15:00:00+09:00"},
+    )
+
+    assert result.decision == "allow"
+
+
+def test_call_without_location_matches_no_zone(store):
+    result = store.evaluate_action(
+        action_type="post_image",
+        context={"time_local": "2026-04-15T15:00:00+09:00"},
+    )
+
+    assert result.decision == "allow"
+    assert result.reasons == ["no matching boundary rule fired"]
+
+
+def test_urgency_overrides_in_room_zone_denial_but_not_publishing(store):
+    loud = store.evaluate_action(
+        action_type="speak_loud",
+        context={"camera_preset": "bed", "time_local": "2026-04-15T15:00:00+09:00"},
+        urgency="high",
+    )
+    post = store.evaluate_action(
+        action_type="post_image",
+        context={"camera_preset": "bed", "time_local": "2026-04-15T15:00:00+09:00"},
+        urgency="high",
+    )
+
+    assert loud.decision == "allow_with_override"
+    assert post.decision == "deny"
+    assert any("privacy zone" in reason for reason in post.reasons)
+
+
+def test_post_with_person_present_requires_review(store):
+    unreviewed = store.evaluate_action(
+        action_type="post_text",
+        channel="x",
+        context={"person_present": True, "time_local": "2026-04-15T15:00:00+09:00"},
+        payload_preview={"text": "今日の空はとても青い"},
+    )
+    reviewed = store.evaluate_action(
+        action_type="post_text",
+        channel="x",
+        context={
+            "person_present": True,
+            "reviewed": True,
+            "time_local": "2026-04-15T15:00:00+09:00",
+        },
+        payload_preview={"text": "今日の空はとても青い"},
+    )
+    nobody = store.evaluate_action(
+        action_type="post_text",
+        channel="x",
+        context={"time_local": "2026-04-15T15:00:00+09:00"},
+        payload_preview={"text": "今日の空はとても青い"},
+    )
+
+    assert unreviewed.decision == "deny"
+    assert any("review_social_post" in reason for reason in unreviewed.reasons)
+    assert reviewed.decision == "allow"
+    assert nobody.decision == "allow"
+
+
+def test_review_requirement_is_not_overridden_by_urgency(store):
+    result = store.evaluate_action(
+        action_type="post_text",
+        channel="x",
+        context={"person_present": True, "time_local": "2026-04-15T15:00:00+09:00"},
+        urgency="high",
+    )
+
+    assert result.decision == "deny"
+
+
+def test_preferred_nudge_style_is_returned_for_the_person(store):
+    with_rule = store.evaluate_action(
+        action_type="say",
+        person_id="kouta",
+        context={"time_local": "2026-04-15T15:00:00+09:00"},
+        payload_preview={"text": "お茶でも飲む？"},
+    )
+    without_rule = store.evaluate_action(
+        action_type="say",
+        person_id="stranger",
+        context={"time_local": "2026-04-15T15:00:00+09:00"},
+    )
+
+    assert with_rule.nudge_style == "brief_gentle"
+    assert without_rule.nudge_style is None

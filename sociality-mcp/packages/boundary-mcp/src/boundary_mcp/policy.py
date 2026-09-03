@@ -54,6 +54,28 @@ class SocialPolicy:
             return None
         return next((rule for rule in self.person_rules if rule.person_id == person_id), None)
 
+    def privacy_zones_for(
+        self,
+        *,
+        zone_name: str | None = None,
+        camera_preset: str | None = None,
+    ) -> list[PrivacyZone]:
+        """Zones that apply to a location given by name and/or camera preset.
+
+        A caller that knows only the zone name passes ``zone_name``; one that
+        knows only where the camera points passes ``camera_preset``. With
+        neither, no zone matches, so callers that never describe a location
+        keep their previous behaviour (#150).
+        """
+
+        matched: list[PrivacyZone] = []
+        for zone in self.privacy_zones:
+            if zone_name is not None and zone.name == zone_name:
+                matched.append(zone)
+            elif camera_preset is not None and camera_preset in zone.camera_presets:
+                matched.append(zone)
+        return matched
+
 
 def get_policy_path(path: str | Path | None = None) -> Path:
     """Resolve the socialPolicy.toml location.
