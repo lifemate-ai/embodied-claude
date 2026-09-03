@@ -25,6 +25,20 @@ Tapo C210などのWiFiカメラをMCP経由で制御して、AIに部屋を見�
 | `camera_go_to_preset` | プリセット位置に移動（`preset_id`） |
 | `listen` | マイクで聞く（`duration` 秒、`transcribe` で文字起こし） |
 
+### 文字起こしのバックエンド
+
+文字起こしは optional で、root の extras から片方（または両方）を選んで入れます。
+
+| extra | パッケージ | `TRANSCRIBE_BACKEND` の値 |
+|-------|-----------|---------------------------|
+| `transcription-whisper` | openai-whisper | `openai-whisper` |
+| `transcription-faster` | faster-whisper（CTranslate2） | `faster-whisper` |
+
+`TRANSCRIBE_BACKEND` を設定しなければ **入っているほうを自動で使います**（両方あれば
+`openai-whisper`）。どちらも入っていないときは録音だけ行い、応答の `--- Transcript ---`
+ではなく `--- No transcript ---` の見出しの下に理由を返します。`uv run python scripts/doctor.py`
+の `wifi-cam:transcription` でも確認できます。
+
 ### 右カメラ（両目）を追加する
 
 同じ場所に 2 台目のカメラを置き、`TAPO_RIGHT_*` を設定すると、起動時に右カメラへ

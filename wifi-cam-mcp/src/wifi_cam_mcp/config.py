@@ -1,5 +1,6 @@
 """Configuration for WiFi Camera MCP Server."""
 
+import importlib.util
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -24,6 +25,47 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 def _default_capture_dir() -> str:
     return str(Path(tempfile.gettempdir()) / "wifi-cam-mcp")
+
+
+# Transcription backends, in the order auto-detection prefers them. Each maps
+# to the importable module and to the root-workspace extra that installs it.
+TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
+TRANSCRIBE_BACKEND_MODULES: dict[str, str] = {
+    "openai-whisper": "whisper",
+    "faster-whisper": "faster_whisper",
+}
+TRANSCRIBE_BACKEND_EXTRAS: dict[str, str] = {
+    "openai-whisper": "transcription-whisper",
+    "faster-whisper": "transcription-faster",
+}
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def transcribe_backend_available(backend: str) -> bool:
+    """True when the package behind ``backend`` is importable."""
+    module = TRANSCRIBE_BACKEND_MODULES.get(backend)
+    return module is not None and _module_available(module)
+
+
+def default_transcribe_backend() -> str:
+    """Pick the transcription backend that is actually installed.
+
+    The two root extras (``transcription-whisper`` / ``transcription-faster``)
+    read as alternatives, so the default must follow whichever one the user
+    chose instead of always pointing at openai-whisper (#151). openai-whisper
+    wins when both are present; when neither is, it stays the default so the
+    "not installed" message keeps pointing at the historical choice.
+    """
+    for backend in TRANSCRIBE_BACKENDS:
+        if transcribe_backend_available(backend):
+            return backend
+    return TRANSCRIBE_BACKENDS[0]
 
 
 @dataclass(frozen=True)
@@ -148,7 +190,8 @@ class ServerConfig:
     mic_source: str = "camera"  # "camera" (RTSP) or "local" (PC microphone)
     mic_device: str | None = None  # DirectShow device name for Windows local mic
     transcribe_default: bool = True
-    transcribe_backend: str = "openai-whisper"  # "openai-whisper" or "faster-whisper"
+    # "openai-whisper" or "faster-whisper"; unset means "whichever is installed"
+    transcribe_backend: str = field(default_factory=default_transcribe_backend)
     transcribe_model: str = "base"  # Whisper model size (tiny/base/small/medium/large)
 
     @classmethod
@@ -157,8 +200,10 @@ class ServerConfig:
         mic_source = os.getenv("MIC_SOURCE", "camera").lower()
         if mic_source not in ("camera", "local"):
             raise ValueError(f"Invalid MIC_SOURCE '{mic_source}'. Must be 'camera' or 'local'.")
-        transcribe_backend = os.getenv("TRANSCRIBE_BACKEND", "openai-whisper").lower()
-        if transcribe_backend not in ("openai-whisper", "faster-whisper"):
+        transcribe_backend = (
+            os.getenv("TRANSCRIBE_BACKEND", "").strip().lower() or default_transcribe_backend()
+        )
+        if transcribe_backend not in TRANSCRIBE_BACKENDS:
             raise ValueError(
                 f"Invalid TRANSCRIBE_BACKEND '{transcribe_backend}'. "
                 "Must be 'openai-whisper' or 'faster-whisper'."

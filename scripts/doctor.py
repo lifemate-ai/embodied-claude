@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import platform
@@ -274,10 +275,78 @@ def check_workspace_packages(
     return results
 
 
+TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
+TRANSCRIBE_BACKEND_MODULES = {"openai-whisper": "whisper", "faster-whisper": "faster_whisper"}
+TRANSCRIBE_BACKEND_EXTRAS = {
+    "openai-whisper": "transcription-whisper",
+    "faster-whisper": "transcription-faster",
+}
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def check_transcription_backend(
+    server: Mapping[str, Any],
+    environment: Mapping[str, str] | None = None,
+    *,
+    module_available: Callable[[str], bool] = _module_available,
+) -> CheckResult:
+    """Check that the transcription backend `listen` will use is importable.
+
+    Mirrors wifi_cam_mcp.config: an explicit TRANSCRIBE_BACKEND (server env,
+    then process env) wins; otherwise the first installed backend is used.
+    Without this check a `transcription-faster`-only install looked healthy
+    while `listen` could never transcribe (#151).
+    """
+
+    source = os.environ if environment is None else environment
+    server_env = server.get("env", {}) if isinstance(server, Mapping) else {}
+    explicit = str(
+        (server_env.get("TRANSCRIBE_BACKEND") if isinstance(server_env, Mapping) else None)
+        or source.get("TRANSCRIBE_BACKEND")
+        or ""
+    ).strip().lower()
+    subject = "wifi-cam:transcription"
+    if explicit:
+        module = TRANSCRIBE_BACKEND_MODULES.get(explicit)
+        if module is None:
+            return CheckResult(
+                CheckStatus.ERROR,
+                subject,
+                f"TRANSCRIBE_BACKEND={explicit!r} is not a known backend",
+                "Use openai-whisper or faster-whisper.",
+            )
+        if module_available(module):
+            return CheckResult(CheckStatus.OK, subject, f"{explicit} is installed")
+        return CheckResult(
+            CheckStatus.WARN,
+            subject,
+            f"TRANSCRIBE_BACKEND={explicit} but module {module!r} is not importable; "
+            "listen will record audio without a transcript",
+            f"Run uv sync --extra {TRANSCRIBE_BACKEND_EXTRAS[explicit]}, "
+            "or set TRANSCRIBE_BACKEND to the backend you installed.",
+        )
+    for backend in TRANSCRIBE_BACKENDS:
+        if module_available(TRANSCRIBE_BACKEND_MODULES[backend]):
+            return CheckResult(CheckStatus.OK, subject, f"{backend} is installed (auto-detected)")
+    return CheckResult(
+        CheckStatus.WARN,
+        subject,
+        "no transcription backend is installed; listen will record audio without a transcript",
+        "Run uv sync --extra transcription-whisper (or --extra transcription-faster).",
+    )
+
+
 def check_optional_dependencies(
     config: Mapping[str, Any],
     *,
     which: Callable[[str], str | None] = shutil.which,
+    module_available: Callable[[str], bool] = _module_available,
 ) -> list[CheckResult]:
     """Check non-blocking executables used by selected optional capabilities."""
 
@@ -299,6 +368,11 @@ def check_optional_dependencies(
                     "Install ffmpeg, then rerun uv run python scripts/doctor.py.",
                 )
             )
+        results.append(
+            check_transcription_backend(
+                configured["wifi-cam"], module_available=module_available
+            )
+        )
 
     if "tts" in configured:
         player = next((name for name in ("mpv", "ffplay") if which(name)), None)

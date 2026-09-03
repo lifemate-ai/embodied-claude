@@ -119,3 +119,57 @@ def test_right_camera_rejects_invalid_ptz_mode(
 
     with pytest.raises(ValueError, match="PTZ mode"):
         CameraConfig.right_camera_from_env()
+
+
+def _only(installed: set[str]):
+    return lambda name: name in installed
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected"),
+    (
+        ({"faster_whisper"}, "faster-whisper"),
+        ({"whisper"}, "openai-whisper"),
+        ({"whisper", "faster_whisper"}, "openai-whisper"),
+        (set(), "openai-whisper"),
+    ),
+)
+def test_transcribe_backend_defaults_to_the_installed_one(
+    monkeypatch: pytest.MonkeyPatch, installed: set[str], expected: str
+) -> None:
+    """Installing only transcription-faster must not leave listen pointing at whisper (#151)."""
+    monkeypatch.delenv("TRANSCRIBE_BACKEND", raising=False)
+    monkeypatch.setattr(config, "_module_available", _only(installed))
+
+    assert config.default_transcribe_backend() == expected
+    assert ServerConfig.from_env().transcribe_backend == expected
+    assert ServerConfig().transcribe_backend == expected
+
+
+def test_explicit_transcribe_backend_wins_over_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRANSCRIBE_BACKEND", "faster-whisper")
+    monkeypatch.setattr(config, "_module_available", _only({"whisper"}))
+
+    assert ServerConfig.from_env().transcribe_backend == "faster-whisper"
+
+
+def test_listen_response_keeps_diagnostics_out_of_the_transcript_heading() -> None:
+    from wifi_cam_mcp.camera import AudioResult
+    from wifi_cam_mcp.server import format_listen_response
+
+    heard = AudioResult("", "/tmp/a.wav", "t", 5.0, transcript="こんにちは")
+    missing = AudioResult(
+        "",
+        "/tmp/a.wav",
+        "t",
+        5.0,
+        transcript=None,
+        transcript_error="faster-whisper is not installed",
+    )
+    silent = AudioResult("", "/tmp/a.wav", "t", 5.0)
+
+    assert "--- Transcript ---\nこんにちは" in format_listen_response(heard)
+    assert "--- Transcript ---" not in format_listen_response(missing)
+    assert "--- No transcript" in format_listen_response(missing)
+    assert "faster-whisper is not installed" in format_listen_response(missing)
+    assert "Transcript" not in format_listen_response(silent)

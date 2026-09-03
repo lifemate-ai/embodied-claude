@@ -63,8 +63,9 @@ MIC_SOURCE=camera
 # MIC_SOURCE=local のときのみ有効。未設定なら先頭の音声デバイスを自動選択する。
 # MIC_DEVICE=マイク配列 (Realtek(R) Audio)
 
-# 認識バックエンド: openai-whisper（既定）/ faster-whisper
-TRANSCRIBE_BACKEND=openai-whisper
+# 認識バックエンド: openai-whisper / faster-whisper
+# 未設定なら、入っているほう（両方あれば openai-whisper）を自動で選ぶ
+# TRANSCRIBE_BACKEND=openai-whisper
 
 # モデルサイズ: tiny / base / small / medium / large
 # 実マイクを通すなら small を推奨（§5-1）
@@ -231,7 +232,7 @@ GPU なし・2 コアの環境では以下のようになる:
 |---|---|---|
 | `MIC_SOURCE` | `camera` | `camera`（RTSP）/ `local`（PC のマイク） |
 | `MIC_DEVICE` | 未設定 | Windows の DirectShow デバイス名。未設定なら自動検出 |
-| `TRANSCRIBE_BACKEND` | `openai-whisper` | `openai-whisper` / `faster-whisper` |
+| `TRANSCRIBE_BACKEND` | 自動検出 | `openai-whisper` / `faster-whisper`。未設定なら import できるほう（両方あれば `openai-whisper`）。どちらも無ければ `listen` は録音だけ行い、transcript の代わりに理由を返す |
 | `TRANSCRIBE_MODEL` | `base` | `tiny` / `base` / `small` / `medium` / `large` |
 
 `faster-whisper` は CTranslate2 を使用し、CPU では `int8`、CUDA が利用可能なら `float16` を自動選択する。

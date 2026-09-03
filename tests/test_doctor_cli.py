@@ -213,3 +213,32 @@ def test_undecodable_config_files_become_check_errors_not_tracebacks(tmp_path: P
     assert doctor._check_social_policy(tmp_path).status is CheckStatus.ERROR
     packages = doctor.check_workspace_packages(tmp_path, {"mcpServers": {"memory": {}}})
     assert [item.status for item in packages] == [CheckStatus.ERROR]
+def test_transcription_check_follows_installed_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """doctor must notice when the backend listen will use is not importable (#151)."""
+    monkeypatch.delenv("TRANSCRIBE_BACKEND", raising=False)
+
+    def only_faster(name: str) -> bool:
+        return name == "faster_whisper"
+
+    auto = doctor.check_transcription_backend({}, {}, module_available=only_faster)
+    assert auto.status is CheckStatus.OK
+    assert "faster-whisper" in auto.detail
+
+    explicit_missing = doctor.check_transcription_backend(
+        {"env": {"TRANSCRIBE_BACKEND": "openai-whisper"}}, {}, module_available=only_faster
+    )
+    assert explicit_missing.status is CheckStatus.WARN
+    assert "transcription-whisper" in explicit_missing.remediation
+
+    nothing = doctor.check_transcription_backend({}, {}, module_available=lambda _n: False)
+    assert nothing.status is CheckStatus.WARN
+
+    unknown = doctor.check_transcription_backend(
+        {}, {"TRANSCRIBE_BACKEND": "vosk"}, module_available=only_faster
+    )
+    assert unknown.status is CheckStatus.ERROR
+
+    results = doctor.check_optional_dependencies(
+        {"mcpServers": {"wifi-cam": {}}}, which=lambda _n: None, module_available=only_faster
+    )
+    assert [r.subject for r in results] == ["wifi-cam:ffmpeg", "wifi-cam:transcription"]

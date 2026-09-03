@@ -15,7 +15,7 @@ from mcp.types import (
 )
 
 from ._behavior import get_behavior
-from .camera import TapoCamera, describe_pose
+from .camera import AudioResult, TapoCamera, describe_pose
 from .config import CameraConfig, ServerConfig
 
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +25,20 @@ logger = logging.getLogger(__name__)
 def resolve_transcribe(arguments: dict[str, Any], *, default: bool) -> bool:
     """Resolve an explicit listen argument against the configured default."""
     return bool(arguments.get("transcribe", default))
+
+
+def format_listen_response(result: AudioResult) -> str:
+    """Render a listen result. Diagnostics never appear under the Transcript heading."""
+    text = f"Recorded {result.duration}s of audio at {result.timestamp}\n"
+    text += f"Audio file: {result.file_path}\n"
+    if result.transcript:
+        text += f"\n--- Transcript ---\n{result.transcript}"
+    elif result.transcript_error:
+        text += (
+            "\n--- No transcript (transcription was not performed) ---\n"
+            f"{result.transcript_error}"
+        )
+    return text
 
 
 class CameraMCPServer:
@@ -165,7 +179,7 @@ class CameraMCPServer:
                 ),
                 Tool(
                     name="listen",
-                    description="Listen with your ears (microphone) to hear what's happening around you. Use this when someone asks 'what do you hear?' or when you want to know what sounds are present. Returns transcribed text of what you heard.",
+                    description="Listen with your ears (microphone) to hear what's happening around you. Use this when someone asks 'what do you hear?' or when you want to know what sounds are present. Returns transcribed text of what you heard under a 'Transcript' heading; when no transcription backend is installed it says so under a separate 'No transcript' heading instead.",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -485,15 +499,9 @@ class CameraMCPServer:
                             duration, transcribe, mic_source
                         )
 
-                        response_text = (
-                            f"Recorded {result.duration}s of audio at {result.timestamp}\n"
-                        )
-                        response_text += f"Audio file: {result.file_path}\n"
-
-                        if result.transcript:
-                            response_text += f"\n--- Transcript ---\n{result.transcript}"
-
-                        return [TextContent(type="text", text=response_text)]
+                        return [
+                            TextContent(type="text", text=format_listen_response(result))
+                        ]
 
                     case "see_right":
                         if not self._camera_right:

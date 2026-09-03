@@ -16,7 +16,12 @@ from pathlib import Path
 from PIL import Image
 
 from ._behavior import get_behavior
-from .config import CameraConfig
+from .config import (
+    TRANSCRIBE_BACKEND_EXTRAS,
+    TRANSCRIBE_BACKEND_MODULES,
+    CameraConfig,
+    transcribe_backend_available,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +60,9 @@ class AudioResult:
     timestamp: str
     duration: float
     transcript: str | None = None
+    # Why no transcript was produced (backend missing, model failure). Kept
+    # apart from ``transcript`` so a diagnostic never reads as heard speech.
+    transcript_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -957,8 +965,9 @@ class TapoCamera:
             audio_base64 = base64.standard_b64encode(audio_data).decode("utf-8")
 
             transcript = None
+            transcript_error = None
             if transcribe:
-                transcript = await self._transcribe_audio(file_path)
+                transcript, transcript_error = await self._transcribe_audio(file_path)
 
             return AudioResult(
                 audio_base64=audio_base64,
@@ -966,11 +975,12 @@ class TapoCamera:
                 timestamp=timestamp,
                 duration=duration,
                 transcript=transcript,
+                transcript_error=transcript_error,
             )
         except Exception as e:
             raise RuntimeError(f"Failed to record audio: {e!s}") from e
 
-    async def _transcribe_audio(self, audio_path: str) -> str | None:
+    async def _transcribe_audio(self, audio_path: str) -> tuple[str | None, str | None]:
         """Transcribe audio file using Whisper.
 
         The backend (openai-whisper or faster-whisper) and model size are
@@ -980,26 +990,27 @@ class TapoCamera:
             audio_path: Path to the audio file
 
         Returns:
-            Transcribed text or None if transcription fails
+            ``(transcript, error)``. Exactly one side is set: the transcript
+            when transcription ran, otherwise a human-readable reason. The
+            reason is never returned in the transcript slot (#151).
         """
         backend = self._transcribe_backend
-        if backend == "faster-whisper":
-            try:
-                import faster_whisper  # noqa: F401
-            except ImportError:
-                return "[faster-whisper not installed. Run: pip install faster-whisper]"
-        else:
-            try:
-                import whisper  # noqa: F401
-            except ImportError:
-                return "[Whisper not installed. Run: pip install openai-whisper]"
+        if not transcribe_backend_available(backend):
+            module = TRANSCRIBE_BACKEND_MODULES.get(backend, backend)
+            extra = TRANSCRIBE_BACKEND_EXTRAS.get(backend)
+            hint = f"uv sync --extra {extra}" if extra else f"pip install {backend}"
+            return None, (
+                f"{backend} is not installed (module {module!r} not found). "
+                f"Install it with `{hint}`, or point TRANSCRIBE_BACKEND at an installed backend."
+            )
 
         try:
             model = await asyncio.to_thread(
                 _get_whisper_model, backend, self._transcribe_model
             )
-            return await asyncio.to_thread(
+            transcript = await asyncio.to_thread(
                 _transcribe_with_model, backend, model, audio_path
             )
         except Exception as e:
-            return f"[Transcription failed: {e!s}]"
+            return None, f"transcription with {backend} failed: {e!s}"
+        return transcript, None

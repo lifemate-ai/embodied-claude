@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from wifi_cam_mcp import camera as camera_module
 from wifi_cam_mcp.camera import (
     TapoCamera,
     _find_dshow_audio_device,
@@ -113,3 +114,29 @@ def test_openai_whisper_model_is_cached_by_backend_and_size(monkeypatch):
         assert loaded == ["base"]
     finally:
         _whisper_models.clear()
+
+
+@pytest.mark.asyncio
+async def test_missing_backend_is_reported_as_error_not_transcript(monkeypatch, tmp_path):
+    """The 'not installed' message must not come back as heard speech (#151)."""
+
+    async def create_subprocess_exec(*args, **kwargs):
+        Path(args[-1]).write_bytes(b"RIFF")
+        return _RecordingProcess()
+
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+    monkeypatch.setattr(camera_module, "transcribe_backend_available", lambda _backend: False)
+
+    camera = TapoCamera(
+        CameraConfig(host="127.0.0.1", username="user", password="pass"),
+        capture_dir=str(tmp_path),
+        mic_device="Microphone Array",
+        transcribe_backend="faster-whisper",
+    )
+    result = await camera.listen_audio(duration=1, transcribe=True, mic_source="local")
+
+    assert result.transcript is None
+    assert result.transcript_error is not None
+    assert "faster-whisper is not installed" in result.transcript_error
+    assert "transcription-faster" in result.transcript_error
