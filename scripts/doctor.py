@@ -212,10 +212,16 @@ def check_workspace_packages(
 
     pyproject_path = repo_root / "pyproject.toml"
     try:
-        project = tomllib.loads(pyproject_path.read_text())
+        project = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
         requirements = project["project"]["dependencies"]
         optional = project["project"].get("optional-dependencies", {})
-    except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError) as error:
+    except (
+        OSError,
+        KeyError,
+        TypeError,
+        UnicodeDecodeError,
+        tomllib.TOMLDecodeError,
+    ) as error:
         return [
             CheckResult(
                 CheckStatus.ERROR,
@@ -478,7 +484,7 @@ def check_autonomous_files(repo_root: Path) -> list[CheckResult]:
 
 def _load_config(path: Path) -> tuple[dict[str, Any] | None, CheckResult]:
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None, CheckResult(
             CheckStatus.ERROR,
@@ -486,7 +492,7 @@ def _load_config(path: Path) -> tuple[dict[str, Any] | None, CheckResult]:
             f"configuration does not exist: {path}",
             "Run ./scripts/setup.sh.",
         )
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         return None, CheckResult(
             CheckStatus.ERROR,
             "config:file",
@@ -598,8 +604,8 @@ def _check_social_policy(repo_root: Path) -> CheckResult:
             "Run ./scripts/setup.sh to create the example policy.",
         )
     try:
-        tomllib.loads(policy_path.read_text())
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        tomllib.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         return CheckResult(
             CheckStatus.ERROR,
             "social-policy",

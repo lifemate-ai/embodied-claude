@@ -171,3 +171,45 @@ def test_hook_gate_check_is_silent_without_a_committed_pre_tool_use_hook(
     tmp_path: Path,
 ) -> None:
     assert doctor.check_hook_gate(tmp_path, None, tmp_path / ".mcp.json") is None
+
+
+def test_config_files_are_read_as_utf8_regardless_of_locale(tmp_path: Path) -> None:
+    """Config files are UTF-8 on disk; the locale codec must not decide their contents (#149)."""
+    mic_device = "マイク (Realtek Audio)"  # a Japanese Windows device name
+    config_path = tmp_path / ".mcp.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"cam": {"env": {"MIC_DEVICE": mic_device}}}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "socialPolicy.toml").write_text(
+        '# quiet hours — keep the night calm\n[global]\ntimezone = "Asia/Tokyo"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '# ワークスペース\n[project]\nname = "x"\ndependencies = ["memory-mcp"]\n',
+        encoding="utf-8",
+    )
+
+    config, result = doctor._load_config(config_path)
+
+    assert result.status is CheckStatus.OK
+    assert config is not None
+    assert config["mcpServers"]["cam"]["env"]["MIC_DEVICE"] == mic_device
+    assert doctor._check_social_policy(tmp_path).status is CheckStatus.OK
+    packages = doctor.check_workspace_packages(tmp_path, {"mcpServers": {"memory": {}}})
+    assert [item.status for item in packages] == [CheckStatus.OK]
+
+
+def test_undecodable_config_files_become_check_errors_not_tracebacks(tmp_path: Path) -> None:
+    """A byte sequence that is not UTF-8 is reported, not raised (#149)."""
+    bad = b"\xff\xfe not utf-8"
+    (tmp_path / ".mcp.json").write_bytes(bad)
+    (tmp_path / "socialPolicy.toml").write_bytes(bad)
+    (tmp_path / "pyproject.toml").write_bytes(bad)
+
+    config, result = doctor._load_config(tmp_path / ".mcp.json")
+    assert config is None
+    assert result.status is CheckStatus.ERROR
+    assert doctor._check_social_policy(tmp_path).status is CheckStatus.ERROR
+    packages = doctor.check_workspace_packages(tmp_path, {"mcpServers": {"memory": {}}})
+    assert [item.status for item in packages] == [CheckStatus.ERROR]
