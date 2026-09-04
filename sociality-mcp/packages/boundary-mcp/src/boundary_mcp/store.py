@@ -132,6 +132,7 @@ class BoundaryStore:
         zones = self.policy.privacy_zones_for(
             zone_name=context.get("zone") or context.get("zone_name"),
             camera_preset=context.get("camera_preset"),
+            camera=context.get("camera"),
         )
         for zone in zones:
             if action_type not in set(zone.deny_actions):

@@ -242,3 +242,37 @@ def test_preferred_nudge_style_is_returned_for_the_person(store):
 
     assert with_rule.nudge_style == "brief_gentle"
     assert without_rule.nudge_style is None
+
+
+def test_privacy_zone_matches_a_fixed_camera_by_name(fixed_camera_store):
+    """A camera that never moves has no preset, so the zone names the camera."""
+    result = fixed_camera_store.evaluate_action(
+        action_type="post_image",
+        person_id="kouta",
+        context={"camera": "wifi-cam-car", "time_local": "2026-04-15T14:00:00+09:00"},
+    )
+
+    assert result.decision == "deny"
+    assert any("customer_site" in reason for reason in result.reasons)
+
+
+def test_a_camera_outside_that_zone_is_not_denied(fixed_camera_store):
+    result = fixed_camera_store.evaluate_action(
+        action_type="post_image",
+        person_id="kouta",
+        context={"camera": "wifi-cam-1f", "time_local": "2026-04-15T14:00:00+09:00"},
+    )
+
+    assert result.decision == "allow"
+
+
+def test_a_fixed_camera_zone_holds_under_high_urgency(fixed_camera_store):
+    """Publishing is a hard deny upstream (#160); naming the camera keeps that."""
+    result = fixed_camera_store.evaluate_action(
+        action_type="post_image",
+        person_id="kouta",
+        urgency="high",
+        context={"camera": "wifi-cam-car", "time_local": "2026-04-15T14:00:00+09:00"},
+    )
+
+    assert result.decision == "deny"

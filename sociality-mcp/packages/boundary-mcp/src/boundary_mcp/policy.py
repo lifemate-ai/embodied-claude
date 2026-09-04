@@ -22,6 +22,9 @@ class GlobalPolicy:
 class PrivacyZone:
     name: str
     camera_presets: list[str] = field(default_factory=list)
+    # A fixed camera never moves to a preset, so a preset list cannot describe
+    # it. Naming the camera itself is the only way to place one in a zone.
+    cameras: list[str] = field(default_factory=list)
     deny_actions: list[str] = field(default_factory=list)
 
 
@@ -59,13 +62,15 @@ class SocialPolicy:
         *,
         zone_name: str | None = None,
         camera_preset: str | None = None,
+        camera: str | None = None,
     ) -> list[PrivacyZone]:
-        """Zones that apply to a location given by name and/or camera preset.
+        """Zones that apply to a location given by name, preset and/or camera.
 
         A caller that knows only the zone name passes ``zone_name``; one that
-        knows only where the camera points passes ``camera_preset``. With
-        neither, no zone matches, so callers that never describe a location
-        keep their previous behaviour (#150).
+        knows only where the camera points passes ``camera_preset``; one whose
+        camera does not move passes ``camera``. With none of the three, no zone
+        matches, so callers that never describe a location keep their previous
+        behaviour (#150).
         """
 
         matched: list[PrivacyZone] = []
@@ -73,6 +78,8 @@ class SocialPolicy:
             if zone_name is not None and zone.name == zone_name:
                 matched.append(zone)
             elif camera_preset is not None and camera_preset in zone.camera_presets:
+                matched.append(zone)
+            elif camera is not None and camera in zone.cameras:
                 matched.append(zone)
         return matched
 
@@ -134,6 +141,7 @@ def load_policy(path: str | Path | None = None) -> SocialPolicy:
             PrivacyZone(
                 name=item["name"],
                 camera_presets=list(item.get("camera_presets", [])),
+                cameras=list(item.get("cameras", [])),
                 deny_actions=list(item.get("deny_actions", [])),
             )
             for item in data.get("privacy_zones", [])

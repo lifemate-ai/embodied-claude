@@ -42,3 +42,36 @@ def store(tmp_path: Path, policy_path: Path) -> BoundaryStore:
     boundary_store = BoundaryStore(tmp_path / "social.db", policy_path=policy_path)
     yield boundary_store
     boundary_store.close()
+
+
+@pytest.fixture
+def fixed_camera_policy_path(tmp_path: Path) -> Path:
+    """A zone named by camera rather than by preset.
+
+    A camera bolted to one place never moves to a preset, so ``camera_presets``
+    cannot describe it. Everything it sees is inside the zone.
+    """
+
+    path = tmp_path / "socialPolicy-fixed-camera.toml"
+    path.write_text(
+        """
+[global]
+timezone = "Asia/Tokyo"
+
+[[privacy_zones]]
+name = "customer_site"
+cameras = ["wifi-cam-car"]
+deny_actions = ["post_image", "post_tweet"]
+""".strip(),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def fixed_camera_store(tmp_path: Path, fixed_camera_policy_path: Path) -> BoundaryStore:
+    boundary_store = BoundaryStore(
+        tmp_path / "fixed-camera.db", policy_path=fixed_camera_policy_path
+    )
+    yield boundary_store
+    boundary_store.close()
