@@ -681,6 +681,9 @@ transcription-faster = [
 transcription-whisper = [
     { name = "wifi-cam-mcp", extra = ["transcribe"] },
 ]
+voice-atlascloud = [
+    { name = "tts-mcp" },
+]
 voice-elevenlabs = [
     { name = "tts-mcp", extra = ["elevenlabs"] },
 ]
@@ -709,6 +712,7 @@ requires-dist = [
     { name = "sociality-mcp", editable = "sociality-mcp" },
     { name = "system-temperature-mcp", marker = "extra == 'all'", editable = "system-temperature-mcp" },
     { name = "system-temperature-mcp", marker = "extra == 'system-temperature'", editable = "system-temperature-mcp" },
+    { name = "tts-mcp", marker = "extra == 'voice-atlascloud'", editable = "tts-mcp" },
     { name = "tts-mcp", marker = "extra == 'voice-voicevox'", editable = "tts-mcp" },
     { name = "tts-mcp", extras = ["elevenlabs"], marker = "extra == 'all'", editable = "tts-mcp" },
     { name = "tts-mcp", extras = ["elevenlabs"], marker = "extra == 'voice-elevenlabs'", editable = "tts-mcp" },
@@ -721,7 +725,7 @@ requires-dist = [
     { name = "x-mcp", marker = "extra == 'all'", editable = "x-mcp" },
     { name = "x-mcp", marker = "extra == 'x'", editable = "x-mcp" },
 ]
-provides-extras = ["camera-usb", "camera-tapo", "transcription-whisper", "transcription-faster", "voice-voicevox", "voice-elevenlabs", "x", "system-temperature", "all"]
+provides-extras = ["camera-usb", "camera-tapo", "transcription-whisper", "transcription-faster", "voice-voicevox", "voice-elevenlabs", "voice-atlascloud", "x", "system-temperature", "all"]
 
 [package.metadata.requires-dev]
 dev = [

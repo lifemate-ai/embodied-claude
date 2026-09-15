@@ -1,1 +1,1 @@
-"""TTS MCP package (ElevenLabs + VOICEVOX)."""
+"""TTS MCP package."""

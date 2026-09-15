@@ -41,7 +41,7 @@ class FeatureSelection:
             raise ValueError(f"Unsupported transcription: {self.transcription}")
         if self.transcription is not None and self.camera != "tapo":
             raise ValueError("Transcription requires a Tapo camera selection")
-        if self.voice not in {None, "voicevox", "elevenlabs"}:
+        if self.voice not in {None, "voicevox", "elevenlabs", "atlascloud"}:
             raise ValueError(f"Unsupported voice: {self.voice}")
         if self.embedding_model not in {"small", "base"}:
             raise ValueError(f"Unsupported embedding model: {self.embedding_model}")
@@ -114,6 +114,15 @@ TAPO_REQUIRED_ENVIRONMENT = (
 )
 ELEVENLABS_REQUIRED_ENVIRONMENT = ("ELEVENLABS_API_KEY",)
 ELEVENLABS_OPTIONAL_ENVIRONMENT = ("ELEVENLABS_VOICE_ID",)
+ATLASCLOUD_REQUIRED_ENVIRONMENT = ("ATLASCLOUD_API_KEY",)
+ATLASCLOUD_OPTIONAL_ENVIRONMENT = (
+    "ATLASCLOUD_TTS_MODEL",
+    "ATLASCLOUD_TTS_VOICE",
+    "ATLASCLOUD_TTS_FORMAT",
+    "ATLASCLOUD_BASE_URL",
+    "ATLASCLOUD_POLL_INTERVAL",
+    "ATLASCLOUD_TIMEOUT",
+)
 # Both have code defaults (~/.claude/sociality/social.db and 18900). A value in
 # a server's env block overrides the inherited environment, so writing the
 # default here would pin it and silently defeat a later SOCIAL_DB_PATH=... in
@@ -187,6 +196,8 @@ def required_environment(selection: FeatureSelection) -> tuple[str, ...]:
         required.extend(TAPO_REQUIRED_ENVIRONMENT)
     if selection.voice == "elevenlabs" or selection.all_tools:
         required.extend(ELEVENLABS_REQUIRED_ENVIRONMENT)
+    if selection.voice == "atlascloud":
+        required.extend(ATLASCLOUD_REQUIRED_ENVIRONMENT)
     if selection.x_enabled:
         required.extend(X_REQUIRED_ENVIRONMENT)
     return tuple(required)
@@ -368,6 +379,14 @@ def build_mcp_config(
             ELEVENLABS_OPTIONAL_ENVIRONMENT,
         )
         voice_environment["TTS_DEFAULT_ENGINE"] = "elevenlabs"
+        servers["tts"] = SERVER_SPECS["tts"].command(voice_environment)
+    elif selection.voice == "atlascloud":
+        voice_environment = _selected_environment(
+            environment,
+            ATLASCLOUD_REQUIRED_ENVIRONMENT,
+            ATLASCLOUD_OPTIONAL_ENVIRONMENT,
+        )
+        voice_environment["TTS_DEFAULT_ENGINE"] = "atlascloud"
         servers["tts"] = SERVER_SPECS["tts"].command(voice_environment)
 
     if selection.x_enabled:

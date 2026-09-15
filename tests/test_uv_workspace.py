@@ -68,6 +68,7 @@ def test_root_extras_install_optional_capabilities_explicitly() -> None:
     assert extras["transcription-faster"] == ["wifi-cam-mcp[transcribe-faster]"]
     assert extras["voice-voicevox"] == ["tts-mcp"]
     assert extras["voice-elevenlabs"] == ["tts-mcp[elevenlabs]"]
+    assert extras["voice-atlascloud"] == ["tts-mcp"]
     assert extras["x"] == ["x-mcp"]
     assert extras["system-temperature"] == ["system-temperature-mcp"]
     assert all("transcrib" not in item for item in extras["camera-tapo"])

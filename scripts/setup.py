@@ -54,7 +54,9 @@ def _parser() -> argparse.ArgumentParser:
         choices=("whisper", "faster"),
         help="Transcribe Tapo audio; requires --with-camera tapo",
     )
-    parser.add_argument("--with-voice", choices=("voicevox", "elevenlabs"))
+    parser.add_argument(
+        "--with-voice", choices=("voicevox", "elevenlabs", "atlascloud")
+    )
     parser.add_argument("--with-x", action="store_true")
     parser.add_argument("--with-system-temperature", action="store_true")
     parser.add_argument(
@@ -114,7 +116,7 @@ def _interactive_selection() -> FeatureSelection:
     )
     voice = _prompt_choice(
         "Voice",
-        ("none", "voicevox", "elevenlabs"),
+        ("none", "voicevox", "elevenlabs", "atlascloud"),
         "none",
     )
     return FeatureSelection(
@@ -185,6 +187,13 @@ def _interactive_environment(
             voice_id = input("ElevenLabs voice ID (optional): ").strip()
             if voice_id:
                 environment["ELEVENLABS_VOICE_ID"] = voice_id
+    elif selection.voice == "atlascloud":
+        _required_input(
+            environment,
+            "ATLASCLOUD_API_KEY",
+            "Atlas Cloud API key",
+            secret=True,
+        )
     if selection.x_enabled:
         for key, label in (
             ("XAI_API_KEY", "xAI API key"),

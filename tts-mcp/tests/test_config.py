@@ -4,12 +4,30 @@ import os
 from unittest.mock import patch
 
 from tts_mcp.config import (
+    AtlasCloudConfig,
     ElevenLabsConfig,
     PlaybackConfig,
     TTSConfig,
     VoicevoxConfig,
     _parse_bool,
 )
+
+
+class TestAtlasCloudConfig:
+    """Tests for Atlas Cloud config."""
+
+    @patch.dict(os.environ, {"ATLASCLOUD_API_KEY": "test-key"}, clear=False)
+    def test_from_env(self):
+        config = AtlasCloudConfig.from_env()
+        assert config is not None
+        assert config.api_key == "test-key"
+        assert config.model_id == "minimax/speech-2.6-turbo"
+        assert config.output_format == "mp3"
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_returns_none_without_api_key(self):
+        os.environ.pop("ATLASCLOUD_API_KEY", None)
+        assert AtlasCloudConfig.from_env() is None
 
 
 class TestParseBool:
@@ -182,6 +200,14 @@ class TestTTSConfig:
         config = TTSConfig.from_env()
         assert config.resolve_engine() == "voicevox"
 
+    @patch.dict(os.environ, {"ATLASCLOUD_API_KEY": "test-key"}, clear=False)
+    def test_resolve_atlascloud_default(self):
+        os.environ.pop("TTS_DEFAULT_ENGINE", None)
+        os.environ.pop("ELEVENLABS_API_KEY", None)
+        os.environ.pop("VOICEVOX_URL", None)
+        config = TTSConfig.from_env()
+        assert config.resolve_engine() == "atlascloud"
+
     @patch.dict(
         os.environ,
         {"TTS_DEFAULT_ENGINE": "voicevox", "VOICEVOX_URL": "http://localhost:50021",
@@ -198,6 +224,7 @@ class TestTTSConfig:
         os.environ.pop("TTS_DEFAULT_ENGINE", None)
         os.environ.pop("ELEVENLABS_API_KEY", None)
         os.environ.pop("VOICEVOX_URL", None)
+        os.environ.pop("ATLASCLOUD_API_KEY", None)
         config = TTSConfig.from_env()
         try:
             config.resolve_engine()

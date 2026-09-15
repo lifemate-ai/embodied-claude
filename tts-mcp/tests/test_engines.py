@@ -3,8 +3,60 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from tts_mcp.engines.atlascloud import AtlasCloudEngine
 from tts_mcp.engines.elevenlabs import ElevenLabsEngine, _split_sentences
 from tts_mcp.engines.voicevox import VoicevoxEngine
+
+
+class TestAtlasCloudEngine:
+    """Tests for the Atlas Cloud submit-once and poll flow."""
+
+    @patch("tts_mcp.engines.atlascloud.urllib.request.urlopen")
+    def test_synthesize_submits_once_then_polls(self, mock_urlopen):
+        responses = []
+        for body in (
+            {"id": "prediction-1", "status": "created"},
+            {"id": "prediction-1", "status": "processing"},
+            {
+                "id": "prediction-1",
+                "status": "completed",
+                "outputs": ["https://cdn.example/audio.mp3"],
+            },
+        ):
+            response = MagicMock()
+            response.__enter__.return_value = response
+            response.read.return_value = json.dumps(body).encode()
+            responses.append(response)
+        audio_response = MagicMock()
+        audio_response.__enter__.return_value = audio_response
+        audio_response.read.return_value = b"audio-bytes"
+        mock_urlopen.side_effect = [*responses, audio_response]
+
+        engine = AtlasCloudEngine(api_key="test-key", poll_interval=0)
+        audio_bytes, fmt = engine.synthesize("hello")
+
+        assert (audio_bytes, fmt) == (b"audio-bytes", "mp3")
+        requests = [call.args[0] for call in mock_urlopen.call_args_list]
+        assert [request.method for request in requests] == ["POST", "GET", "GET", "GET"]
+        assert sum(request.method == "POST" for request in requests) == 1
+        assert json.loads(requests[0].data)["model"] == "minimax/speech-2.6-turbo"
+
+    @patch("tts_mcp.engines.atlascloud.urllib.request.urlopen")
+    def test_failed_prediction_raises(self, mock_urlopen):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(
+            {"id": "prediction-1", "status": "failed"}
+        ).encode()
+        mock_urlopen.return_value = response
+
+        engine = AtlasCloudEngine(api_key="test-key", poll_interval=0)
+        with pytest.raises(RuntimeError, match="failed"):
+            engine.synthesize("hello")
+
+        assert mock_urlopen.call_count == 1
 
 
 class TestSplitSentences:

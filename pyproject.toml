@@ -17,6 +17,7 @@ transcription-whisper = ["wifi-cam-mcp[transcribe]"]
 transcription-faster = ["wifi-cam-mcp[transcribe-faster]"]
 voice-voicevox = ["tts-mcp"]
 voice-elevenlabs = ["tts-mcp[elevenlabs]"]
+voice-atlascloud = ["tts-mcp"]
 x = ["x-mcp"]
 system-temperature = ["system-temperature-mcp"]
 all = [

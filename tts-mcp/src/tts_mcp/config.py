@@ -67,6 +67,35 @@ class VoicevoxConfig:
 
 
 @dataclass(frozen=True)
+class AtlasCloudConfig:
+    """Atlas Cloud-specific configuration."""
+
+    api_key: str
+    model_id: str
+    voice_id: str
+    output_format: str
+    base_url: str
+    poll_interval: float
+    timeout: float
+
+    @classmethod
+    def from_env(cls) -> "AtlasCloudConfig | None":
+        """Create config from environment variables. Returns None if not configured."""
+        api_key = os.getenv("ATLASCLOUD_API_KEY", "")
+        if not api_key:
+            return None
+        return cls(
+            api_key=api_key,
+            model_id=os.getenv("ATLASCLOUD_TTS_MODEL", "minimax/speech-2.6-turbo"),
+            voice_id=os.getenv("ATLASCLOUD_TTS_VOICE", "English_expressive_narrator"),
+            output_format=os.getenv("ATLASCLOUD_TTS_FORMAT", "mp3"),
+            base_url=os.getenv("ATLASCLOUD_BASE_URL", "https://api.atlascloud.ai"),
+            poll_interval=float(os.getenv("ATLASCLOUD_POLL_INTERVAL", "1")),
+            timeout=float(os.getenv("ATLASCLOUD_TIMEOUT", "120")),
+        )
+
+
+@dataclass(frozen=True)
 class PlaybackConfig:
     """Playback and go2rtc configuration (shared across engines)."""
 
@@ -135,6 +164,7 @@ class TTSConfig:
     default_engine: str | None
     elevenlabs: ElevenLabsConfig | None
     voicevox: VoicevoxConfig | None
+    atlascloud: AtlasCloudConfig | None
     playback: PlaybackConfig
 
     @classmethod
@@ -144,6 +174,7 @@ class TTSConfig:
             default_engine=os.getenv("TTS_DEFAULT_ENGINE") or None,
             elevenlabs=ElevenLabsConfig.from_env(),
             voicevox=VoicevoxConfig.from_env(),
+            atlascloud=AtlasCloudConfig.from_env(),
             playback=PlaybackConfig.from_env(),
         )
 
@@ -163,7 +194,12 @@ class TTSConfig:
             return "elevenlabs"
         if self.voicevox:
             return "voicevox"
-        raise ValueError("No TTS engine configured. Set ELEVENLABS_API_KEY or VOICEVOX_URL.")
+        if self.atlascloud:
+            return "atlascloud"
+        raise ValueError(
+            "No TTS engine configured. Set ELEVENLABS_API_KEY, VOICEVOX_URL, "
+            "or ATLASCLOUD_API_KEY."
+        )
 
 
 @dataclass(frozen=True)

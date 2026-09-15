@@ -25,6 +25,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.onboarding import (
+    ATLASCLOUD_REQUIRED_ENVIRONMENT,
     CORE_SERVER_NAMES,
     ELEVENLABS_REQUIRED_ENVIRONMENT,
     SERVER_SPECS,
@@ -110,6 +111,8 @@ def _required_server_environment(
         return ("VOICEVOX_URL",)
     if engine == "elevenlabs":
         return ELEVENLABS_REQUIRED_ENVIRONMENT
+    if engine == "atlascloud":
+        return ATLASCLOUD_REQUIRED_ENVIRONMENT
     return ("TTS_DEFAULT_ENGINE",)
 
 

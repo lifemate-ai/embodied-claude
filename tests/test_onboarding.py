@@ -239,6 +239,11 @@ def test_base_embedding_model_is_explicitly_selectable() -> None:
             "tts",
         ),
         (
+            FeatureSelection(voice="atlascloud"),
+            {"ATLASCLOUD_API_KEY": "atlas-secret"},
+            "tts",
+        ),
+        (
             FeatureSelection(x_enabled=True),
             {
                 "XAI_API_KEY": "xai-secret",
@@ -293,6 +298,18 @@ def test_elevenlabs_voice_id_is_optional_but_preserved_when_present() -> None:
         "TTS_DEFAULT_ENGINE": "elevenlabs",
     }
     assert with_voice["mcpServers"]["tts"]["env"]["ELEVENLABS_VOICE_ID"] == "voice-id"
+
+
+def test_atlascloud_uses_api_key_and_keeps_optional_defaults_in_code() -> None:
+    config = build_mcp_config(
+        FeatureSelection(voice="atlascloud"),
+        {"ATLASCLOUD_API_KEY": "atlas-secret"},
+    )
+
+    assert config["mcpServers"]["tts"]["env"] == {
+        "ATLASCLOUD_API_KEY": "atlas-secret",
+        "TTS_DEFAULT_ENGINE": "atlascloud",
+    }
 
 
 def test_missing_environment_lists_every_selected_requirement() -> None:

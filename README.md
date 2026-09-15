@@ -83,6 +83,7 @@ features explicitly:
 | Camera transcription | `--with-transcription whisper|faster` | Tapo camera plus ffmpeg |
 | Local VOICEVOX speech | `--with-voice voicevox` | A running VOICEVOX engine |
 | ElevenLabs speech | `--with-voice elevenlabs` | An ElevenLabs API key |
+| Atlas Cloud speech | `--with-voice atlascloud` | An Atlas Cloud API key |
 | X search and posting | `--with-x` | xAI and X API credentials |
 | Host temperature and time | `--with-system-temperature` | A supported sensor source |
 
@@ -163,7 +164,7 @@ Read more:
 | [`consciousness-mcp/`](./consciousness-mcp/) | EFPF workspace, field, agency, attention, HOR, and quality geometry |
 | [`usb-webcam-mcp/`](./usb-webcam-mcp/) | Local USB camera capture |
 | [`wifi-cam-mcp/`](./wifi-cam-mcp/) | Tapo PTZ vision, camera audio, and local microphone capture |
-| [`tts-mcp/`](./tts-mcp/) | Unified VOICEVOX and ElevenLabs speech |
+| [`tts-mcp/`](./tts-mcp/) | Unified Atlas Cloud, VOICEVOX, and ElevenLabs speech |
 | [`system-temperature-mcp/`](./system-temperature-mcp/) | Time, resource, and temperature signals |
 | [`x-mcp/`](./x-mcp/) | X search, posting, replies, and deletion |
 | [`.claude/`](./.claude/) | Automatic EFPF lifecycle hooks |

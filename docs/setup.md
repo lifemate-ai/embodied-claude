@@ -97,7 +97,7 @@ The stable options are:
 --profile core
 --with-camera usb|tapo
 --with-transcription whisper|faster
---with-voice voicevox|elevenlabs
+--with-voice voicevox|elevenlabs|atlascloud
 --with-x
 --with-system-temperature
 --embedding-model small|base
@@ -258,6 +258,20 @@ export ELEVENLABS_VOICE_ID='...'  # optional
 
 PowerShell uses `$env:ELEVENLABS_API_KEY` and
 `$env:ELEVENLABS_VOICE_ID`.
+
+### Atlas Cloud
+
+`ATLASCLOUD_API_KEY` enables Atlas Cloud as an optional TTS engine. The
+default model, voice, and MP3 output work without additional settings.
+
+```bash
+export ATLASCLOUD_API_KEY='...'
+./scripts/setup.sh --with-voice atlascloud --non-interactive
+```
+
+Use `ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_TTS_VOICE`, and
+`ATLASCLOUD_TTS_FORMAT` to override the defaults. Atlas Cloud generation is
+submitted once; the server polls that prediction until it completes.
 
 ### X search and posting
 

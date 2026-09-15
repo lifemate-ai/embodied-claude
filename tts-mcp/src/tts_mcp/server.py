@@ -1,4 +1,4 @@
-"""MCP Server for text-to-speech (ElevenLabs + VOICEVOX)."""
+"""MCP Server for text-to-speech."""
 
 from __future__ import annotations
 
@@ -55,9 +55,24 @@ class TTSMCP:
                 speaker=vv.speaker,
             )
 
+        if self._config.atlascloud:
+            from .engines.atlascloud import AtlasCloudEngine
+
+            atlas = self._config.atlascloud
+            self._engines["atlascloud"] = AtlasCloudEngine(
+                api_key=atlas.api_key,
+                model_id=atlas.model_id,
+                voice_id=atlas.voice_id,
+                output_format=atlas.output_format,
+                base_url=atlas.base_url,
+                poll_interval=atlas.poll_interval,
+                timeout=atlas.timeout,
+            )
+
         if not self._engines:
             logger.warning(
-                "No TTS engine configured. Set ELEVENLABS_API_KEY or VOICEVOX_URL."
+                "No TTS engine configured. Set ELEVENLABS_API_KEY, VOICEVOX_URL, "
+                "or ATLASCLOUD_API_KEY."
             )
 
     def _get_engine(self, requested: str | None = None) -> TTSEngine:
@@ -102,19 +117,26 @@ class TTSMCP:
                                     f"TTS engine to use ({engine_desc}). "
                                     "If omitted, uses default."
                                 ),
-                                "enum": available_engines or ["elevenlabs", "voicevox"],
+                                "enum": available_engines
+                                or ["elevenlabs", "voicevox", "atlascloud"],
                             },
                             "voice_id": {
                                 "type": "string",
-                                "description": "Override voice ID (ElevenLabs only, optional)",
+                                "description": (
+                                    "Override voice ID (ElevenLabs or Atlas Cloud, optional)"
+                                ),
                             },
                             "model_id": {
                                 "type": "string",
-                                "description": "Override model ID (ElevenLabs only, optional)",
+                                "description": (
+                                    "Override model ID (ElevenLabs or Atlas Cloud, optional)"
+                                ),
                             },
                             "output_format": {
                                 "type": "string",
-                                "description": "Override output format (ElevenLabs only, optional)",
+                                "description": (
+                                    "Override output format (ElevenLabs or Atlas Cloud, optional)"
+                                ),
                             },
                             "voicevox_speaker": {
                                 "type": "integer",
@@ -173,7 +195,7 @@ class TTSMCP:
 
                 # Build engine-specific kwargs
                 kwargs: dict[str, Any] = {}
-                if engine_name == "elevenlabs":
+                if engine_name in {"elevenlabs", "atlascloud"}:
                     for key in ("voice_id", "model_id", "output_format"):
                         if arguments.get(key):
                             kwargs[key] = arguments[key]
