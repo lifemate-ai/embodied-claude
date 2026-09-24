@@ -27,9 +27,17 @@ def _default_capture_dir() -> str:
     return str(Path(tempfile.gettempdir()) / "wifi-cam-mcp")
 
 
-# Transcription backends, in the order auto-detection prefers them. Each maps
-# to the importable module and to the root-workspace extra that installs it.
-TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
+# Every value TRANSCRIBE_BACKEND accepts.
+TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper", "openai-api")
+# The backends auto-detection may choose, in the order it prefers them.
+# openai-api is deliberately absent. It needs an API key, it bills per request,
+# and it sends camera audio off the machine; none of that may start happening
+# because a package turned out to be importable. It has to be asked for by name.
+AUTODETECT_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
+# The importable module behind each local backend, and the root-workspace extra
+# that installs it. openai-api has no entry in either: it rides on httpx, a core
+# dependency, so "is it installed" is never the question - "is there a key" is,
+# and that is checked where the key is used.
 TRANSCRIBE_BACKEND_MODULES: dict[str, str] = {
     "openai-whisper": "whisper",
     "faster-whisper": "faster_whisper",
@@ -61,11 +69,14 @@ def default_transcribe_backend() -> str:
     chose instead of always pointing at openai-whisper (#151). openai-whisper
     wins when both are present; when neither is, it stays the default so the
     "not installed" message keeps pointing at the historical choice.
+
+    Only ``AUTODETECT_BACKENDS`` is considered, so the cloud backend is never
+    reached by default.
     """
-    for backend in TRANSCRIBE_BACKENDS:
+    for backend in AUTODETECT_BACKENDS:
         if transcribe_backend_available(backend):
             return backend
-    return TRANSCRIBE_BACKENDS[0]
+    return AUTODETECT_BACKENDS[0]
 
 
 @dataclass(frozen=True)
@@ -190,9 +201,12 @@ class ServerConfig:
     mic_source: str = "camera"  # "camera" (RTSP) or "local" (PC microphone)
     mic_device: str | None = None  # DirectShow device name for Windows local mic
     transcribe_default: bool = True
-    # "openai-whisper" or "faster-whisper"; unset means "whichever is installed"
+    # "openai-whisper" / "faster-whisper" (local) or "openai-api" (cloud);
+    # unset means "whichever local backend is installed"
     transcribe_backend: str = field(default_factory=default_transcribe_backend)
-    transcribe_model: str = "base"  # Whisper model size (tiny/base/small/medium/large)
+    # Whisper model size (local backends) or an OpenAI model id (openai-api)
+    transcribe_model: str = "base"
+    openai_api_key: str | None = None  # required when transcribe_backend is openai-api
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
@@ -204,11 +218,27 @@ class ServerConfig:
             os.getenv("TRANSCRIBE_BACKEND", "").strip().lower() or default_transcribe_backend()
         )
         if transcribe_backend not in TRANSCRIBE_BACKENDS:
+            allowed = ", ".join(repr(b) for b in TRANSCRIBE_BACKENDS)
             raise ValueError(
-                f"Invalid TRANSCRIBE_BACKEND '{transcribe_backend}'. "
-                "Must be 'openai-whisper' or 'faster-whisper'."
+                f"Invalid TRANSCRIBE_BACKEND '{transcribe_backend}'. Must be one of {allowed}."
             )
         capture_dir = os.getenv("CAPTURE_DIR", "").strip() or _default_capture_dir()
+        # TRANSCRIBE_MODEL is a Whisper size for the local backends and an
+        # OpenAI model id for openai-api, so the default differs per backend.
+        #
+        # The openai-api default is whisper-1, not gpt-4o-transcribe, because
+        # MIC_SOURCE defaults to the camera and a Tapo RTSP audio track is
+        # pcm_alaw 8000 Hz. Measured on that band, gpt-4o-transcribe alters the
+        # first mora of a Japanese proper noun (a voiced bilabial stop comes
+        # back as a nasal) while whisper-1 keeps it. One mora is not a slightly
+        # worse transcript here: the sociality layer keys on proper nouns, so a
+        # name that arrives one mora off is a different person. Nothing reports
+        # it either; the transcript comes back looking like a transcript.
+        #
+        # On wideband audio (MIC_SOURCE=local, a PC microphone) gpt-4o-transcribe
+        # is both more accurate and much faster; set TRANSCRIBE_MODEL explicitly
+        # in that case.
+        default_model = "whisper-1" if transcribe_backend == "openai-api" else "base"
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "wifi-cam-mcp"),
             version=os.getenv("MCP_SERVER_VERSION", "0.4.6"),
@@ -217,5 +247,6 @@ class ServerConfig:
             mic_device=os.getenv("MIC_DEVICE") or None,
             transcribe_default=_environment_bool("TRANSCRIBE_DEFAULT", True),
             transcribe_backend=transcribe_backend,
-            transcribe_model=os.getenv("TRANSCRIBE_MODEL", "base"),
+            transcribe_model=os.getenv("TRANSCRIBE_MODEL", default_model),
+            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         )

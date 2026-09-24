@@ -29,15 +29,34 @@ Tapo C210などのWiFiカメラをMCP経由で制御して、AIに部屋を見�
 
 文字起こしは optional で、root の extras から片方（または両方）を選んで入れます。
 
-| extra | パッケージ | `TRANSCRIBE_BACKEND` の値 |
-|-------|-----------|---------------------------|
-| `transcription-whisper` | openai-whisper | `openai-whisper` |
-| `transcription-faster` | faster-whisper（CTranslate2） | `faster-whisper` |
+| extra | パッケージ | `TRANSCRIBE_BACKEND` の値 | 動く場所 |
+|-------|-----------|---------------------------|---------|
+| `transcription-whisper` | openai-whisper | `openai-whisper` | 手元 |
+| `transcription-faster` | faster-whisper（CTranslate2） | `faster-whisper` | 手元 |
+| 不要 | — | `openai-api` | クラウド |
 
-`TRANSCRIBE_BACKEND` を設定しなければ **入っているほうを自動で使います**（両方あれば
-`openai-whisper`）。どちらも入っていないときは録音だけ行い、応答の `--- Transcript ---`
-ではなく `--- No transcript ---` の見出しの下に理由を返します。`uv run python scripts/doctor.py`
-の `wifi-cam:transcription` でも確認できます。
+`TRANSCRIBE_BACKEND` を設定しなければ **手元で動くうち、入っているほうを自動で使います**
+（両方あれば `openai-whisper`）。どちらも入っていないときは録音だけ行い、応答の
+`--- Transcript ---` ではなく `--- No transcript ---` の見出しの下に理由を返します。
+`uv run python scripts/doctor.py` の `wifi-cam:transcription` でも確認できます。
+
+#### `openai-api`（クラウド）
+
+手元でモデルを動かさず、録った音声を OpenAI の transcription API へ送ります。httpx（コア依存）
+だけで動くので extra は不要です。`OPENAI_API_KEY` が要り、未設定なら `listen` は録音だけ行って
+`--- No transcript ---` にその理由を返します。
+
+**自動検出の対象には入りません。** キーが要り、リクエストごとに課金され、カメラの音声が機外へ
+出ます。パッケージが import できたから選ばれた、ということが起きてはならないので、
+`TRANSCRIBE_BACKEND=openai-api` と名指ししたときだけ使われます。
+
+`TRANSCRIBE_MODEL` の既定は、このバックエンドのときだけ `whisper-1` です（手元のバックエンドは
+`base`）。`MIC_SOURCE` の既定がカメラで、Tapo の RTSP 音声は pcm_alaw 8000Hz だからです。
+この帯域で測ると、`gpt-4o-transcribe` は日本語の固有名詞の第1モーラを変え（有声両唇破裂音が
+鼻音で返る）、`whisper-1` は保ちました。sociality 層は固有名詞をキーにしているため、1モーラ
+ずれた名前は別人になります。しかも何も報告されません——書き起こしは書き起こしの顔をして
+返ってきます。広帯域の音声（`MIC_SOURCE=local`）なら `gpt-4o-transcribe` のほうが精度も速度も
+上なので、その場合は `TRANSCRIBE_MODEL` を明示してください。
 
 ### 右カメラ（両目）を追加する
 

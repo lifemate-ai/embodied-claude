@@ -63,12 +63,17 @@ MIC_SOURCE=camera
 # MIC_SOURCE=local のときのみ有効。未設定なら先頭の音声デバイスを自動選択する。
 # MIC_DEVICE=マイク配列 (Realtek(R) Audio)
 
-# 認識バックエンド: openai-whisper / faster-whisper
-# 未設定なら、入っているほう（両方あれば openai-whisper）を自動で選ぶ
+# 認識バックエンド: openai-whisper / faster-whisper（手元）、openai-api（クラウド）
+# 未設定なら、手元に入っているほう（両方あれば openai-whisper）を自動で選ぶ。
+# openai-api は自動では選ばれない。名指ししたときだけ使われる（§6）
 # TRANSCRIBE_BACKEND=openai-whisper
+
+# TRANSCRIBE_BACKEND=openai-api のときのみ必要
+# OPENAI_API_KEY=sk-...
 
 # モデルサイズ: tiny / base / small / medium / large
 # 実マイクを通すなら small を推奨（§5-1）
+# openai-api のときは OpenAI のモデル id（既定 whisper-1）
 TRANSCRIBE_MODEL=small
 
 # 録音・撮影の保存先。既定の "/tmp/wifi-cam-mcp" は POSIX 前提のため、
@@ -232,11 +237,23 @@ GPU なし・2 コアの環境では以下のようになる:
 |---|---|---|
 | `MIC_SOURCE` | `camera` | `camera`（RTSP）/ `local`（PC のマイク） |
 | `MIC_DEVICE` | 未設定 | Windows の DirectShow デバイス名。未設定なら自動検出 |
-| `TRANSCRIBE_BACKEND` | 自動検出 | `openai-whisper` / `faster-whisper`。未設定なら import できるほう（両方あれば `openai-whisper`）。どちらも無ければ `listen` は録音だけ行い、transcript の代わりに理由を返す |
-| `TRANSCRIBE_MODEL` | `base` | `tiny` / `base` / `small` / `medium` / `large` |
+| `TRANSCRIBE_BACKEND` | 自動検出 | `openai-whisper` / `faster-whisper`（手元）、`openai-api`（クラウド）。未設定なら手元で import できるほう（両方あれば `openai-whisper`）。どちらも無ければ `listen` は録音だけ行い、transcript の代わりに理由を返す |
+| `TRANSCRIBE_MODEL` | `base`（`openai-api` は `whisper-1`） | `tiny` / `base` / `small` / `medium` / `large`。`openai-api` では OpenAI のモデル id |
+| `OPENAI_API_KEY` | 未設定 | `TRANSCRIBE_BACKEND=openai-api` のときに必要 |
 
 `faster-whisper` は CTranslate2 を使用し、CPU では `int8`、CUDA が利用可能なら `float16` を自動選択する。
 戻り値の形は `openai-whisper` と同一のため、`.env` の変更のみで切り替えられる。
+
+`openai-api` は手元でモデルを動かさず、録った音声を OpenAI の transcription API へ送る。
+httpx（コア依存）だけで動くので追加インストールは不要だが、`OPENAI_API_KEY` が要る。
+**自動検出の対象には入らない。** キーが要り、リクエストごとに課金され、カメラの音声が機外へ出るため、
+名指ししたときだけ使われる。
+
+`TRANSCRIBE_MODEL` の既定がこのバックエンドだけ `whisper-1` なのは、`MIC_SOURCE` の既定がカメラで、
+Tapo の RTSP 音声が pcm_alaw 8000Hz だから。この帯域で測ると `gpt-4o-transcribe` は日本語の固有名詞の
+第1モーラを変え（有声両唇破裂音が鼻音で返る）、`whisper-1` は保った。sociality 層は固有名詞をキーに
+しているため、1モーラずれた名前は別人になる。広帯域（`MIC_SOURCE=local`）なら `gpt-4o-transcribe` の
+ほうが精度も速度も上なので、その場合は明示する。
 
 ---
 

@@ -313,7 +313,10 @@ def check_workspace_packages(
     return results
 
 
-TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
+TRANSCRIBE_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper", "openai-api")
+# Mirrors wifi_cam_mcp.config: openai-api is a valid choice but never an
+# auto-detected one, because it needs a key and bills per request.
+AUTODETECT_BACKENDS: tuple[str, ...] = ("openai-whisper", "faster-whisper")
 TRANSCRIBE_BACKEND_MODULES = {"openai-whisper": "whisper", "faster-whisper": "faster_whisper"}
 TRANSCRIBE_BACKEND_EXTRAS = {
     "openai-whisper": "transcription-whisper",
@@ -351,14 +354,30 @@ def check_transcription_backend(
         or ""
     ).strip().lower()
     if explicit:
-        module = TRANSCRIBE_BACKEND_MODULES.get(explicit)
-        if module is None:
+        if explicit not in TRANSCRIBE_BACKENDS:
             return CheckResult(
                 CheckStatus.ERROR,
                 subject,
                 f"TRANSCRIBE_BACKEND={explicit!r} is not a known backend",
-                "Use openai-whisper or faster-whisper.",
+                f"Use {' or '.join(TRANSCRIBE_BACKENDS)}.",
             )
+        if explicit == "openai-api":
+            # Nothing to import: the backend rides on httpx. What it needs is a key.
+            key = str(
+                (server_env.get("OPENAI_API_KEY") if isinstance(server_env, Mapping) else None)
+                or source.get("OPENAI_API_KEY")
+                or ""
+            ).strip()
+            if key:
+                return CheckResult(CheckStatus.OK, subject, "openai-api has OPENAI_API_KEY")
+            return CheckResult(
+                CheckStatus.WARN,
+                subject,
+                "TRANSCRIBE_BACKEND=openai-api but OPENAI_API_KEY is not set; "
+                "listen will record audio without a transcript",
+                "Set OPENAI_API_KEY, or set TRANSCRIBE_BACKEND to a local backend.",
+            )
+        module = TRANSCRIBE_BACKEND_MODULES[explicit]
         if module_available(module):
             return CheckResult(CheckStatus.OK, subject, f"{explicit} is installed")
         return CheckResult(
@@ -369,7 +388,7 @@ def check_transcription_backend(
             f"Run uv sync --extra {TRANSCRIBE_BACKEND_EXTRAS[explicit]}, "
             "or set TRANSCRIBE_BACKEND to the backend you installed.",
         )
-    for backend in TRANSCRIBE_BACKENDS:
+    for backend in AUTODETECT_BACKENDS:
         if module_available(TRANSCRIBE_BACKEND_MODULES[backend]):
             return CheckResult(CheckStatus.OK, subject, f"{backend} is installed (auto-detected)")
     return CheckResult(

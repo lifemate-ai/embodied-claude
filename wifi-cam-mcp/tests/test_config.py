@@ -32,6 +32,67 @@ def test_invalid_transcription_default_is_rejected(
         ServerConfig.from_env()
 
 
+def test_openai_api_backend_defaults_to_whisper_1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default audio source is the camera, and its RTSP track is 8 kHz.
+
+    gpt-4o-transcribe alters the first mora of a proper noun on that band;
+    whisper-1 keeps it. Pin the default so the camera path stays safe.
+    """
+    monkeypatch.setenv("TRANSCRIBE_BACKEND", "openai-api")
+    monkeypatch.delenv("TRANSCRIBE_MODEL", raising=False)
+
+    assert ServerConfig.from_env().transcribe_model == "whisper-1"
+
+
+def test_local_backends_still_default_to_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRANSCRIBE_BACKEND", "faster-whisper")
+    monkeypatch.delenv("TRANSCRIBE_MODEL", raising=False)
+
+    assert ServerConfig.from_env().transcribe_model == "base"
+
+
+def test_transcribe_model_overrides_the_per_backend_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRANSCRIBE_BACKEND", "openai-api")
+    monkeypatch.setenv("TRANSCRIBE_MODEL", "gpt-4o-transcribe")
+
+    assert ServerConfig.from_env().transcribe_model == "gpt-4o-transcribe"
+
+
+def test_auto_detection_never_reaches_the_cloud_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """openai-api must be asked for by name.
+
+    It needs a key, it bills per request, and it sends camera audio off the
+    machine, so it may not be selected just because something is importable.
+    Nothing local is installed here and the default still stays local.
+    """
+    monkeypatch.delenv("TRANSCRIBE_BACKEND", raising=False)
+    monkeypatch.setattr(config, "_module_available", lambda _name: False)
+
+    assert "openai-api" not in config.AUTODETECT_BACKENDS
+    assert config.default_transcribe_backend() != "openai-api"
+    assert ServerConfig.from_env().transcribe_backend != "openai-api"
+
+
+def test_openai_api_is_still_a_valid_explicit_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRANSCRIBE_BACKEND", "openai-api")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+    parsed = ServerConfig.from_env()
+
+    assert parsed.transcribe_backend == "openai-api"
+    assert parsed.openai_api_key == "sk-test"
+
+
 def test_capture_directory_uses_platform_temp_by_default(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

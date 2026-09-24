@@ -732,6 +732,7 @@ class CameraMCPServer:
             mic_device=self._server_config.mic_device,
             transcribe_backend=self._server_config.transcribe_backend,
             transcribe_model=self._server_config.transcribe_model,
+            openai_api_key=self._server_config.openai_api_key,
         )
         await self._camera.connect()
         logger.info(f"Connected to left/primary camera at {config.host}")
@@ -746,6 +747,7 @@ class CameraMCPServer:
                     mic_device=self._server_config.mic_device,
                     transcribe_backend=self._server_config.transcribe_backend,
                     transcribe_model=self._server_config.transcribe_model,
+                    openai_api_key=self._server_config.openai_api_key,
                 )
                 await self._camera_right.connect()
                 self._has_stereo = True

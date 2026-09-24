@@ -244,6 +244,34 @@ def test_transcription_check_follows_installed_backend(monkeypatch: pytest.Monke
     assert [r.subject for r in results] == ["wifi-cam:ffmpeg", "wifi-cam:transcription"]
 
 
+def test_transcription_check_asks_openai_api_for_a_key_not_a_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """openai-api imports nothing, so the precondition doctor reports is the key."""
+    monkeypatch.delenv("TRANSCRIBE_BACKEND", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    def nothing_installed(_name: str) -> bool:
+        return False
+
+    with_key = doctor.check_transcription_backend(
+        {"env": {"TRANSCRIBE_BACKEND": "openai-api", "OPENAI_API_KEY": "sk-test"}},
+        {},
+        module_available=nothing_installed,
+    )
+    assert with_key.status is CheckStatus.OK
+
+    without_key = doctor.check_transcription_backend(
+        {"env": {"TRANSCRIBE_BACKEND": "openai-api"}}, {}, module_available=nothing_installed
+    )
+    assert without_key.status is CheckStatus.WARN
+    assert "OPENAI_API_KEY" in without_key.detail
+
+    # ...and it is never what auto-detection lands on.
+    assert "openai-api" not in doctor.AUTODETECT_BACKENDS
+    auto = doctor.check_transcription_backend({}, {}, module_available=lambda _n: True)
+    assert "openai-api" not in auto.detail
+
+
 def _camera(password: str) -> dict[str, object]:
     return {
         "command": "uv",

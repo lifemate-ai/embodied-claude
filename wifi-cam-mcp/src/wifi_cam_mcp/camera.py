@@ -222,10 +222,35 @@ def _get_whisper_model(backend: str, model_size: str):
     return model
 
 
+async def _transcribe_with_openai_api(model: str, audio_path: str, api_key: str) -> str:
+    """Transcribe an audio file via the OpenAI transcription API.
+
+    Uses httpx, already a core dependency, so this backend installs nothing.
+    Returns the same shape as the local backends: the transcript text.
+
+    Args:
+        model: OpenAI model id (e.g. "whisper-1", "gpt-4o-transcribe")
+        audio_path: Path to the audio file
+        api_key: OpenAI API key
+    """
+    import httpx
+
+    audio = Path(audio_path).read_bytes()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            files={"file": (Path(audio_path).name, audio, "audio/wav")},
+            data={"model": model, "language": "ja"},
+        )
+    response.raise_for_status()
+    return response.json().get("text", "").strip()
+
+
 def _transcribe_with_model(backend: str, model, audio_path: str) -> str:
     """Transcribe an audio file with a loaded model (blocking).
 
-    Both backends return the same shape of result: the transcript text.
+    Both local backends return the same shape of result: the transcript text.
     """
     if backend == "faster-whisper":
         segments, _info = model.transcribe(audio_path, language="ja")
@@ -292,12 +317,14 @@ class TapoCamera:
         mic_device: str | None = None,
         transcribe_backend: str = "openai-whisper",
         transcribe_model: str = "base",
+        openai_api_key: str | None = None,
     ):
         self._config = config
         self._capture_dir = Path(capture_dir)
         self._mic_device = mic_device
         self._transcribe_backend = transcribe_backend
         self._transcribe_model = transcribe_model
+        self._openai_api_key = openai_api_key
         self._lock = asyncio.Lock()
 
         # ONVIF objects (set on connect)
@@ -981,10 +1008,10 @@ class TapoCamera:
             raise RuntimeError(f"Failed to record audio: {e!s}") from e
 
     async def _transcribe_audio(self, audio_path: str) -> tuple[str | None, str | None]:
-        """Transcribe audio file using Whisper.
+        """Transcribe audio file.
 
-        The backend (openai-whisper or faster-whisper) and model size are
-        configured via TRANSCRIBE_BACKEND / TRANSCRIBE_MODEL.
+        The backend (openai-whisper, faster-whisper or openai-api) and the
+        model are configured via TRANSCRIBE_BACKEND / TRANSCRIBE_MODEL.
 
         Args:
             audio_path: Path to the audio file
@@ -995,6 +1022,23 @@ class TapoCamera:
             reason is never returned in the transcript slot (#151).
         """
         backend = self._transcribe_backend
+        if backend == "openai-api":
+            # Cloud backend: nothing to import and no model to load, so the
+            # importable-module check below does not apply. The precondition
+            # here is the key.
+            if not self._openai_api_key:
+                return None, (
+                    "OPENAI_API_KEY is not set, and TRANSCRIBE_BACKEND=openai-api needs it. "
+                    "Set the key, or point TRANSCRIBE_BACKEND at a local backend."
+                )
+            try:
+                transcript = await _transcribe_with_openai_api(
+                    self._transcribe_model, audio_path, self._openai_api_key
+                )
+            except Exception as e:
+                return None, f"transcription with {backend} failed: {e!s}"
+            return transcript, None
+
         if not transcribe_backend_available(backend):
             module = TRANSCRIBE_BACKEND_MODULES.get(backend, backend)
             extra = TRANSCRIBE_BACKEND_EXTRAS.get(backend)
