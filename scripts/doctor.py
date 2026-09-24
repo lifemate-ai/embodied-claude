@@ -18,6 +18,7 @@ import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from scripts.onboarding import (
     SERVER_SPECS,
     TAPO_REQUIRED_ENVIRONMENT,
     X_REQUIRED_ENVIRONMENT,
+    ServerSpec,
     is_placeholder_value,
 )
 
@@ -74,8 +76,38 @@ def check_state_path(path: Path) -> CheckResult:
     )
 
 
-def _server_shape(name: str) -> tuple[str, list[str]]:
-    spec = SERVER_SPECS[name]
+SPECS_BY_PACKAGE = {spec.package: spec for spec in SERVER_SPECS.values()}
+
+
+def _package_argument(server: Any) -> str | None:
+    if not isinstance(server, Mapping):
+        return None
+    args = server.get("args")
+    if not isinstance(args, list):
+        return None
+    for flag, value in pairwise(args):
+        if flag == "--package" and isinstance(value, str):
+            return value
+    return None
+
+
+def resolve_server_spec(name: str, server: Any) -> ServerSpec | None:
+    """Return the setup-managed spec a `.mcp.json` entry runs, whatever its key.
+
+    Several cameras need several keys (`wifi-cam-1f`, `wifi-cam-2f`), and every
+    check that looked the spec up by key alone skipped those entries without
+    saying so (#162). A key that is not a known server name falls back to the
+    workspace package its `uv run --package` argument names.
+    """
+
+    spec = SERVER_SPECS.get(name)
+    if spec is not None:
+        return spec
+    package = _package_argument(server)
+    return None if package is None else SPECS_BY_PACKAGE.get(package)
+
+
+def _server_shape(spec: ServerSpec) -> tuple[str, list[str]]:
     return "uv", ["run", "--package", spec.package, spec.entrypoint]
 
 
@@ -144,12 +176,14 @@ def validate_mcp_config(config: Mapping[str, Any]) -> list[CheckResult]:
 
     for raw_name, raw_server in servers.items():
         name = str(raw_name)
-        if name not in SERVER_SPECS:
+        spec = resolve_server_spec(name, raw_server)
+        if spec is None:
             results.append(
                 CheckResult(
                     CheckStatus.WARN,
                     f"server:{name}",
-                    "Custom MCP server is not managed or modified by setup.",
+                    "Custom MCP server is not managed by setup; its command, "
+                    "environment and dependencies are not checked.",
                     "Validate this custom entry manually.",
                 )
             )
@@ -165,7 +199,7 @@ def validate_mcp_config(config: Mapping[str, Any]) -> list[CheckResult]:
             )
             continue
 
-        expected_command, expected_args = _server_shape(name)
+        expected_command, expected_args = _server_shape(spec)
         problems: list[str] = []
         if raw_server.get("command") != expected_command:
             problems.append(f"command must be {expected_command!r}")
@@ -175,7 +209,7 @@ def validate_mcp_config(config: Mapping[str, Any]) -> list[CheckResult]:
         if placeholders:
             problems.append(f"placeholder values remain in: {', '.join(placeholders)}")
         environment = raw_server.get("env", {})
-        required = _required_server_environment(name, raw_server)
+        required = _required_server_environment(spec.name, raw_server)
         missing = (
             required
             if not isinstance(environment, Mapping)
@@ -198,7 +232,8 @@ def validate_mcp_config(config: Mapping[str, Any]) -> list[CheckResult]:
                 CheckResult(
                     CheckStatus.OK,
                     f"server:{name}",
-                    "workspace command shape is valid",
+                    "workspace command shape is valid"
+                    + ("" if spec.name == name else f" (runs {spec.name})"),
                 )
             )
     return results
@@ -252,8 +287,8 @@ def check_workspace_packages(
     configured = servers if isinstance(servers, Mapping) else {}
     results: list[CheckResult] = []
     checked_packages: set[str] = set()
-    for name in configured:
-        spec = SERVER_SPECS.get(str(name))
+    for name, server in configured.items():
+        spec = resolve_server_spec(str(name), server)
         if spec is None or spec.package in checked_packages:
             continue
         checked_packages.add(spec.package)
@@ -298,6 +333,7 @@ def check_transcription_backend(
     environment: Mapping[str, str] | None = None,
     *,
     module_available: Callable[[str], bool] = _module_available,
+    subject: str = "wifi-cam:transcription",
 ) -> CheckResult:
     """Check that the transcription backend `listen` will use is importable.
 
@@ -314,7 +350,6 @@ def check_transcription_backend(
         or source.get("TRANSCRIBE_BACKEND")
         or ""
     ).strip().lower()
-    subject = "wifi-cam:transcription"
     if explicit:
         module = TRANSCRIBE_BACKEND_MODULES.get(explicit)
         if module is None:
@@ -356,8 +391,14 @@ def check_optional_dependencies(
     servers = config.get("mcpServers", {})
     configured = servers if isinstance(servers, Mapping) else {}
     results: list[CheckResult] = []
+    kinds = {
+        str(name): spec.name
+        for name, server in configured.items()
+        if (spec := resolve_server_spec(str(name), server)) is not None
+    }
+    cameras = [name for name, kind in kinds.items() if kind == "wifi-cam"]
 
-    if "wifi-cam" in configured:
+    if cameras:
         if which("ffmpeg"):
             results.append(
                 CheckResult(CheckStatus.OK, "wifi-cam:ffmpeg", "ffmpeg is available")
@@ -371,13 +412,18 @@ def check_optional_dependencies(
                     "Install ffmpeg, then rerun uv run python scripts/doctor.py.",
                 )
             )
-        results.append(
-            check_transcription_backend(
-                configured["wifi-cam"], module_available=module_available
+        # ffmpeg is one per machine; the transcription backend follows each
+        # camera's own env, so every camera entry gets its own line.
+        for name in cameras:
+            results.append(
+                check_transcription_backend(
+                    configured[name],
+                    module_available=module_available,
+                    subject=f"{name}:transcription",
+                )
             )
-        )
 
-    if "tts" in configured:
+    if "tts" in kinds.values():
         player = next((name for name in ("mpv", "ffplay") if which(name)), None)
         if player:
             results.append(
@@ -749,9 +795,10 @@ def run_live_checks(
 
     results: list[CheckResult] = []
     probe = repo_root / "scripts" / "mcp_probe.py"
-    for raw_name in servers:
+    for raw_name, raw_server in servers.items():
         name = str(raw_name)
-        if name not in SERVER_SPECS:
+        spec = resolve_server_spec(name, raw_server)
+        if spec is None:
             continue
         command = [
             "uv",
@@ -771,7 +818,7 @@ def run_live_checks(
             "--state-dir",
             str(state_root / name),
         ]
-        if name == "memory":
+        if spec.name == "memory":
             command.append("--remember-roundtrip")
         completed = runner(
             command,

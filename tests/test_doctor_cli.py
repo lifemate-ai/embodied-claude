@@ -242,3 +242,74 @@ def test_transcription_check_follows_installed_backend(monkeypatch: pytest.Monke
         {"mcpServers": {"wifi-cam": {}}}, which=lambda _n: None, module_available=only_faster
     )
     assert [r.subject for r in results] == ["wifi-cam:ffmpeg", "wifi-cam:transcription"]
+
+
+def _camera(password: str) -> dict[str, object]:
+    return {
+        "command": "uv",
+        "args": ["run", "--package", "wifi-cam-mcp", "wifi-cam-mcp"],
+        "env": {
+            "TAPO_CAMERA_HOST": "192.168.1.50",
+            "TAPO_USERNAME": "admin",
+            "TAPO_PASSWORD": password,
+        },
+    }
+
+
+def test_renamed_server_entries_are_checked_by_their_package() -> None:
+    """A second camera needs a second key; renaming must not skip the checks (#162)."""
+    config = {
+        "mcpServers": {
+            "wifi-cam-1f": _camera(""),
+            "wifi-cam-car": _camera("YOUR_PASSWORD_HERE"),
+            "wifi-cam-2f": _camera("secret"),
+            "usb-webcam-desk": {
+                "command": "uv",
+                "args": ["run", "--package", "usb-webcam-mcp", "usb-webcam-mcp"],
+            },
+            "weather": {"command": "npx", "args": ["weather-mcp"]},
+        }
+    }
+
+    results = {r.subject: r for r in doctor.validate_mcp_config(config)}
+
+    for name in ("wifi-cam-1f", "wifi-cam-car"):
+        assert results[f"server:{name}"].status is CheckStatus.ERROR
+        assert "TAPO_PASSWORD" in results[f"server:{name}"].detail
+    assert "placeholder" in results["server:wifi-cam-car"].detail
+    assert results["server:wifi-cam-2f"].status is CheckStatus.OK
+    assert "wifi-cam" in results["server:wifi-cam-2f"].detail
+    assert results["server:usb-webcam-desk"].status is CheckStatus.OK
+    custom = results["server:weather"]
+    assert custom.status is CheckStatus.WARN
+    assert "not checked" in custom.detail
+
+
+def test_renamed_entries_keep_package_and_optional_checks(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = []\n'
+        '[project.optional-dependencies]\ncamera-tapo = ["wifi-cam-mcp"]\n',
+        encoding="utf-8",
+    )
+    config = {
+        "mcpServers": {
+            "wifi-cam-1f": _camera("secret"),
+            "wifi-cam-2f": {**_camera("secret"), "env": {"TRANSCRIBE_BACKEND": "openai-whisper"}},
+        }
+    }
+
+    packages = doctor.check_workspace_packages(tmp_path, config)
+    assert [(p.subject, p.status) for p in packages] == [
+        ("package:wifi-cam-mcp", CheckStatus.OK)
+    ]
+
+    optional = doctor.check_optional_dependencies(
+        config,
+        which=lambda _n: "/usr/bin/ffmpeg",
+        module_available=lambda name: name == "faster_whisper",
+    )
+    assert [(r.subject, r.status) for r in optional] == [
+        ("wifi-cam:ffmpeg", CheckStatus.OK),
+        ("wifi-cam-1f:transcription", CheckStatus.OK),
+        ("wifi-cam-2f:transcription", CheckStatus.WARN),
+    ]
