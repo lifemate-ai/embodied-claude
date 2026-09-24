@@ -648,3 +648,73 @@ def test_emit_writes_utf8_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     _emit({"reason": "プロジェクト"})
 
     assert buffer.getvalue() == '{"reason":"プロジェクト"}\n'.encode()
+
+
+def _runtime(tmp_path: Path) -> tuple[SocialDB, TickProducer, FieldRuntime]:
+    db = SocialDB(tmp_path / "hook-social.db")
+    producer = TickProducer(
+        db,
+        interoception_path=tmp_path / "interoception.json",
+        desires_path=tmp_path / "desires.json",
+    )
+    return db, producer, FieldRuntime(db, producer=producer)
+
+
+def _propose(tmp_path: Path, tool_input: dict) -> str:
+    db, producer, runtime = _runtime(tmp_path)
+    field = producer.get_current_field()
+    assert field is not None
+    try:
+        return runtime.propose_action(
+            ActionProposal(
+                field_id=field.field_id,
+                tool_name="Write",
+                tool_input=tool_input,
+                goal="write fixture",
+            )
+        ).action_id
+    finally:
+        db.close()
+
+
+def test_reproposing_after_a_mismatch_replaces_the_stale_intention(tmp_path) -> None:
+    """A declared input that never matches must not wedge the next proposal (#165)."""
+    _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {"session_id": "s", "hook_event_name": "UserPromptSubmit", "prompt": "write"},
+    )
+    declared = {"file_path": "/tmp/efpf-fixture", "content": "declared"}
+    actual = {"file_path": "/tmp/efpf-fixture", "content": "actual"}
+
+    def pre_tool_use(tool_input: dict, tool_use_id: str) -> dict:
+        return _run_hook(
+            tmp_path,
+            "pre-tool-use",
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "tool_input": tool_input,
+                "tool_use_id": tool_use_id,
+            },
+        )["hookSpecificOutput"]
+
+    stale = _propose(tmp_path, declared)
+    mismatch = pre_tool_use(actual, "w-1")
+    assert mismatch["permissionDecision"] == "deny"
+    assert "hash mismatch" in mismatch["permissionDecisionReason"]
+    assert stale in mismatch["permissionDecisionReason"]
+
+    _propose(tmp_path, actual)
+    db, _producer, runtime = _runtime(tmp_path)
+    record = runtime.agency.get(stale)
+    db.close()
+    assert record is not None and record.status == "DENIED"
+
+    valid = pre_tool_use(actual, "w-2")
+    assert valid["permissionDecision"] == "allow", valid
+
+    # An intention the gate has let through is in flight until its outcome is
+    # closed; a new proposal must not quietly replace that one.
+    with pytest.raises(ValueError, match="in flight"):
+        _propose(tmp_path, declared)

@@ -207,9 +207,18 @@ class AgencyStore:
                 raise ValueError("actions require a field from the current continuity")
         existing = self.get_pending(owner_id)
         if existing is not None:
-            raise ValueError(
-                f"owner {owner_id!r} already has pending intention {existing.action_id!r}"
-            )
+            if existing.status == IntentionStatus.ALLOWED:
+                raise ValueError(
+                    f"owner {owner_id!r} has intention {existing.action_id!r} in flight; "
+                    "close it with close_field_action first"
+                )
+            # A PENDING intention was never let through the gate, so nothing was
+            # enacted under it. The gate leaves it PENDING after a tool or input
+            # mismatch so that issuing the declared input still passes, but a
+            # caller whose declared input can never match had no way out short
+            # of closing an act that never ran (#165). A fresh proposal is a
+            # revised intention: the old one is denied, not given an outcome.
+            self.mark_denied(existing.action_id)
 
         normalized = normalize_tool_input(proposal.tool_input)
         action_id = f"act_{secrets.token_urlsafe(12)}"

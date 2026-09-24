@@ -1461,7 +1461,13 @@ class FieldRuntime:
         *,
         owner_id: str = "self",
     ) -> IntentionRecord:
+        previous = self.agency.get_pending(owner_id)
         intention = self.agency.propose(proposal, owner_id=owner_id)
+        if previous is not None and generative_enabled():
+            try:
+                self.producer.prediction.mark_denied_trajectory(previous.action_id)
+            except Exception:
+                pass
         field = self.fields.get(intention.field_id)
         if field is not None:
             if generative_enabled():
@@ -1526,9 +1532,15 @@ class FieldRuntime:
             tool_input=tool_input,
         )
         if not matches or intention is None:
+            hint = (
+                "call propose_field_action first"
+                if intention is None
+                else "call propose_field_action again; it replaces pending "
+                f"intention {intention.action_id!r}"
+            )
             return ToolGateDecision(
                 allow=False,
-                reason=reason + "; call propose_field_action first",
+                reason=f"{reason}; {hint}",
                 external=True,
                 field_id=field.field_id,
                 action_id=intention.action_id if intention else None,
