@@ -184,46 +184,52 @@ def test_doctor_is_satisfied_by_a_complete_list_or_enable_all(tmp_path: Path) ->
     assert result.status is CheckStatus.OK
 
 
-# --- 2. memory HTTP recall port -------------------------------------------
+# --- 2. memory store read by individual-kernel (#174) ----------------------
 
 
-def test_doctor_warns_when_the_recall_port_is_closed() -> None:
-    result = doctor.check_memory_http_port({}, is_listening=lambda _h, _p: False)
+def test_doctor_warns_when_the_memory_store_is_absent(tmp_path: Path) -> None:
+    missing = tmp_path / "memory.db"
+
+    result = doctor.check_memory_db({"MEMORY_DB_PATH": str(missing)})
 
     assert result.status is CheckStatus.WARN
-    assert result.detail == (
-        "memory HTTP recall port 18900 is not listening; individual-kernel ticks "
-        "will carry no memory candidates"
-    )
+    assert result.subject == "memory:store"
+    assert str(missing) in result.detail
+    assert "no memory candidates" in result.detail
 
 
-def test_doctor_probes_the_configured_recall_port() -> None:
-    probed: list[tuple[str, int]] = []
+def test_doctor_reads_the_configured_memory_store(tmp_path: Path) -> None:
+    import sqlite3
 
-    def listening(host: str, port: int) -> bool:
-        probed.append((host, port))
-        return True
+    store = tmp_path / "memory.db"
+    connection = sqlite3.connect(store)
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
+    connection.execute("INSERT INTO memories VALUES ('m1', 'a remembered room')")
+    connection.commit()
+    connection.close()
 
-    result = doctor.check_memory_http_port(
-        {"MEMORY_HTTP_PORT": "18901"}, is_listening=listening
-    )
+    result = doctor.check_memory_db({"MEMORY_DB_PATH": str(store)})
 
-    assert probed == [("127.0.0.1", 18901)]
     assert result.status is CheckStatus.OK
+    assert "1 memories" in result.detail
 
 
-def test_doctor_really_connects_to_a_closed_port() -> None:
-    import socket
+def test_doctor_reports_a_store_that_is_not_a_database(tmp_path: Path) -> None:
+    store = tmp_path / "memory.db"
+    store.write_bytes(b"not a database at all, only bytes " * 8)
 
-    # Bind and release to find a port nothing is listening on right now.
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    result = doctor.check_memory_db({"MEMORY_DB_PATH": str(store)})
 
-    result = doctor.check_memory_http_port({"MEMORY_HTTP_PORT": str(port)})
+    assert result.status is CheckStatus.ERROR
+    assert "Do not delete" in (result.remediation or "")
 
-    assert result.status is CheckStatus.WARN
-    assert f"port {port} is not listening" in result.detail
+
+def test_doctor_still_honours_the_legacy_memory_db_file(tmp_path: Path) -> None:
+    legacy = tmp_path / "legacy.db"
+
+    result = doctor.check_memory_db({"MEMORY_DB_FILE": str(legacy)})
+
+    assert str(legacy) in result.detail
 
 
 # --- 3. @SOUL.md / @TODO.md / @ROUTINES.md --------------------------------
@@ -283,4 +289,4 @@ def test_examples_do_not_pin_state_overrides() -> None:
         for server in config["mcpServers"].values():
             env = server.get("env", {})
             assert "SOCIAL_DB_PATH" not in env, name
-            assert "MEMORY_HTTP_PORT" not in env, name
+            assert "MEMORY_DB_PATH" not in env, name

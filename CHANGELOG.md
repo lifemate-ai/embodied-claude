@@ -4,6 +4,16 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+Memory recall into the individual kernel never delivered a memory (#174).
+Each tick asked memory-mcp's HTTP recall port for candidates; the answers
+carried no memory id, so every one was dropped at ingest while the field's
+trace recorded success. The kernel now reads memory-mcp's SQLite store
+directly, with the same keyword recall `compose_interaction_context` uses, and
+the HTTP endpoint and `MEMORY_HTTP_PORT` are gone along with the setup,
+doctor and probe code that kept the port consistent. The store's path is
+`MEMORY_DB_PATH` everywhere; the orchestrator's old `MEMORY_DB_FILE` is still
+read when the new name is unset.
+
 A reader going through `wifi-cam-mcp` with the code open (fmtowns3, #132)
 found that the second camera was documented in three places that disagreed
 with each other and with the implementation: the tool description promised

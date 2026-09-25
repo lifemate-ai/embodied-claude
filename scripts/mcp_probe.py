@@ -73,7 +73,6 @@ def _isolated_environment(state_dir: Path | None) -> dict[str, str]:
         "MEMORY_DB_PATH": str(state_dir / "memory.db"),
         "SOCIAL_DB_PATH": str(state_dir / "social.db"),
         "DESIRES_PATH": str(state_dir / "desires.json"),
-        "MEMORY_HTTP_PORT": "0",
     }
 
 

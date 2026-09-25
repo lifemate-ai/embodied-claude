@@ -33,8 +33,20 @@ def _run_hook(
 ) -> dict:
     env = dict(os.environ)
     env["SOCIAL_DB_PATH"] = str(tmp_path / "hook-social.db")
-    # Keep the hook off the machine's real recall endpoint; 0 means "none".
-    env["MEMORY_HTTP_PORT"] = "0"
+    # Keep the hook off the machine's real memory store. An empty store of its
+    # own keeps recall quiet; a missing one is warned about on stderr (#174).
+    store = tmp_path / "memory.db"
+    if not store.exists():
+        import sqlite3
+
+        connection = sqlite3.connect(store)
+        connection.execute(
+            "CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT, "
+            "timestamp TEXT, emotion TEXT, importance INTEGER, category TEXT)"
+        )
+        connection.commit()
+        connection.close()
+    env["MEMORY_DB_PATH"] = str(store)
     env.update(env_overrides or {})
     result = subprocess.run(
         [sys.executable, "-m", "individual_kernel_mcp.hook_cli", command],
