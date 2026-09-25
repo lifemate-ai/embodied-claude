@@ -118,8 +118,13 @@ def _suggestions(monkeypatch, tone):
     return [suggest_followup_text(context, stress) for context, stress in BRANCHES]
 
 
-def test_default_tone_keeps_the_original_lines(monkeypatch):
-    texts = [text for text, *_ in _suggestions(monkeypatch, None)]
+def test_default_tone_is_neutral(monkeypatch):
+    """The package serves any agent, so no dialect is assumed (#173)."""
+    assert _suggestions(monkeypatch, None) == _suggestions(monkeypatch, "neutral")
+
+
+def test_kansai_tone_keeps_the_original_lines(monkeypatch):
+    texts = [text for text, *_ in _suggestions(monkeypatch, "kansai")]
 
     assert texts == [
         "今日は会議多くて疲れたって言うてたけど、そのあと少しは落ち着いた？",

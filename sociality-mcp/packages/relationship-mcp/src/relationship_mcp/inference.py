@@ -65,10 +65,11 @@ def summarize_relationship(*, role: str | None, recent_stress: float, open_loop_
 # The follow-up is handed to the model as a ready-made line, so once TTS is
 # involved its phrasing is spoken in the agent's own voice. It used to be one
 # fixed dialect for every deployment (#173, the gap #146 closed for
-# system-temperature-mcp). RELATIONSHIP_TONE picks the phrasing and the
-# default keeps the original lines. Whatever the tone, each suggestion also
+# system-temperature-mcp). RELATIONSHIP_TONE picks the phrasing. The default
+# is neutral because this package serves any agent; `kansai` keeps the
+# original lines. Whatever the tone, each suggestion also
 # carries its intent and topic, so a caller can phrase it in its own words.
-DEFAULT_TONE = "kansai"
+DEFAULT_TONE = "neutral"
 
 STRESS_CHECK_IN = "check_in_after_stress"
 EVENING_CHECK_IN = "evening_check_in"

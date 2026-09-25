@@ -332,7 +332,7 @@ the generated `.mcp.json` when they are set in the environment it runs under.
 | `SELF_PRONOUN` | `自分` | desire-system `identity_coherence` |
 | `SYSTEM_TEMPERATURE_TONE` | `kansai` | system-temperature phrasing (`kansai` or `neutral`) |
 | `SYSTEM_TEMPERATURE_TIMEZONE` | `Asia/Tokyo` | system-temperature `get_current_time` |
-| `RELATIONSHIP_TONE` | `kansai` | sociality `suggest_followup` phrasing (`kansai` or `neutral`); `intent` / `topic` are returned whatever the tone |
+| `RELATIONSHIP_TONE` | `neutral` | sociality `suggest_followup` phrasing (`neutral` or `kansai`); `intent` / `topic` are returned whatever the tone |
 | `DESIRE_TIMEZONE` | `Asia/Tokyo` | desire-system and individual-kernel allostatic quiet hours (IANA name or `+09:00`) |
 | `DESIRE_NIGHT_START` / `DESIRE_NIGHT_END` | `0` / `5` | night band `[start, end)`; `end < start` wraps past midnight |
 | `DESIRE_DAWN_END` | `7` | dawn band `[NIGHT_END, DAWN_END)` |

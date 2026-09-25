@@ -7,9 +7,9 @@ All notable changes to embodied-claude are documented here.
 `suggest_followup` handed the model a ready-made line in one fixed dialect
 (#173, reported by fmtowns3), the same gap #146 closed for
 system-temperature-mcp: with TTS, an agent's own voice spoke someone else's
-way of talking. `RELATIONSHIP_TONE` now picks the phrasing (`kansai` by
-default, `neutral` for plain Japanese, unknown values fall back to
-`neutral`), setup passes it to the sociality server when set, and every
+way of talking. `RELATIONSHIP_TONE` now picks the phrasing (`neutral` by
+default, since the package serves any agent; `kansai` for the original
+lines; unknown values fall back to `neutral`), setup passes it to the sociality server when set, and every
 suggestion also carries a tone-independent `intent` and `topic`, which
 `compose_interaction_context` forwards, so the agent can phrase the
 follow-up in its own words.
