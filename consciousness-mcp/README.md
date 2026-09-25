@@ -63,7 +63,7 @@ frame and `EnactedField` in the same SQLite transaction; legacy
   desire-derived need relevance. Negative valence is capped and recovers.
 - Commit-time attention schema and grounded HOR records that feed the next
   competition and precision calculation.
-- Structured intention, normalized tool-input hash, predicted effects,
+- Structured intention, the tool input actually enacted, predicted effects,
   measured outcome mismatch, and ownership assessment.
 - Local quality geometry from recent transition history and stored memory-mcp
   E5 vectors for `memory:` / `episode:` refs, with deterministic fallback.
@@ -130,7 +130,7 @@ event-specific decisions inside `hookSpecificOutput`.
 |---|---|
 | `SessionStart` | recover stale ticks/actions, restore continuity, inject current field |
 | `UserPromptSubmit` | read sources directly, begin/compete/commit, inject compact field |
-| `PreToolUse` | deny no-field, stale-field, no-intention, hash mismatch, boundary denial, or second outward action |
+| `PreToolUse` | deny no-field, stale-field, no-intention, tool mismatch, boundary denial, or second outward action |
 | `PostToolUse` | persist outcome/mismatch/ownership and commit one tool-result microtick |
 | `PostToolUseFailure` | close the intention as failed and refresh the field |
 | `PostToolBatch` | combine read-only perception/recall results into one refresh |

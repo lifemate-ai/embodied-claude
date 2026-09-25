@@ -28,6 +28,7 @@ from individual_kernel_mcp.agency import (
     AgencyAssessment,
     AgencyStore,
     IntentionRecord,
+    hash_tool_input,
     is_external_tool,
 )
 from individual_kernel_mcp.allostasis import compose_valence, project_desires
@@ -1508,7 +1509,6 @@ class FieldRuntime:
         matches, reason, intention = self.agency.match_pending(
             owner_id=owner_id,
             tool_name=tool_name,
-            tool_input=tool_input,
         )
         if not matches or intention is None:
             hint = (
@@ -1534,9 +1534,9 @@ class FieldRuntime:
             # What the gate actually needs to prevent is acting on an intention
             # formed in a DIFFERENT lineage -- another session, another individual,
             # a continuity that was reset. Same-continuity supersession is just the
-            # clock moving. The byte-exact tool_input hash, checked above by
-            # `match_pending`, remains the guarantee that the act is the declared
-            # one. The outcome is deliberately left bound to the field the
+            # clock moving. The tool, checked above by `match_pending`, and the
+            # input recorded when the act is let through tie the act to the
+            # declared intention. The outcome is deliberately left bound to the field the
             # intention was formed under, because that is the causal truth.
             prior = self.fields.get(intention.field_id)
             if prior is None or prior.continuity_token != field.continuity_token:
@@ -1570,7 +1570,7 @@ class FieldRuntime:
         bottleneck = self.bottleneck.commit_action(
             tick_id=field.tick_id,
             action_ref=intention.action_id,
-            action_payload={"tool_name": tool_name, "tool_input_hash": intention.tool_input_hash},
+            action_payload={"tool_name": tool_name, "tool_input_hash": hash_tool_input(tool_input)},
             person_id=field.person_id,
         )
         if not bottleneck.ok:
@@ -1582,6 +1582,7 @@ class FieldRuntime:
                 action_id=intention.action_id,
                 deferred=True,
             )
+        self.agency.record_enacted_input(intention.action_id, tool_input)
         self.agency.mark_allowed(intention.action_id)
         if generative_enabled():
             try:
@@ -1590,7 +1591,7 @@ class FieldRuntime:
                 pass
         return ToolGateDecision(
             allow=True,
-            reason="field, intention, input hash, boundary, and bottleneck checks passed",
+            reason="field, intention, boundary, and bottleneck checks passed",
             external=True,
             field_id=field.field_id,
             action_id=intention.action_id,
@@ -1616,7 +1617,6 @@ class FieldRuntime:
             matches, _, intention = self.agency.match_pending(
                 owner_id=owner_id,
                 tool_name=tool_name,
-                tool_input=tool_input,
             )
             if not matches or intention is None:
                 return None, self.agency.assess_uncommanded_outcome(effect_match=0.5), None

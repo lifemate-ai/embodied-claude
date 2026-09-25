@@ -301,8 +301,18 @@ class AgencyStore:
         *,
         owner_id: str,
         tool_name: str,
-        tool_input: dict[str, Any],
     ) -> tuple[bool, str, IntentionRecord | None]:
+        """Find the pending intention an act by ``tool_name`` would enact.
+
+        Only the tool is compared. The input used to be matched against a hash
+        of what the caller declared, but the caller cannot see the input the
+        hook receives -- tool defaults and harness fields are added to it -- so
+        correct acts were refused over fields that change nothing; and the
+        agent that declares an act is the one that performs it, so an exact
+        match guarded against nothing but slips (#176). What the gate lets
+        through is recorded instead; see ``record_enacted_input``.
+        """
+
         pending = self.get_pending(owner_id)
         if pending is None:
             return False, "no matching pending intention", None
@@ -312,10 +322,30 @@ class AgencyStore:
                 f"intention tool mismatch: expected {pending.tool_name!r}",
                 pending,
             )
-        actual_hash = hash_tool_input(tool_input)
-        if pending.tool_input_hash != actual_hash:
-            return False, "intention tool input hash mismatch", pending
-        return True, "pending intention matches tool and normalized input", pending
+        return True, "pending intention matches tool", pending
+
+    def record_enacted_input(self, action_id: str, tool_input: dict[str, Any]) -> None:
+        """Store on the intention the input the gate actually let through.
+
+        The goal and predicted effects say what was meant; this says what was
+        done, which is what reafference (``commanded_delta_from_tool``) and any
+        later audit need.
+        """
+
+        self._db.execute(
+            """
+            UPDATE field_intentions
+            SET tool_input_hash = ?, normalized_tool_input_json = ?
+            WHERE action_id = ?
+            """,
+            (
+                hash_tool_input(tool_input),
+                json.dumps(
+                    normalize_tool_input(tool_input), ensure_ascii=False, sort_keys=True
+                ),
+                action_id,
+            ),
+        )
 
     def mark_allowed(self, action_id: str) -> IntentionRecord:
         self._db.execute(

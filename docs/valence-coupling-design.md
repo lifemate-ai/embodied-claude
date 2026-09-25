@@ -39,7 +39,7 @@ an engine constructed with no affect at all.
 **The boundary gate.** What is permitted must never depend on how it feels.
 `tests/test_gate_affect_independence.py` asserts that the same outward action
 receives an identical `ToolGateDecision` under the best and worst affect the
-runtime can represent, that a hash mismatch is refused under both, and that
+runtime can represent, that a tool mismatch is refused under both, and that
 read-only tools pass under both. A good mood must not excuse acting on something
 never declared.
 

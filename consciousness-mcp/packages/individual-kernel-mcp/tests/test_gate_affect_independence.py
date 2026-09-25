@@ -107,7 +107,7 @@ class TestGateIsAffectBlind:
             bad.external,
         )
 
-    def test_hash_mismatch_is_refused_regardless_of_affect(
+    def test_tool_mismatch_is_refused_regardless_of_affect(
         self, social_db: SocialDB, tmp_path: Path
     ) -> None:
         """A good mood must not excuse acting on something never declared."""
@@ -121,8 +121,12 @@ class TestGateIsAffectBlind:
             producer.recover_stale_runtime(older_than_seconds=0.0)
             runtime.propose_action(_proposal(field))
             decision = runtime.gate_tool(
-                tool_name="Write",
-                tool_input={"file_path": "/tmp/not-what-was-declared.txt"},
+                tool_name="Edit",
+                tool_input={
+                    "file_path": "/tmp/not-what-was-declared.txt",
+                    "old_string": "a",
+                    "new_string": "b",
+                },
             )
             assert decision.allow is False
 

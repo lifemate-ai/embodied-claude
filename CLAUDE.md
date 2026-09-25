@@ -272,7 +272,7 @@ file/network side effect は committed field と matching intention がない限
 | `compose_introspection_report` | window_hours?, owner_id? | 最近の HOR + attention reflection + counterfactual 件数を合わせた IntrospectionReport を作る。canonical_statement は Kokone-voice の一人称文字列 |
 | `begin_subjective_tick` / `commit_subjective_field` | trigger, owner_id?, ... / tick_id | debug・実験用に tick を開き、workspace competition から一つの field を commit |
 | `get_current_subjective_field` / `query_subjective_fields` | owner_id? / filters... | 現在 field と履歴を source mode 付きで読む |
-| `propose_field_action` | field_id, tool_name, tool_input, predicted_effects, goal, confidence | exact tool/input hash と予測効果を intention として登録 |
+| `propose_field_action` | field_id, tool_name, predicted_effects, goal, tool_input?, confidence | ツール名と予測効果を intention として登録（ゲートはツール名で照合し、実際に通した入力を記録する） |
 | `get_pending_intention` / `close_field_action` | owner_id? / action_id, actual_result... | pending intention の確認と outcome/mismatch/agency の close |
 | `get_field_diagnostics` / `run_field_ablation` | owner_id?, window? / kind, fixture?, seed? | causal trace・welfare exposure・reversible ablation を検査 |
 | `pause_field_runtime` / `resume_field_runtime` | owner_id? | field runtime の停止・再開 |
@@ -288,8 +288,8 @@ file/network side effect は committed field と matching intention がない限
    `compose_interaction_context_tool` → `plan_response_tool`。
    plan の `primary_move` が `stay_silent` / `defer` なら黙って応答しない。`voice.speak=false`
    を勝手に覆さへん。`must_avoid` と `must_include` を必ず守る。
-3. 外向き tool の直前に `propose_field_action` で exact input と予測を一つ登録する。
-   `PreToolUse` の field / intention / hash / boundary / bottleneck 判定を迂回しない。
+3. 外向き tool の直前に `propose_field_action` でツール名と予測を一つ登録する。
+   `PreToolUse` の field / intention / boundary / bottleneck 判定を迂回しない。
 4. `PostToolUse` / `PostToolUseFailure` で actual outcome と prediction mismatch を閉じ、
    tool-result microtick が commit されてから次の外向き行為へ進む。
 5. 応答を出した直後: `record_agent_experience`（kind 適宜）。promise があれば `create_commitment`。

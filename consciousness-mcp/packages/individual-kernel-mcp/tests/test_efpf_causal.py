@@ -665,8 +665,12 @@ def test_hook_gate_decisions_cover_no_field_mismatch_and_valid(
     assert no_intention["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     runtime.propose_action(_proposal(field))
+    # The gate matches the declared tool, not its input (#176).
     mismatch = pre_tool_use(
-        {"tool_name": "mcp__tts__say", "tool_input": {"text": "different"}},
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/tmp/efpf-other.txt", "content": "different"},
+        },
         runtime,
     )
     valid = pre_tool_use(
