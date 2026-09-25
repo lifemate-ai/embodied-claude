@@ -214,8 +214,17 @@ def _reading(celsius: float) -> list[dict]:
     return [{"source": "test", "name": "CPU", "temperature_celsius": celsius}]
 
 
-def test_default_tone_is_the_original_kansai_phrase(monkeypatch) -> None:
+def test_default_tone_is_neutral(monkeypatch) -> None:
+    """The package serves any agent, so no dialect is assumed (#173)."""
     monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+
+    text = server.interpret_temperature(_reading(52.0))
+
+    assert text.splitlines()[0] == "快適です。ちょうどよい状態です。"
+
+
+def test_kansai_tone_is_the_original_phrase(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "kansai")
 
     text = server.interpret_temperature(_reading(52.0))
 
@@ -292,8 +301,8 @@ def _freeze_now(monkeypatch, utc_tuple) -> None:
     monkeypatch.setattr(server, "datetime", _FrozenDatetime)
 
 
-def test_current_time_default_tone_and_timezone(monkeypatch) -> None:
-    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
+def test_current_time_kansai_tone_and_default_timezone(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "kansai")
     monkeypatch.delenv("SYSTEM_TEMPERATURE_TIMEZONE", raising=False)
     _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))  # 07:30 JST on the 15th
 
@@ -304,7 +313,8 @@ def test_current_time_default_tone_and_timezone(monkeypatch) -> None:
 
 
 def test_current_time_neutral_tone(monkeypatch) -> None:
-    monkeypatch.setenv("SYSTEM_TEMPERATURE_TONE", "neutral")
+    # Unset is neutral too (#173).
+    monkeypatch.delenv("SYSTEM_TEMPERATURE_TONE", raising=False)
     monkeypatch.delenv("SYSTEM_TEMPERATURE_TIMEZONE", raising=False)
     _freeze_now(monkeypatch, (2026, 8, 14, 22, 30, 0))
 

@@ -12,7 +12,9 @@ default, since the package serves any agent; `kansai` for the original
 lines; unknown values fall back to `neutral`), setup passes it to the sociality server when set, and every
 suggestion also carries a tone-independent `intent` and `topic`, which
 `compose_interaction_context` forwards, so the agent can phrase the
-follow-up in its own words.
+follow-up in its own words. For the same reason `SYSTEM_TEMPERATURE_TONE`
+(#146) now defaults to `neutral` as well; set it to `kansai` to keep the
+original phrases.
 
 The action gate stopped comparing tool inputs (#176). An intention was
 matched against a hash of the whole declared `tool_input`, but the hook

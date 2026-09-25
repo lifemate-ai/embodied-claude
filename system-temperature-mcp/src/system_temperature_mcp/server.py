@@ -109,17 +109,17 @@ def get_hwmon_temperatures() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Tone tables
 #
-# The phrases these tools return are the agent's body talking, and by default
-# they talk in Kansai dialect because that is the voice of the agent this
-# project grew up with. An agent running with a different persona would hear
-# only its thermometer and its clock speaking in someone else's voice, so the
-# tone is selectable with SYSTEM_TEMPERATURE_TONE. Both tables are keyed by the
+# The phrases these tools return are the agent's body talking. An agent would
+# hear its thermometer and its clock speaking in someone else's voice if they
+# assumed one, so they default to plain Japanese (this package serves any
+# agent) and the tone is selectable with SYSTEM_TEMPERATURE_TONE; the Kansai
+# phrases of the agent this project grew up with remain as `kansai`. Both tables are keyed by the
 # same band names, so adding a tone is a one-table job; the structured line
 # (``level=... max_celsius=...`` / ``iso=... part_of_day=...``) is appended
 # regardless of tone so the agent can always phrase the state itself.
 # ---------------------------------------------------------------------------
 
-DEFAULT_TONE = "kansai"
+DEFAULT_TONE = "neutral"
 
 TEMPERATURE_PHRASES: dict[str, dict[str, str]] = {
     "kansai": {
@@ -173,9 +173,8 @@ TIME_PHRASES: dict[str, dict[str, str]] = {
 def _tone() -> str:
     """Return the configured tone, falling back to ``neutral`` for unknown values.
 
-    Unset means the default (``kansai``). An operator who set the variable at
-    all is not the default deployment, so a typo lands on the neutral table
-    rather than on someone else's voice -- and never on an exception.
+    Unset means the default (``neutral``). A typo also lands on the neutral
+    table rather than on someone else's voice -- and never on an exception.
     """
     raw = os.environ.get("SYSTEM_TEMPERATURE_TONE", "").strip().lower()
     if not raw:
