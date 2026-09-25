@@ -86,6 +86,8 @@ class CommitmentSummary(BaseModel):
 class FollowupSuggestion(BaseModel):
     text: str
     reason: str | None = None
+    intent: str | None = None
+    topic: str | None = None
 
 
 class RelevantMemoryRef(BaseModel):

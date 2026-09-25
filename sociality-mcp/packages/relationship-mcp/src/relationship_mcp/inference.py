@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from social_core import clamp01
 
 STRESS_KEYWORDS = ("疲れ", "tired", "stress", "しんど", "overwhelmed", "会議多")
@@ -60,21 +62,64 @@ def summarize_relationship(*, role: str | None, recent_stress: float, open_loop_
     return f"{role_text.title()} relationship with {continuity}; {stress_text}."
 
 
-def suggest_followup_text(context: str, latest_stress_text: str | None) -> tuple[str, str]:
-    """Suggest a contextual follow-up without dumping transcripts."""
+# The follow-up is handed to the model as a ready-made line, so once TTS is
+# involved its phrasing is spoken in the agent's own voice. It used to be one
+# fixed dialect for every deployment (#173, the gap #146 closed for
+# system-temperature-mcp). RELATIONSHIP_TONE picks the phrasing. The default
+# is neutral because this package serves any agent; `kansai` keeps the
+# original lines. Whatever the tone, each suggestion also
+# carries its intent and topic, so a caller can phrase it in its own words.
+DEFAULT_TONE = "neutral"
 
+STRESS_CHECK_IN = "check_in_after_stress"
+EVENING_CHECK_IN = "evening_check_in"
+CONTINUE_OPEN_THREAD = "continue_open_thread"
+
+FOLLOWUP_PHRASES: dict[str, dict[str, str]] = {
+    "kansai": {
+        STRESS_CHECK_IN: "{topic}って言うてたけど、そのあと少しは落ち着いた？",
+        EVENING_CHECK_IN: "今日はだいぶ詰まってそうやったけど、少しは一息つけた？",
+        CONTINUE_OPEN_THREAD: "いま気になってること、続きある？",
+    },
+    "neutral": {
+        STRESS_CHECK_IN: "{topic}と言っていたけれど、そのあと少しは落ち着いた？",
+        EVENING_CHECK_IN: "今日はだいぶ忙しそうだったけれど、少しは一息つけた？",
+        CONTINUE_OPEN_THREAD: "いま気になっていること、続きはある？",
+    },
+}
+
+FOLLOWUP_REASONS = {
+    STRESS_CHECK_IN: "References a same-day stress disclosure without overreaching.",
+    EVENING_CHECK_IN: "Uses the active context without inventing details.",
+    CONTINUE_OPEN_THREAD: "Keeps continuity while staying generic.",
+}
+
+
+def _tone() -> str:
+    """The phrasing tone, read per call; unknown values fall back to neutral."""
+
+    raw = os.environ.get("RELATIONSHIP_TONE", "").strip().lower()
+    if not raw:
+        return DEFAULT_TONE
+    return raw if raw in FOLLOWUP_PHRASES else "neutral"
+
+
+def suggest_followup_text(
+    context: str, latest_stress_text: str | None
+) -> tuple[str, str, str, str | None]:
+    """Suggest a contextual follow-up without dumping transcripts.
+
+    Returns ``(text, reason, intent, topic)``. Only ``text`` depends on
+    RELATIONSHIP_TONE; the rest describe the same suggestion without a voice.
+    """
+
+    topic: str | None = None
     if latest_stress_text:
         topic = latest_stress_text.strip("。.!?？ ")[:18]
-        return (
-            f"{topic}って言うてたけど、そのあと少しは落ち着いた？",
-            "References a same-day stress disclosure without overreaching.",
-        )
-    if context == "evening_checkin":
-        return (
-            "今日はだいぶ詰まってそうやったけど、少しは一息つけた？",
-            "Uses the active context without inventing details.",
-        )
-    return (
-        "いま気になってること、続きある？",
-        "Keeps continuity while staying generic.",
-    )
+        intent = STRESS_CHECK_IN
+    elif context == "evening_checkin":
+        intent = EVENING_CHECK_IN
+    else:
+        intent = CONTINUE_OPEN_THREAD
+    text = FOLLOWUP_PHRASES[_tone()][intent].format(topic=topic)
+    return text, FOLLOWUP_REASONS[intent], intent, topic

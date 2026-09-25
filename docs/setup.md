@@ -306,8 +306,8 @@ uses the LibreHardwareMonitor bridge documented in
 [`system-temperature-mcp/README_WinNative.md`](../system-temperature-mcp/README_WinNative.md).
 WSL2 normally cannot see Windows host temperature sensors.
 
-The tool replies are phrased in Kansai dialect by default. Set
-`SYSTEM_TEMPERATURE_TONE=neutral` for plain Japanese and
+The tool replies are phrased in plain Japanese by default. Set
+`SYSTEM_TEMPERATURE_TONE=kansai` for the original Kansai phrasing and
 `SYSTEM_TEMPERATURE_TIMEZONE` (IANA name, default `Asia/Tokyo`) for the clock;
 see [Persona and companion](#persona-and-companion) below.
 
@@ -330,8 +330,9 @@ the generated `.mcp.json` when they are set in the environment it runs under.
 | `COMPANION_ID` | `companion` | sociality / interaction-orchestrator (`person_id` default and the primary-companion response contract), individual-kernel hooks |
 | `SELF_NAME` | `自分` (desire-system) / `This agent` (self-narrative summary) | desire-system `identity_coherence`, sociality `get_self_summary` |
 | `SELF_PRONOUN` | `自分` | desire-system `identity_coherence` |
-| `SYSTEM_TEMPERATURE_TONE` | `kansai` | system-temperature phrasing (`kansai` or `neutral`) |
+| `SYSTEM_TEMPERATURE_TONE` | `neutral` | system-temperature phrasing (`neutral` or `kansai`) |
 | `SYSTEM_TEMPERATURE_TIMEZONE` | `Asia/Tokyo` | system-temperature `get_current_time` |
+| `RELATIONSHIP_TONE` | `neutral` | sociality `suggest_followup` phrasing (`neutral` or `kansai`); `intent` / `topic` are returned whatever the tone |
 | `DESIRE_TIMEZONE` | `Asia/Tokyo` | desire-system and individual-kernel allostatic quiet hours (IANA name or `+09:00`) |
 | `DESIRE_NIGHT_START` / `DESIRE_NIGHT_END` | `0` / `5` | night band `[start, end)`; `end < start` wraps past midnight |
 | `DESIRE_DAWN_END` | `7` | dawn band `[NIGHT_END, DAWN_END)` |

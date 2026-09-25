@@ -91,7 +91,12 @@ def list_open_loops(person_id: str, limit: int = 10) -> list[dict[str, Any]]:
 
 @mcp.tool()
 def suggest_followup(person_id: str, context: str) -> dict[str, Any]:
-    """Suggest a context-aware follow-up."""
+    """Suggest a context-aware follow-up.
+
+    Each suggestion's ``text`` is a ready-made line in the RELATIONSHIP_TONE
+    phrasing. ``intent`` and ``topic`` carry the same suggestion without a
+    voice, so you can phrase it in your own words instead.
+    """
 
     suggestions = _store().suggest_followup(person_id=person_id, context=context)
     return {"suggestions": [item.model_dump(mode="json") for item in suggestions]}

@@ -37,6 +37,10 @@ class SuggestionRecord(BaseModel):
 
     text: str
     reason: str
+    # The tone-independent parts of the suggestion (#173): what the line is
+    # for, and the disclosure it refers to, if any.
+    intent: str = "continue_open_thread"
+    topic: str | None = None
 
 
 class PreferenceRecord(BaseModel):

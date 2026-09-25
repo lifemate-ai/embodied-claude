@@ -1,5 +1,6 @@
 """Tests for relationship abstractions."""
 
+from relationship_mcp.inference import suggest_followup_text
 from relationship_mcp.store import RelationshipStore
 
 
@@ -103,3 +104,56 @@ def test_person_model_stays_compact_and_followup_uses_same_day_disclosure(store)
     assert boundary_pref is not None
     assert boundary_pref.evidence  # evidence list must not be empty
     assert "会議多くて疲れた" in suggestions[0].text
+
+
+STRESS = "今日は会議多くて疲れた"
+BRANCHES = (("chat", STRESS), ("evening_checkin", None), ("chat", None))
+
+
+def _suggestions(monkeypatch, tone):
+    if tone is None:
+        monkeypatch.delenv("RELATIONSHIP_TONE", raising=False)
+    else:
+        monkeypatch.setenv("RELATIONSHIP_TONE", tone)
+    return [suggest_followup_text(context, stress) for context, stress in BRANCHES]
+
+
+def test_default_tone_is_neutral(monkeypatch):
+    """The package serves any agent, so no dialect is assumed (#173)."""
+    assert _suggestions(monkeypatch, None) == _suggestions(monkeypatch, "neutral")
+
+
+def test_kansai_tone_keeps_the_original_lines(monkeypatch):
+    texts = [text for text, *_ in _suggestions(monkeypatch, "kansai")]
+
+    assert texts == [
+        "今日は会議多くて疲れたって言うてたけど、そのあと少しは落ち着いた？",
+        "今日はだいぶ詰まってそうやったけど、少しは一息つけた？",
+        "いま気になってること、続きある？",
+    ]
+
+
+def test_neutral_tone_has_no_dialect(monkeypatch):
+    """A voice other than the original author's must not speak its dialect (#173)."""
+    for text, *_ in _suggestions(monkeypatch, "neutral"):
+        for marker in ("言うてた", "やった", "なってること"):
+            assert marker not in text, text
+    assert _suggestions(monkeypatch, "neutral")[0][0].startswith(STRESS)
+
+
+def test_unknown_tone_falls_back_to_neutral(monkeypatch):
+    assert _suggestions(monkeypatch, "klingon") == _suggestions(monkeypatch, "neutral")
+
+
+def test_intent_and_topic_do_not_depend_on_the_tone(monkeypatch):
+    expected = [
+        ("check_in_after_stress", STRESS),
+        ("evening_check_in", None),
+        ("continue_open_thread", None),
+    ]
+    for tone in ("kansai", "neutral"):
+        suggestions = _suggestions(monkeypatch, tone)
+        assert [(intent, topic) for _, _, intent, topic in suggestions] == expected
+        assert [reason for _, reason, _, _ in suggestions] == [
+            reason for _, reason, _, _ in _suggestions(monkeypatch, "kansai")
+        ]
