@@ -584,19 +584,23 @@ def query_subjective_fields(
 def propose_field_action(
     field_id: str,
     tool_name: str,
-    tool_input: dict[str, Any],
     predicted_effects: dict[str, Any],
     goal: str,
+    tool_input: dict[str, Any] | None = None,
     confidence: float = 0.6,
     expected_latency_ms: int | None = None,
     owner_id: str = "self",
 ) -> dict[str, Any]:
-    """Register one structured intention and efference copy for a field."""
+    """Register one structured intention and efference copy for a field.
+
+    The gate matches the next outward act on ``tool_name`` and records the
+    input that act actually carries, so ``tool_input`` is optional (#176).
+    """
 
     proposal = ActionProposal(
         field_id=field_id,
         tool_name=tool_name,
-        tool_input=tool_input,
+        tool_input=tool_input or {},
         predicted_effects=PredictedEffects.model_validate(predicted_effects),
         goal=goal,
         confidence=confidence,

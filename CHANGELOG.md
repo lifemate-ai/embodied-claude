@@ -4,6 +4,15 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+The action gate stopped comparing tool inputs (#176). An intention was
+matched against a hash of the whole declared `tool_input`, but the hook
+receives tool defaults and harness fields the caller never sees, so correct
+acts were refused over a `timeout` or a default `replace_all`; and since the
+agent that declares an act also performs it, the exact match guarded against
+nothing but slips. The gate now matches the tool name, records the input it
+actually lets through on the intention, and `propose_field_action` takes
+`tool_input` as optional.
+
 Memory recall into the individual kernel never delivered a memory (#174).
 Each tick asked memory-mcp's HTTP recall port for candidates; the answers
 carried no memory id, so every one was dropped at ingest while the field's

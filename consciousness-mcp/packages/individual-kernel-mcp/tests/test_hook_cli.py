@@ -171,7 +171,7 @@ def test_pre_tool_stdin_json_covers_no_field_mismatch_valid_and_second(
         "pre-tool-use",
         {
             "hook_event_name": "PreToolUse",
-            "tool_name": tool_name,
+            "tool_name": "Edit",
             "tool_input": {**tool_input, "content": "different"},
             "tool_use_id": "write-2",
         },
@@ -198,7 +198,7 @@ def test_pre_tool_stdin_json_covers_no_field_mismatch_valid_and_second(
     )
 
     assert mismatch["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "hash mismatch" in mismatch["hookSpecificOutput"][
+    assert "tool mismatch" in mismatch["hookSpecificOutput"][
         "permissionDecisionReason"
     ]
     assert valid["hookSpecificOutput"]["permissionDecision"] == "allow", valid
@@ -672,7 +672,7 @@ def _runtime(tmp_path: Path) -> tuple[SocialDB, TickProducer, FieldRuntime]:
     return db, producer, FieldRuntime(db, producer=producer)
 
 
-def _propose(tmp_path: Path, tool_input: dict) -> str:
+def _propose(tmp_path: Path, tool_input: dict, tool_name: str = "Write") -> str:
     db, producer, runtime = _runtime(tmp_path)
     field = producer.get_current_field()
     assert field is not None
@@ -680,7 +680,7 @@ def _propose(tmp_path: Path, tool_input: dict) -> str:
         return runtime.propose_action(
             ActionProposal(
                 field_id=field.field_id,
-                tool_name="Write",
+                tool_name=tool_name,
                 tool_input=tool_input,
                 goal="write fixture",
             )
@@ -690,7 +690,7 @@ def _propose(tmp_path: Path, tool_input: dict) -> str:
 
 
 def test_reproposing_after_a_mismatch_replaces_the_stale_intention(tmp_path) -> None:
-    """A declared input that never matches must not wedge the next proposal (#165)."""
+    """A declared act that does not match must not wedge the next proposal (#165)."""
     _run_hook(
         tmp_path,
         "user-prompt-submit",
@@ -711,10 +711,10 @@ def test_reproposing_after_a_mismatch_replaces_the_stale_intention(tmp_path) -> 
             },
         )["hookSpecificOutput"]
 
-    stale = _propose(tmp_path, declared)
+    stale = _propose(tmp_path, declared, tool_name="Edit")
     mismatch = pre_tool_use(actual, "w-1")
     assert mismatch["permissionDecision"] == "deny"
-    assert "hash mismatch" in mismatch["permissionDecisionReason"]
+    assert "tool mismatch" in mismatch["permissionDecisionReason"]
     assert stale in mismatch["permissionDecisionReason"]
 
     _propose(tmp_path, actual)
@@ -730,3 +730,32 @@ def test_reproposing_after_a_mismatch_replaces_the_stale_intention(tmp_path) -> 
     # closed; a new proposal must not quietly replace that one.
     with pytest.raises(ValueError, match="in flight"):
         _propose(tmp_path, declared)
+
+
+def test_the_gate_matches_the_tool_and_records_what_ran(tmp_path) -> None:
+    """The declared input is not compared; the enacted one is recorded (#176)."""
+    _run_hook(
+        tmp_path,
+        "user-prompt-submit",
+        {"session_id": "s", "hook_event_name": "UserPromptSubmit", "prompt": "write"},
+    )
+    action_id = _propose(tmp_path, {"file_path": "/tmp/efpf-fixture", "content": "declared"})
+    enacted = {"file_path": "/tmp/efpf-fixture", "content": "enacted"}
+
+    decision = _run_hook(
+        tmp_path,
+        "pre-tool-use",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": enacted,
+            "tool_use_id": "w-1",
+        },
+    )["hookSpecificOutput"]
+
+    assert decision["permissionDecision"] == "allow", decision
+    db, _producer, runtime = _runtime(tmp_path)
+    record = runtime.agency.get(action_id)
+    db.close()
+    assert record is not None
+    assert record.normalized_tool_input == enacted

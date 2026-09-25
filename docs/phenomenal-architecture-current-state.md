@@ -18,7 +18,8 @@ score.
   competition over typed candidates (desire, event, interoception, memory,
   previous field, scene, social, attention-schema/HOR self-model).
 - Explicit intention/outcome loop: `propose_field_action` with typed predicted
-  effects, exact tool-input hash gating in `PreToolUse`, outcome closure with a
+  effects, tool-name gating in `PreToolUse` that records the enacted input,
+  outcome closure with a
   five-channel mismatch vector and ownership scoring.
 - Counterfactual ledger, HOR records, attention schemas, quality signatures,
   reversible field ablations, and a deterministic fail-closed boundary gate

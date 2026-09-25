@@ -17,7 +17,7 @@ tools are the inspection, explicit-intention, and experiment surface:
 | `commit_subjective_field` | compete and atomically commit one field |
 | `get_current_subjective_field` | read the current compact and typed field |
 | `get_subjective_field` / `query_subjective_fields` | inspect field history |
-| `propose_field_action` | register exact tool/hash, goal, and predicted effects |
+| `propose_field_action` | register the tool, goal, and predicted effects |
 | `get_pending_intention` | inspect the one pending intention |
 | `close_field_action` | record result, mismatch, ownership, and next microtick |
 | `close_subjective_tick` | close a committed episode |
@@ -34,8 +34,9 @@ committed field; without one it returns `unknown / no committed field`.
 For an outward action, the caller must:
 
 1. Have one current `COMMITTED` field.
-2. Call `propose_field_action` with the exact MCP tool name and input.
-3. Pass `PreToolUse`, which matches the normalized input hash and boundary.
+2. Call `propose_field_action` with the exact MCP tool name (input optional).
+3. Pass `PreToolUse`, which matches the tool name and boundary and records
+   the input it lets through.
 4. Execute no more than one outward action for that field/tick.
 5. Let `PostToolUse` or `PostToolUseFailure` close the intention.
 6. Use the resulting tool-result microtick before another outward action.
@@ -84,9 +85,10 @@ printf '%s\n' \
 ```
 
 Use the `get_current_subjective_field` and `propose_field_action` MCP tools,
-then replay the same `PreToolUse` JSON. It is allowed only when the tool name
-and normalized input hash exactly match. A different text is denied, and a
-second call for the same tick is deferred by `ActionBottleneck`.
+then replay the same `PreToolUse` JSON. It is allowed when the tool name
+matches, and the input it carried is recorded on the intention. A different
+tool is denied, and a second call for the same tick is deferred by
+`ActionBottleneck`.
 
 Close the loop with a real `PostToolUse` payload:
 
