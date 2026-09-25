@@ -94,7 +94,19 @@ def test_setup_help_lists_stable_profile_options() -> None:
     assert "--dry-run" in result.stdout
 
 
+def _file_state(path: Path) -> tuple[bytes, int] | None:
+    if not path.exists():
+        return None
+    return path.read_bytes(), path.stat().st_mtime_ns
+
+
 def test_noninteractive_core_dry_run_lists_only_core_servers() -> None:
+    # .mcp.json is gitignored and every configured checkout has one, so
+    # "absent afterwards" only held on a clean clone and could not tell a
+    # dry run that rewrote an existing config (#167). Compare before/after.
+    config_path = ROOT / ".mcp.json"
+    before = _file_state(config_path)
+
     result = _run_setup_cli(
         "--profile",
         "core",
@@ -105,7 +117,7 @@ def test_noninteractive_core_dry_run_lists_only_core_servers() -> None:
     assert result.returncode == 0, result.stderr
     config = json.loads(result.stdout)
     assert tuple(config["mcpServers"]) == CORE_SERVER_NAMES
-    assert not (ROOT / ".mcp.json").exists()
+    assert _file_state(config_path) == before
 
 
 def test_optional_dry_run_redacts_secrets() -> None:
