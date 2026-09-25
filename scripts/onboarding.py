@@ -123,11 +123,12 @@ ATLASCLOUD_OPTIONAL_ENVIRONMENT = (
     "ATLASCLOUD_POLL_INTERVAL",
     "ATLASCLOUD_TIMEOUT",
 )
-# Both have code defaults (~/.claude/sociality/social.db and 18900). A value in
+# Both have code defaults (~/.claude/sociality/social.db and
+# ~/.claude/memories/memory.db). A value in
 # a server's env block overrides the inherited environment, so writing the
 # default here would pin it and silently defeat a later SOCIAL_DB_PATH=... in
 # the parent process. They are emitted only when the operator has set them.
-INDIVIDUAL_KERNEL_OPTIONAL_ENVIRONMENT = ("SOCIAL_DB_PATH", "MEMORY_HTTP_PORT")
+INDIVIDUAL_KERNEL_OPTIONAL_ENVIRONMENT = ("SOCIAL_DB_PATH", "MEMORY_DB_PATH")
 X_REQUIRED_ENVIRONMENT = (
     "XAI_API_KEY",
     "X_CONSUMER_KEY",
@@ -304,10 +305,10 @@ def build_mcp_config(
         environment, (), QUIET_HOURS_OPTIONAL_ENVIRONMENT
     )
     # Operator overrides are pinned into every server that reads them, so the
-    # readers cannot disagree about which database or port is meant.
+    # readers cannot disagree about which database is meant.
     memory_environment = {"MEMORY_EMBEDDING_MODEL": embedding_model}
     memory_environment.update(
-        _selected_environment(environment, (), ("MEMORY_HTTP_PORT",))
+        _selected_environment(environment, (), ("MEMORY_DB_PATH",))
     )
     memory_environment.update(persona_environment)
     servers: dict[str, dict[str, Any]] = {
@@ -317,7 +318,9 @@ def build_mcp_config(
         ),
         "sociality": SERVER_SPECS["sociality"].command(
             {
-                **_selected_environment(environment, (), ("SOCIAL_DB_PATH",)),
+                **_selected_environment(
+                    environment, (), ("SOCIAL_DB_PATH", "MEMORY_DB_PATH")
+                ),
                 **persona_environment,
             }
         ),

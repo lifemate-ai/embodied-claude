@@ -414,9 +414,9 @@ wiring a new server in.
 
 A value in a server's `env` block wins over whatever the parent process
 exported, so only put values there that you want pinned. Setup writes
-`SOCIAL_DB_PATH` and `MEMORY_HTTP_PORT` only when they are set in the
+`SOCIAL_DB_PATH` and `MEMORY_DB_PATH` only when they are set in the
 environment it runs in; otherwise the servers fall back to their code defaults
-(`~/.claude/sociality/social.db` and `18900`) and a later
+(`~/.claude/sociality/social.db` and `~/.claude/memories/memory.db`) and a later
 `SOCIAL_DB_PATH=... claude` still takes effect. Copying the defaults into
 `.mcp.json` by hand would silently pin them.
 
@@ -495,8 +495,7 @@ Statuses:
 | `[error]` | Core or a selected configuration cannot start correctly |
 
 Static doctor is read-only. It does not create state directories, start MCP
-servers, or connect to hardware. Its one network action is a TCP connect to
-the memory HTTP recall port on localhost. It verifies:
+servers, connect to hardware, or use the network. It verifies:
 
 - Python 3.13
 - current `uv.lock`
@@ -507,11 +506,11 @@ the memory HTTP recall port on localhost. It verifies:
 - writable existing state parents
 - optional `ffmpeg`, `mpv`, or `ffplay`
 - every `.mcp.json` server is enabled for headless runs (see above)
-- memory HTTP recall port (`MEMORY_HTTP_PORT`, default `18900`) is listening.
-  `individual-kernel` pulls memory candidates into each tick over it and
-  commits the field without them when nothing answers. memory-mcp binds the
-  port when Claude Code starts it, so this is a warning until the first
-  session is running.
+- the memory store (`MEMORY_DB_PATH`, default `~/.claude/memories/memory.db`)
+  is readable. `individual-kernel` reads memory candidates for each tick
+  straight from it and commits the field without them when it cannot.
+  memory-mcp creates the file the first time it starts, so this is a warning
+  until then.
 - `SOUL.md`, `TODO.md`, `ROUTINES.md` for the autonomous prompt (a warning
   once `autonomous-action.sh` is installed; see
   [`docs/autonomous-files.md`](autonomous-files.md))

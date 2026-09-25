@@ -67,13 +67,18 @@ class OrchestratorMemoryAdapter(Protocol):
         ...
 
 
-def _default_sqlite_path() -> Path:
-    return Path(
-        os.getenv(
-            "MEMORY_DB_FILE",
-            str(Path.home() / ".claude" / "memories" / "memory.db"),
-        )
-    ).expanduser()
+def memory_db_path() -> Path:
+    """Where memory-mcp keeps its SQLite store.
+
+    ``MEMORY_DB_PATH`` is memory-mcp's own variable. This adapter used to read
+    ``MEMORY_DB_FILE`` instead, so a store moved for memory-mcp was missed
+    here (#174); the old name is still honoured when the new one is unset.
+    """
+
+    raw = os.getenv("MEMORY_DB_PATH") or os.getenv("MEMORY_DB_FILE")
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".claude" / "memories" / "memory.db"
 
 
 def _extract_keywords(text: str, *, max_keywords: int = 6) -> list[str]:
@@ -258,7 +263,7 @@ def make_default_adapter() -> OrchestratorMemoryAdapter:
     """Choose an adapter based on env + filesystem hints."""
 
     backend = os.getenv("ORCHESTRATOR_MEMORY_BACKEND", "auto").lower()
-    sqlite_path = _default_sqlite_path()
+    sqlite_path = memory_db_path()
     if backend in {"null", "none", "off"}:
         return NullMemoryAdapter()
     if backend == "sqlite":

@@ -10,7 +10,7 @@ import os
 import platform
 import re
 import shutil
-import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -462,7 +462,6 @@ def check_optional_dependencies(
 
 HEADLESS_SETTINGS = Path(".claude") / "settings.local.json"
 AUTONOMOUS_FILES = ("SOUL.md", "TODO.md", "ROUTINES.md")
-DEFAULT_MEMORY_HTTP_PORT = 18900
 
 
 def check_headless_approval(
@@ -527,59 +526,47 @@ def check_headless_approval(
     return results
 
 
-def _port_is_listening(host: str, port: int) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=0.5):
-            return True
-    except OSError:
-        return False
+def check_memory_db(environment: Mapping[str, str] | None = None) -> CheckResult:
+    """Check that the memory store individual-kernel recalls from is readable.
 
-
-def check_memory_http_port(
-    environment: Mapping[str, str] | None = None,
-    *,
-    is_listening: Callable[[str, int], bool] = _port_is_listening,
-) -> CheckResult:
-    """Check that memory-mcp's HTTP recall endpoint is reachable.
-
-    individual-kernel pulls memory candidates into each tick over this port and
-    commits the field without them when nothing answers, so a closed port means
-    every heartbeat runs on no memory while looking normal (#140).
+    Each tick reads recall candidates straight from memory-mcp's SQLite file
+    and commits the field without them when it cannot, so an unreadable store
+    means every heartbeat runs on no memory while looking normal (#140, #174).
+    The file is opened read-only; doctor never creates or changes it.
     """
 
     source = os.environ if environment is None else environment
-    raw = str(source.get("MEMORY_HTTP_PORT", DEFAULT_MEMORY_HTTP_PORT)).strip()
+    raw = source.get("MEMORY_DB_PATH") or source.get("MEMORY_DB_FILE")
+    path = (
+        Path(raw).expanduser()
+        if raw
+        else Path.home() / ".claude" / "memories" / "memory.db"
+    )
+    if not path.is_file():
+        return CheckResult(
+            CheckStatus.WARN,
+            "memory:store",
+            f"{path} does not exist yet; individual-kernel ticks will carry no "
+            "memory candidates",
+            "Expected until memory-mcp has started once (it creates the store). "
+            "If it has, check MEMORY_DB_PATH matches in .mcp.json and the environment.",
+        )
     try:
-        port = int(raw)
-    except ValueError:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            (count,) = connection.execute("SELECT COUNT(*) FROM memories").fetchone()
+        finally:
+            connection.close()
+    except sqlite3.Error as error:
         return CheckResult(
-            CheckStatus.WARN,
-            "memory:http-recall",
-            f"MEMORY_HTTP_PORT is not a number: {raw!r}",
-            "Unset it or set it to the port memory-mcp binds (default 18900).",
-        )
-    if port == 0:
-        return CheckResult(
-            CheckStatus.WARN,
-            "memory:http-recall",
-            "MEMORY_HTTP_PORT=0 disables HTTP recall; individual-kernel ticks "
-            "will carry no memory candidates",
-            "Unset MEMORY_HTTP_PORT unless this is intended.",
-        )
-    if is_listening("127.0.0.1", port):
-        return CheckResult(
-            CheckStatus.OK,
-            "memory:http-recall",
-            f"memory HTTP recall port {port} is listening",
+            CheckStatus.ERROR,
+            "memory:store",
+            f"{path} is not a readable memory store: {error}",
+            "Check that MEMORY_DB_PATH points at memory-mcp's store. Do not delete "
+            "the file; it holds every memory.",
         )
     return CheckResult(
-        CheckStatus.WARN,
-        "memory:http-recall",
-        f"memory HTTP recall port {port} is not listening; individual-kernel "
-        "ticks will carry no memory candidates",
-        "Expected until memory-mcp is running (it binds the port at startup). "
-        "If it is running, check MEMORY_HTTP_PORT matches in .mcp.json and the "
-        "environment.",
+        CheckStatus.OK, "memory:store", f"{path} is readable ({count} memories)"
     )
 
 
@@ -775,7 +762,7 @@ def run_doctor(
         check_state_path(home / ".claude" / "sociality" / "social.db"),
     ]
     results.extend(check_autonomous_files(repo_root))
-    results.append(check_memory_http_port())
+    results.append(check_memory_db())
     config, config_result = _load_config(config_path)
     results.append(config_result)
     gate_result = check_hook_gate(repo_root, config, config_path)

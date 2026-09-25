@@ -11,6 +11,7 @@ from interaction_orchestrator_mcp.memory_adapter import (
     _extract_keywords,
     _use_policy_for,
     make_default_adapter,
+    memory_db_path,
 )
 
 
@@ -211,6 +212,14 @@ class TestFactory:
         monkeypatch.delenv("ORCHESTRATOR_MEMORY_BACKEND", raising=False)
         monkeypatch.setenv("MEMORY_DB_FILE", str(tmp_path / "nope.db"))
         assert isinstance(make_default_adapter(), NullMemoryAdapter)
+
+    def test_memory_db_path_wins_over_the_legacy_name(self, monkeypatch, tmp_path):
+        """memory-mcp's own variable decides; MEMORY_DB_FILE only fills in (#174)."""
+        monkeypatch.setenv("MEMORY_DB_PATH", str(tmp_path / "new.db"))
+        monkeypatch.setenv("MEMORY_DB_FILE", str(tmp_path / "old.db"))
+        assert memory_db_path() == tmp_path / "new.db"
+        monkeypatch.delenv("MEMORY_DB_PATH")
+        assert memory_db_path() == tmp_path / "old.db"
 
     def test_returns_sqlite_when_db_present(self, monkeypatch, tmp_path):
         db = tmp_path / "memory.db"
