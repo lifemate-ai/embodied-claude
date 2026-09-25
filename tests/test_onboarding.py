@@ -389,7 +389,7 @@ def test_new_config_is_created_atomically_with_private_mode(tmp_path: Path) -> N
 
     apply_config_plan(plan, config)
 
-    assert json.loads(destination.read_text()) == config
+    assert json.loads(destination.read_text(encoding="utf-8")) == config
     if os.name == "posix":
         assert destination.stat().st_mode & 0o777 == 0o600
     assert list(tmp_path.glob(".mcp.json.*.tmp")) == []
@@ -405,7 +405,7 @@ def test_equivalent_existing_config_is_kept_byte_for_byte(tmp_path: Path) -> Non
     apply_config_plan(plan, config)
 
     assert plan.action is ConfigAction.KEEP
-    assert destination.read_text() == original
+    assert destination.read_text(encoding="utf-8") == original
 
 
 def test_different_existing_config_is_refused_without_force(tmp_path: Path) -> None:
@@ -442,8 +442,8 @@ def test_force_backs_up_before_replacing_config(tmp_path: Path) -> None:
 
     assert plan.action is ConfigAction.REPLACE
     assert plan.backup == tmp_path / ".mcp.json.backup-20260724-123456"
-    assert plan.backup.read_text() == old_content
-    assert json.loads(destination.read_text()) == config
+    assert plan.backup.read_text(encoding="utf-8") == old_content
+    assert json.loads(destination.read_text(encoding="utf-8")) == config
 
 
 def test_force_chooses_a_unique_backup_name(tmp_path: Path) -> None:
@@ -469,11 +469,11 @@ def test_social_policy_is_copied_only_when_missing(tmp_path: Path) -> None:
     source.write_text('version = 1\nname = "example"\n')
 
     assert copy_policy_if_missing(source, destination)
-    assert destination.read_text() == source.read_text()
+    assert destination.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
 
     destination.write_text('version = 1\nname = "custom"\n')
     assert not copy_policy_if_missing(source, destination)
-    assert 'name = "custom"' in destination.read_text()
+    assert 'name = "custom"' in destination.read_text(encoding="utf-8")
 
 
 def test_state_path_check_uses_nearest_parent_without_creating(tmp_path: Path) -> None:

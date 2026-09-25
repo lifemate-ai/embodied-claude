@@ -26,7 +26,7 @@ def workspace_versions(repo_root: Path = REPO_ROOT) -> dict[Path, str]:
             continue
         relative = path.relative_to(repo_root)
         try:
-            version = tomllib.loads(path.read_text())["project"]["version"]
+            version = tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"]
         except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError) as error:
             raise ReleaseCheckError(f"cannot read project version from {relative}: {error}")
         versions[relative] = str(version)
@@ -65,7 +65,7 @@ def validate_changelog(version: str, repo_root: Path = REPO_ROOT) -> None:
     """Require the release version to have a dated changelog heading."""
 
     try:
-        changelog = (repo_root / "CHANGELOG.md").read_text()
+        changelog = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
     except OSError as error:
         raise ReleaseCheckError(f"cannot read CHANGELOG.md: {error}")
     if f"## [{version}] - " not in changelog:

@@ -46,7 +46,7 @@ def _load_config_server(
     path: Path,
     server_name: str,
 ) -> tuple[str, list[str], dict[str, str]]:
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     servers = raw.get("mcpServers", {})
     server = servers.get(server_name) if isinstance(servers, Mapping) else None
     if not isinstance(server, Mapping):

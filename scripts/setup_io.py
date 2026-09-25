@@ -61,7 +61,7 @@ def plan_config_write(
         return ConfigPlan(ConfigAction.CREATE, destination)
 
     try:
-        existing = json.loads(destination.read_text())
+        existing = json.loads(destination.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         if not force:
             raise ConfigConflictError(

@@ -21,7 +21,7 @@ def _workspace_pyprojects() -> list[Path]:
 
 def test_all_workspace_projects_share_the_release_version() -> None:
     versions = {
-        str(path.relative_to(ROOT)): tomllib.loads(path.read_text())["project"][
+        str(path.relative_to(ROOT)): tomllib.loads(path.read_text(encoding="utf-8"))["project"][
             "version"
         ]
         for path in _workspace_pyprojects()
@@ -39,13 +39,13 @@ def test_runtime_server_defaults_share_the_release_version() -> None:
     )
 
     for path in runtime_configs:
-        source = path.read_text()
+        source = path.read_text(encoding="utf-8")
         assert f'version: str = "{RELEASE_VERSION}"' in source
         assert f'MCP_SERVER_VERSION", "{RELEASE_VERSION}"' in source
 
 
 def test_changelog_contains_the_dated_release() -> None:
-    changelog = (ROOT / "CHANGELOG.md").read_text()
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
     assert "## [Unreleased]" in changelog
     assert f"## [{RELEASE_VERSION}] - 2026-07-31" in changelog
@@ -62,7 +62,7 @@ def test_release_verifier_accepts_only_the_exact_version_tag() -> None:
 
 
 def test_release_workflow_publishes_but_never_creates_tags() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "tags:" in workflow
     assert "v*" in workflow

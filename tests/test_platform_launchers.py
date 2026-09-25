@@ -10,7 +10,7 @@ def test_posix_launchers_delegate_with_exec_and_all_arguments() -> None:
         ("setup.sh", "scripts/setup.py"),
         ("doctor.sh", "scripts/doctor.py"),
     ):
-        script = (ROOT / "scripts" / name).read_text()
+        script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert "command -v uv" in script
         assert "exec uv run --no-project --python 3.13 python" in script
         assert target in script
@@ -22,7 +22,7 @@ def test_windows_launchers_delegate_and_preserve_exit_status() -> None:
         ("setup.cmd", r"scripts\setup.py"),
         ("doctor.cmd", r"scripts\doctor.py"),
     ):
-        script = (ROOT / "scripts" / name).read_text()
+        script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert 'cd /d "%~dp0.."' in script
         assert "where uv" in script
         assert "uv run --no-project --python 3.13 python" in script

@@ -292,9 +292,9 @@ def test_real_orchestration_syncs_once_writes_config_and_runs_doctor(
 
     assert result == 0
     assert commands == [["uv", "sync", "--locked", "--no-dev"]]
-    config = json.loads((tmp_path / ".mcp.json").read_text())
+    config = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))
     assert set(config["mcpServers"]) == set(CORE_SERVER_NAMES)
-    assert (tmp_path / "socialPolicy.toml").read_text() == policy_source.read_text()
+    assert (tmp_path / "socialPolicy.toml").read_text(encoding="utf-8") == policy_source.read_text(encoding="utf-8")
     assert doctor_calls == [
         (tmp_path, tmp_path / ".mcp.json", tmp_path / "home"),
     ]

@@ -112,7 +112,7 @@ def test_setup_enables_exactly_the_servers_it_wrote(tmp_path: Path) -> None:
     )
 
     assert result == 0
-    written = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
+    written = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     settings = json.loads(
         (tmp_path / ".claude" / "settings.local.json").read_text(encoding="utf-8")
     )
