@@ -153,6 +153,7 @@ def test_persona_environment_is_passed_through_only_when_set() -> None:
         "DESIRE_TIMEZONE": "Asia/Tokyo",
         "DESIRE_NIGHT_START": "22",
         "SYSTEM_TEMPERATURE_TONE": "kansai",
+        "RELATIONSHIP_TONE": "neutral",
         "UNRELATED": "ignored",
     }
     config = build_mcp_config(FeatureSelection(system_temperature=True), environment)
@@ -168,6 +169,8 @@ def test_persona_environment_is_passed_through_only_when_set() -> None:
         "DESIRE_NIGHT_START": "22",
     }
     assert servers["sociality"]["env"]["COMPANION_ID"] == "kouta"
+    # suggest_followup runs inside the sociality server (#173).
+    assert servers["sociality"]["env"]["RELATIONSHIP_TONE"] == "neutral"
     assert servers["individual-kernel"]["env"]["COMPANION_ID"] == "kouta"
     assert servers["individual-kernel"]["env"]["DESIRE_NIGHT_START"] == "22"
     # #140: nothing is pinned any more; SOCIAL_DB_PATH appears only when the

@@ -351,8 +351,8 @@ class RelationshipStore:
             if any(keyword in text.lower() for keyword in STRESS_KEYWORDS):
                 latest_stress_text = text
                 break
-        text, reason = suggest_followup_text(context, latest_stress_text)
-        return [SuggestionRecord(text=text, reason=reason)]
+        text, reason, intent, topic = suggest_followup_text(context, latest_stress_text)
+        return [SuggestionRecord(text=text, reason=reason, intent=intent, topic=topic)]
 
     def refresh_snapshot(self, person_id: str) -> None:
         latest_ts = self.events.get_latest_timestamp(person_id=person_id)

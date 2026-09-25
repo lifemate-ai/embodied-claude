@@ -157,6 +157,7 @@ SYSTEM_TEMPERATURE_OPTIONAL_ENVIRONMENT = (
     "SYSTEM_TEMPERATURE_TONE",
     "SYSTEM_TEMPERATURE_TIMEZONE",
 )
+RELATIONSHIP_OPTIONAL_ENVIRONMENT = ("RELATIONSHIP_TONE",)
 
 # Deliberately fake values for --all. They keep the `changeme-` marker that
 # is_placeholder_value() rejects, so a demo config announces itself as one
@@ -322,6 +323,9 @@ def build_mcp_config(
                     environment, (), ("SOCIAL_DB_PATH", "MEMORY_DB_PATH")
                 ),
                 **persona_environment,
+                **_selected_environment(
+                    environment, (), RELATIONSHIP_OPTIONAL_ENVIRONMENT
+                ),
             }
         ),
         "individual-kernel": SERVER_SPECS["individual-kernel"].command(

@@ -60,6 +60,8 @@ def test_sociality_facade_handles_social_state_and_relationship_flow():
     assert any(item["id"] == commitment["commitment_id"] for item in model["active_commitments"])
     assert suggestions["suggestions"]
     assert "会議多くて疲れた" in suggestions["suggestions"][0]["text"]
+    assert suggestions["suggestions"][0]["intent"] == "check_in_after_stress"
+    assert suggestions["suggestions"][0]["topic"] == "今日は会議多くて疲れた"
 
 
 def test_sociality_facade_handles_joint_attention_and_boundary_gating():

@@ -330,6 +330,8 @@ def _collect_followups(
         FollowupSuggestion(
             text=str(item.get("text") or item.get("suggestion") or ""),
             reason=item.get("reason"),
+            intent=item.get("intent"),
+            topic=item.get("topic"),
         )
         for item in items
         if item.get("text") or item.get("suggestion")

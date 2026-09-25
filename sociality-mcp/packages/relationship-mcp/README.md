@@ -14,6 +14,11 @@ Tools:
 - `suggest_followup`
 - `record_boundary`
 
+`suggest_followup` returns a ready-made `text` in Kansai dialect by default. Set
+`RELATIONSHIP_TONE=neutral` for plain Japanese (unknown values also fall back to
+`neutral`). Every suggestion also carries `intent` and `topic`, independent of
+the tone, so the agent can phrase the follow-up in its own voice.
+
 Example MCP config:
 
 ```json
