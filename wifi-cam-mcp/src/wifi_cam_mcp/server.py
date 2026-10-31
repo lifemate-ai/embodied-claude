@@ -15,7 +15,7 @@ from mcp.types import (
 )
 
 from ._behavior import get_behavior
-from .camera import AudioResult, TapoCamera, describe_pose
+from .camera import AudioResult, TapoCamera, describe_pose, warm_transcribe_backend
 from .config import CameraConfig, ServerConfig
 
 logging.basicConfig(level=logging.INFO)
@@ -38,6 +38,10 @@ def format_listen_response(result: AudioResult) -> str:
             "\n--- No transcript (transcription was not performed) ---\n"
             f"{result.transcript_error}"
         )
+    elif result.transcript is not None:
+        # Transcription ran and recognised no speech. Say so, or a quiet
+        # room looks the same as transcribe=False.
+        text += "\n--- Transcript (empty: no speech recognised) ---"
     return text
 
 
@@ -51,6 +55,19 @@ class CameraMCPServer:
         self._server_config = ServerConfig.from_env()
         self._has_stereo = False
         self._setup_handlers()
+
+    def warm_transcription(self) -> None:
+        """Import the local transcription backend on the main thread.
+
+        Must run before the event loop starts; see warm_transcribe_backend.
+        A failure is logged, not fatal: listen reports it again on use.
+        """
+        backend = self._server_config.transcribe_backend
+        try:
+            if warm_transcribe_backend(backend):
+                logger.info(f"Transcription backend {backend} imported on the main thread")
+        except Exception as e:
+            logger.warning(f"Could not pre-import transcription backend {backend}: {e}")
 
     def _setup_handlers(self) -> None:
         """Set up MCP tool handlers."""
@@ -179,7 +196,7 @@ class CameraMCPServer:
                 ),
                 Tool(
                     name="listen",
-                    description="Listen with your ears (microphone) to hear what's happening around you. Use this when someone asks 'what do you hear?' or when you want to know what sounds are present. Returns transcribed text of what you heard under a 'Transcript' heading; when no transcription backend is installed it says so under a separate 'No transcript' heading instead.",
+                    description="Listen with your ears (microphone) to hear what's happening around you. Use this when someone asks 'what do you hear?' or when you want to know what sounds are present. Returns transcribed text of what you heard under a 'Transcript' heading (an empty heading means it ran and recognised no speech); when no transcription backend is installed it says so under a separate 'No transcript' heading instead.",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -798,6 +815,7 @@ def main() -> None:
     except ImportError:
         pass
     server = CameraMCPServer()
+    server.warm_transcription()
     asyncio.run(server.run())
 
 

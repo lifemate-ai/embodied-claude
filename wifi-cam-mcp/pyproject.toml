@@ -30,6 +30,11 @@ transcribe = [
 ]
 transcribe-faster = [
     "faster-whisper>=1.0.0",
+    # ctranslate2 on Windows needs cuBLAS / cuDNN DLLs that no system
+    # installer provides; the pip wheels carry them. Linux/WSL get them
+    # from the CUDA toolkit already, so keep this to win32.
+    "nvidia-cublas-cu12<12.9.3; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12>=9; sys_platform == 'win32'",
 ]
 
 [project.scripts]

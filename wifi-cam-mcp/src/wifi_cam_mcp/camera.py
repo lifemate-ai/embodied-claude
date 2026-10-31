@@ -5,7 +5,9 @@ import base64
 import io
 import locale
 import logging
+import os
 import re
+import sys
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -188,6 +190,67 @@ RECONNECT_DELAY = 1.0  # seconds
 _whisper_models: dict[tuple[str, str], object] = {}
 _whisper_models_lock = threading.Lock()
 
+# Upper bound for model load and for transcription, each, in the worker
+# thread. A native library load that never returns must surface as an error
+# with a reason, not as a listen that never answers.
+TRANSCRIBE_TIMEOUT_S = 90.0
+
+
+def _register_cuda_dll_dirs() -> None:
+    """Let ctranslate2 find cuBLAS / cuDNN on Windows.
+
+    The nvidia-*-cu12 wheels drop their DLLs under site-packages/nvidia/<lib>/bin,
+    which is not on the loader search path; ctranslate2 4.8 only registers its
+    own package dir. Without this, a machine with a visible CUDA device fails
+    at transcribe time with "cublas64_12.dll is not found". No-op elsewhere.
+    """
+    if sys.platform != "win32":
+        return
+    import site
+
+    # ctranslate2 resolves cuBLAS with a plain LoadLibrary, which walks PATH and
+    # ignores os.add_dll_directory; so the bin dirs go on PATH, and are also
+    # registered for anything that does honour the DLL-directory list.
+    found: list[str] = []
+    for base in site.getsitepackages() + [site.getusersitepackages()]:
+        for lib in ("cublas", "cudnn", "cuda_nvrtc"):
+            bin_dir = Path(base) / "nvidia" / lib / "bin"
+            if bin_dir.is_dir():
+                found.append(str(bin_dir))
+                if hasattr(os, "add_dll_directory"):
+                    os.add_dll_directory(str(bin_dir))
+    if found:
+        current = os.environ.get("PATH", "")
+        missing = [d for d in found if d not in current.split(os.pathsep)]
+        if missing:
+            os.environ["PATH"] = os.pathsep.join(missing + [current])
+
+
+def warm_transcribe_backend(backend: str) -> bool:
+    """Import a local backend's native libraries on the calling thread.
+
+    Call this from the main thread before the event loop starts. Under the
+    MCP server on Windows, the first import of numpy (pulled in by ctranslate2)
+    from a worker thread blocked forever inside the OpenBLAS DLL
+    initialisation once the recording subprocess had run; reproduced with and
+    without jurigged, never in a process that only imports. The same imports
+    on the main thread at startup take a couple of seconds, after which the
+    worker thread only builds the model and transcribes.
+
+    Returns True when the backend's modules were imported, False when the
+    backend is not a local one or is not installed (listen then reports that
+    itself).
+    """
+    if not transcribe_backend_available(backend):
+        return False
+    if backend == "faster-whisper":
+        _register_cuda_dll_dirs()
+        import ctranslate2  # noqa: F401
+        import faster_whisper  # noqa: F401
+    else:
+        import whisper  # noqa: F401
+    return True
+
 
 def _get_whisper_model(backend: str, model_size: str):
     """Load a Whisper model, or return the cached one (blocking).
@@ -204,6 +267,7 @@ def _get_whisper_model(backend: str, model_size: str):
         model = _whisper_models.get(key)
         if model is None:
             if backend == "faster-whisper":
+                _register_cuda_dll_dirs()
                 import ctranslate2
                 from faster_whisper import WhisperModel
 
@@ -979,12 +1043,27 @@ class TapoCamera:
                     file_path,
                 ]
 
+            # ffmpeg polls stdin for interactive keys unless told not to; under
+            # an MCP server stdin is the JSON-RPC pipe, so detach it on both
+            # sides. On timeout the child must be killed, or it keeps the RTSP
+            # session open and the next listen inherits a busy camera.
+            cmd.insert(1, "-nostdin")
+            timeout = duration + 10.0
             process = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            await asyncio.wait_for(process.wait(), timeout=duration + 10.0)
+            try:
+                returncode = await asyncio.wait_for(process.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                process.kill()
+                raise RuntimeError(
+                    f"ffmpeg did not finish recording within {timeout:.0f}s"
+                ) from None
+            if returncode != 0:
+                raise RuntimeError(f"ffmpeg exited with code {returncode}")
 
             with open(file_path, "rb") as f:
                 audio_data = f.read()
@@ -1049,11 +1128,19 @@ class TapoCamera:
             )
 
         try:
-            model = await asyncio.to_thread(
-                _get_whisper_model, backend, self._transcribe_model
+            model = await asyncio.wait_for(
+                asyncio.to_thread(_get_whisper_model, backend, self._transcribe_model),
+                timeout=TRANSCRIBE_TIMEOUT_S,
             )
-            transcript = await asyncio.to_thread(
-                _transcribe_with_model, backend, model, audio_path
+            transcript = await asyncio.wait_for(
+                asyncio.to_thread(_transcribe_with_model, backend, model, audio_path),
+                timeout=TRANSCRIBE_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            return None, (
+                f"transcription with {backend} did not finish within "
+                f"{TRANSCRIBE_TIMEOUT_S:.0f}s; the worker thread is still blocked, so "
+                "later listens may fail the same way until the server is restarted"
             )
         except Exception as e:
             return None, f"transcription with {backend} failed: {e!s}"
