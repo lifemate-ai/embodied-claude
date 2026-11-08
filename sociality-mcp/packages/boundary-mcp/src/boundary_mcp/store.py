@@ -150,6 +150,10 @@ class BoundaryStore:
             context.get("scene_contains_face")
             or context.get("person_present")
             or payload_preview.get("person_mentions")
+            # Only this value tightens. Any other familiarity, "familiar"
+            # included, is never grounds to allow: a "seen before" answer is
+            # the unreliable side (#172).
+            or context.get("familiarity") == "first_time"
         )
         posting = action_type in PUBLISHING_ACTIONS or channel == "x"
         rule = self.policy.posting_rule_for(channel or "x") if posting else None

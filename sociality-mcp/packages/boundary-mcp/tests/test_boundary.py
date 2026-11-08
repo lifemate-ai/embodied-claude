@@ -4,6 +4,8 @@ from pathlib import Path
 
 from social_core import SocialEventCreate
 
+from boundary_mcp.store import BoundaryStore
+
 
 def test_get_policy_path_walks_up_from_cwd(tmp_path: Path, monkeypatch):
     """If cwd has no policy, climb parents to find the repo-root socialPolicy.toml."""
@@ -276,3 +278,84 @@ def test_a_fixed_camera_zone_holds_under_high_urgency(fixed_camera_store):
     )
 
     assert result.decision == "deny"
+
+
+def _wildcard_store(tmp_path):
+    path = tmp_path / "socialPolicy-wildcard.toml"
+    path.write_text(
+        """
+[global]
+timezone = "Asia/Tokyo"
+
+[[posting_rules]]
+channel = "x"
+require_review_if_person_present = true
+
+[[person_rules]]
+person_id = "kouta"
+preferred_nudge_style = "brief_gentle"
+
+[[person_rules]]
+person_id = "*"
+avoid_actions = ["camera_speaker_after_midnight"]
+preferred_nudge_style = "formal"
+""".strip(),
+        encoding="utf-8",
+    )
+    return BoundaryStore(tmp_path / "wildcard.db", policy_path=path)
+
+
+def test_unknown_person_gets_the_wildcard_rule(tmp_path):
+    store = _wildcard_store(tmp_path)
+    try:
+        for person_id in (None, "stranger"):
+            result = store.evaluate_action(
+                action_type="camera_speaker_after_midnight",
+                person_id=person_id,
+                context={"time_local": "2026-09-25T10:00:00+09:00"},
+            )
+            assert result.decision == "deny"
+            assert result.nudge_style == "formal"
+    finally:
+        store.close()
+
+
+def test_named_rule_wins_over_the_wildcard(tmp_path):
+    store = _wildcard_store(tmp_path)
+    try:
+        result = store.evaluate_action(
+            action_type="camera_speaker_after_midnight",
+            person_id="kouta",
+            context={"time_local": "2026-09-25T10:00:00+09:00"},
+        )
+        assert result.decision == "allow"
+        assert result.nudge_style == "brief_gentle"
+    finally:
+        store.close()
+
+
+def test_no_wildcard_means_no_rule_for_an_unknown_person(store):
+    result = store.evaluate_action(
+        action_type="camera_speaker_after_midnight",
+        person_id=None,
+        context={"time_local": "2026-09-25T10:00:00+09:00"},
+    )
+    assert result.decision == "allow"
+
+
+def test_first_time_familiarity_requires_review_but_familiar_never_relaxes(store):
+    def post(familiarity, **extra):
+        return store.evaluate_action(
+            action_type="post_text",
+            channel="x",
+            context={
+                "familiarity": familiarity,
+                "time_local": "2026-04-15T15:00:00+09:00",
+                **extra,
+            },
+        )
+
+    assert post("first_time").decision == "deny"
+    assert post("first_time", reviewed=True).decision == "allow"
+    assert post("familiar").decision == "allow"
+    assert post("familiar", person_present=True).decision == "deny"
