@@ -10,6 +10,10 @@ from pathlib import Path
 from social_core import DEFAULT_POLICY_TIMEZONE
 from social_core import in_quiet_hours as _in_quiet_hours_core
 
+# A ``person_rules`` entry with this ``person_id`` applies to anyone who has no
+# rule of their own, including a caller that passes no ``person_id`` (#172).
+UNKNOWN_PERSON_ID = "*"
+
 
 @dataclass(slots=True)
 class GlobalPolicy:
@@ -53,9 +57,23 @@ class SocialPolicy:
         return next((rule for rule in self.posting_rules if rule.channel == channel), None)
 
     def person_rule_for(self, person_id: str | None) -> PersonRule | None:
-        if person_id is None:
-            return None
-        return next((rule for rule in self.person_rules if rule.person_id == person_id), None)
+        """The rule for ``person_id``, falling back to the ``"*"`` rule.
+
+        ``person_id`` is the caller's claim, and nothing in the repository
+        verifies it, so "unknown" (``None``) is a common state. A rule written
+        with ``person_id = "*"`` applies to anyone without a rule of their own,
+        including ``None``. Without such a rule nothing applies, as before (#172).
+        """
+
+        if person_id is not None:
+            exact = next(
+                (rule for rule in self.person_rules if rule.person_id == person_id), None
+            )
+            if exact is not None:
+                return exact
+        return next(
+            (rule for rule in self.person_rules if rule.person_id == UNKNOWN_PERSON_ID), None
+        )
 
     def privacy_zones_for(
         self,

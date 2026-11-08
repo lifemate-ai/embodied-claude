@@ -31,6 +31,13 @@ How `evaluate_action` reads the policy:
   passes `context.reviewed = true`. `require_face_consent` keeps its previous meaning.
 - `[[person_rules]]` `preferred_nudge_style` is returned as `nudge_style` on every result
   for that person so the caller can shape the nudge or reply.
+- `person_id` is the caller's claim, not a sensor reading, so it is often missing. A
+  `[[person_rules]]` entry with `person_id = "*"` applies to anyone who has no rule of their
+  own, including a call with no `person_id`. A named rule wins over `"*"`; it does not merge
+  with it. With no `"*"` entry, an unknown person gets no person rule, as before.
+- `context.familiarity = "first_time"` counts as a person being present for
+  `require_review_if_person_present`. It only tightens: no other value, `"familiar"` included,
+  relaxes any rule.
 
 Example MCP config:
 
