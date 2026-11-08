@@ -71,8 +71,9 @@ async def test_windows_local_audio_uses_configured_dshow_device(monkeypatch, tmp
     )
     result = await camera.listen_audio(duration=2.5, mic_source="local")
 
-    assert command[:7] == [
+    assert command[:8] == [
         "ffmpeg",
+        "-nostdin",
         "-f",
         "dshow",
         "-audio_buffer_size",
@@ -82,6 +83,45 @@ async def test_windows_local_audio_uses_configured_dshow_device(monkeypatch, tmp
     ]
     assert command[command.index("-t") + 1] == "2.5"
     assert result.audio_base64 == base64.standard_b64encode(b"RIFF").decode("ascii")
+
+
+@pytest.mark.asyncio
+async def test_hung_ffmpeg_is_killed_and_reported(monkeypatch, tmp_path):
+    """A recorder that never exits must be killed, not left holding the camera's
+    audio session, and the error must say why (an empty TimeoutError message
+    used to come back as "Failed to record audio: ")."""
+    killed = []
+    stdin_seen = []
+
+    class _HungProcess:
+        async def wait(self):
+            await asyncio.sleep(3600)
+
+        def kill(self):
+            killed.append(True)
+
+    async def create_subprocess_exec(*args, **kwargs):
+        stdin_seen.append(kwargs.get("stdin"))
+        return _HungProcess()
+
+    async def wait_for(awaitable, timeout):
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+    monkeypatch.setattr(asyncio, "wait_for", wait_for)
+
+    camera = TapoCamera(
+        CameraConfig(host="127.0.0.1", username="user", password="pass"),
+        capture_dir=str(tmp_path),
+        mic_device="Microphone Array",
+    )
+    with pytest.raises(RuntimeError, match="did not finish recording within 12s"):
+        await camera.listen_audio(duration=2, mic_source="local")
+
+    assert killed == [True]
+    assert stdin_seen == [asyncio.subprocess.DEVNULL]
 
 
 def test_server_config_reads_transcription_settings(monkeypatch):
