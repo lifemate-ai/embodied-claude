@@ -39,12 +39,12 @@ class ServerConfig:
     """MCP Server configuration."""
 
     name: str = "memory-mcp"
-    version: str = "0.4.6"
+    version: str = "0.5.0"
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
         """Create config from environment variables."""
         return cls(
             name=os.getenv("MCP_SERVER_NAME", "memory-mcp"),
-            version=os.getenv("MCP_SERVER_VERSION", "0.4.6"),
+            version=os.getenv("MCP_SERVER_VERSION", "0.5.0"),
         )

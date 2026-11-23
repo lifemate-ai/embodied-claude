@@ -4,6 +4,18 @@ All notable changes to embodied-claude are documented here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-23
+
+**Upgrading from v0.4.6.** The individual kernel reads memory-mcp's SQLite
+database. If you use a custom location, set `MEMORY_DB_PATH` to the same
+file for both servers. The HTTP recall endpoint has been removed.
+Follow-up suggestions and system-temperature readings now default to neutral
+phrasing. Set `RELATIONSHIP_TONE=kansai` and `SYSTEM_TEMPERATURE_TONE=kansai`
+to retain the earlier phrasing.
+
+Release validation now checks the declared workspace members, allowing
+unrelated Python projects to coexist under the checkout.
+
 `suggest_followup` handed the model a ready-made line in one fixed dialect
 (#173, reported by fmtowns3), the same gap #146 closed for
 system-temperature-mcp: with TTS, an agent's own voice spoke someone else's
