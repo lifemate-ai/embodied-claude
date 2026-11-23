@@ -178,8 +178,8 @@ These values are mechanism indicators, not a consciousness probability.
 - The v1 quality geometry reuses an existing memory-mcp E5 vector when the ref
   and `MEMORY_DB_PATH` resolve; other content uses a deterministic fallback. It
   is a local transition structure, not a learned world model.
-- Memory HTTP recall is optional and fails closed to deterministic local
-  candidates when the memory service is unavailable.
+- Memory recall reads memory-mcp's SQLite database. Set `MEMORY_DB_PATH` to
+  the same file for both servers when using a custom database location.
 - Prediction matching is lexical/structured in v1 and should be calibrated
   against richer domain-specific outcome models.
 - Hook and MCP strict runtimes wire the existing boundary policy through

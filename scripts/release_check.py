@@ -21,9 +21,15 @@ def workspace_versions(repo_root: Path = REPO_ROOT) -> dict[Path, str]:
     """Return every workspace project version keyed by relative pyproject path."""
 
     versions: dict[Path, str] = {}
-    for path in sorted(repo_root.rglob("pyproject.toml")):
-        if ".venv" in path.parts:
-            continue
+    root_project = repo_root / "pyproject.toml"
+    workspace = tomllib.loads(root_project.read_text(encoding="utf-8"))["tool"]["uv"]["workspace"]
+    paths = {root_project}
+    for pattern in workspace["members"]:
+        directories = list(repo_root.glob(pattern))
+        if not directories:
+            raise ReleaseCheckError(f"workspace member not found: {pattern}")
+        paths.update(directory / "pyproject.toml" for directory in directories)
+    for path in sorted(paths):
         relative = path.relative_to(repo_root)
         try:
             version = tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"]

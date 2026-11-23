@@ -7,16 +7,17 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-RELEASE_VERSION = "0.4.6"
+RELEASE_VERSION = "0.5.0"
 RELEASE_TAG = f"v{RELEASE_VERSION}"
 
 
 def _workspace_pyprojects() -> list[Path]:
-    return [
-        path
-        for path in ROOT.rglob("pyproject.toml")
-        if ".venv" not in path.parts
-    ]
+    workspace = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return [ROOT / "pyproject.toml", *(
+        member / "pyproject.toml"
+        for pattern in workspace["tool"]["uv"]["workspace"]["members"]
+        for member in ROOT.glob(pattern)
+    )]
 
 
 def test_all_workspace_projects_share_the_release_version() -> None:
@@ -29,6 +30,23 @@ def test_all_workspace_projects_share_the_release_version() -> None:
 
     assert versions
     assert set(versions.values()) == {RELEASE_VERSION}, versions
+
+
+def test_release_verifier_ignores_unrelated_projects_but_checks_members(tmp_path: Path) -> None:
+    from scripts.release_check import ReleaseCheckError, validate_workspace_version
+
+    project = '[project]\nversion = "1"\n'
+    (tmp_path / "pyproject.toml").write_text(
+        project + '[tool.uv.workspace]\nmembers = ["member"]\n', encoding="utf-8"
+    )
+    for name in ("member", "unrelated"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "pyproject.toml").write_text(project, encoding="utf-8")
+    (tmp_path / "unrelated/pyproject.toml").write_text("invalid TOML!", encoding="utf-8")
+    validate_workspace_version("1", tmp_path)
+    (tmp_path / "member/pyproject.toml").write_text(project.replace('"1"', '"2"'), encoding="utf-8")
+    with pytest.raises(ReleaseCheckError, match="member"):
+        validate_workspace_version("1", tmp_path)
 
 
 def test_runtime_server_defaults_share_the_release_version() -> None:
@@ -48,7 +66,7 @@ def test_changelog_contains_the_dated_release() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
     assert "## [Unreleased]" in changelog
-    assert f"## [{RELEASE_VERSION}] - 2026-07-31" in changelog
+    assert f"## [{RELEASE_VERSION}] - 2026-11-23" in changelog
     assert "phenomenal-consciousness candidate architecture" in changelog
     assert "proof of phenomenal consciousness" not in changelog
 
